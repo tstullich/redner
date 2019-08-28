@@ -9,7 +9,7 @@ Real HomogeneousMedium::transmittance(const Ray &ray, Sampler &sampler) {
 }
 
 Real HomogeneousMedium::sample(const Ray &ray, Sampler &sampler,
-                               MediumInteraction mediumInteraction) {
+                               MediumInteraction *mediumInteraction) {
   // Sample a random channel and distance along ray
   // int channel = min()
   Real dist = 1.0; // Implement
@@ -24,7 +24,7 @@ Real HomogeneousMedium::sample(const Ray &ray, Sampler &sampler,
   bool sampledMedium = t < ray.tmax;
   if (sampledMedium) {
     // A medium interaction has occured and so we add the needed information
-    // mediumInteraction =
+    // mediumInteraction = MediumInteraction(, -ray.dir, ray.time, this, );
   }
 
   // Calculate the weighting factor for scattering within the medium

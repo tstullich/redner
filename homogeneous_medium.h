@@ -13,7 +13,7 @@ public:
   Real transmittance(const Ray &ray, Sampler &sampler);
 
   Real sample(const Ray &ray, Sampler &sampler,
-              MediumInteraction mediumInteraction);
+              MediumInteraction *mediumInteraction);
 
 private:
   const Real sigma_a, sigma_s, sigma_t, g;
