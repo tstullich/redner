@@ -51,6 +51,7 @@ set(SRCS aabb.h
          area_light.h
          atomic.h
          bsdf_sample.h
+         bssrdf_sample.h
          buffer.h
          camera.h
          channels.h
@@ -87,6 +88,7 @@ set(SRCS aabb.h
          aabb.cpp
          active_pixels.cpp
          bsdf_sample.cpp
+         bssrdf_sample.cpp
          camera.cpp
          channels.cpp
          edge.cpp

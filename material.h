@@ -71,7 +71,14 @@ struct TBSDFSample {
     T w;
 };
 
+template <typename T>
+struct TBSSRDFSample {
+    TVector2<T> uv;
+    T w;
+};
+
 using BSDFSample = TBSDFSample<Real>;
+using BSSRDFSample = TBSSRDFSample<Real>;
 
 DEVICE
 inline Vector3 get_diffuse_reflectance(const Material &material,
@@ -535,6 +542,30 @@ void d_bsdf(const Material &material,
     } else {
         d_shading_point.shading_frame.n += d_n;
     }
+}
+
+DEVICE
+inline
+Vector3 bssrdf(const Material &material,
+               const SurfacePoint &shading_point,
+               const Vector3 &wi,
+               const Vector3 &wo,
+               const Real min_roughness) {
+    return Vector3(0.0, 0.0, 0.0);
+}
+
+DEVICE
+inline
+Vector3 bssrdf_sample(const Material &material,
+                      const SurfacePoint &shading_point,
+                      const Vector3 &wi,
+                      const BSSRDFSample &bssrdf_sample,
+                      const Real min_roughness,
+                      const RayDifferential &wi_differential,
+                      RayDifferential &wo_differential,
+                      Real *next_min_roughness = nullptr) {
+    // Only considering homogeneous media for now
+    return Vector3(0.0, 0.0, 0.0);
 }
 
 DEVICE
