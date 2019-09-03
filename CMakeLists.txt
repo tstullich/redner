@@ -100,7 +100,6 @@ set(SRCS aabb.h
          phase_function.h
          medium_interaction.h
          medium_interface.h
-         homogeneous_medium.h
          path_contribution.cpp
          pathtracer.cpp
          pcg_sampler.cpp
