@@ -109,7 +109,7 @@ Scene::Scene(const Camera &camera,
 
         optix_scene = optix_context->createModel();
         optix_scene->setInstances(
-            (int)shapes.size(), RTP_BUFFER_TYPE_HOST, &optix_instances[0], 
+            (int)shapes.size(), RTP_BUFFER_TYPE_HOST, &optix_instances[0],
             RTP_BUFFER_FORMAT_TRANSFORM_FLOAT4x4, RTP_BUFFER_TYPE_HOST, &transforms[0]);
         optix_scene->update(RTP_MODEL_HINT_NONE);
         optix_scene->finish();
@@ -341,7 +341,7 @@ DScene::DScene(const DCamera &camera,
         this->materials = Buffer<DMaterial>(use_gpu, materials.size());
         for (int material_id = 0; material_id < (int)materials.size(); material_id++) {
             this->materials[material_id] = *materials[material_id];
-            
+
         }
     }
     if (area_lights.size() > 0) {
@@ -667,7 +667,7 @@ void occluded(const Scene &scene,
                     rays[pixel_id].tmax = -1;
                 }
             }
-        }, num_threads); 
+        }, num_threads);
     }
 }
 
@@ -740,6 +740,10 @@ void sample_point_on_light(const Scene &scene,
         active_pixels.size(), scene.use_gpu);
 }
 
+void transmittance(const Scene &scene, const BufferView<Ray> &rays) {
+
+}
+
 void test_scene_intersect(bool use_gpu) {
     Buffer<Vector3f> vertices(use_gpu, 3);
     vertices[0] = Vector3f{-1.f, 0.f, 1.f};
@@ -794,7 +798,7 @@ void test_scene_intersect(bool use_gpu) {
     Buffer<OptiXRay> optix_rays(use_gpu, 2);
     Buffer<OptiXHit> optix_hits(use_gpu, 2);
     intersect(scene,
-              active_pixels.view(0, active_pixels.size()), 
+              active_pixels.view(0, active_pixels.size()),
               rays.view(0, rays.size()),
               ray_diffs.view(0, rays.size()),
               isects.view(0, rays.size()),
