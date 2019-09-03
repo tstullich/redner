@@ -17,7 +17,9 @@ struct Medium {
 };
 
 /**
- * This struct holds data to represent a medium
+ * This struct holds data to represent a homogeneous medium.
+ * Since the medium is assumed to be homogeneous, we use Beer's law in
+ * order to calculate the transmittance. Sampling is done by
  */
 struct HomogeneousMedium : Medium {
    public:
@@ -56,6 +58,7 @@ struct HomogeneousMedium : Medium {
         // Return the weighting factor scattering inside of a homogeneous medium
         Vector3f density = sampledMedium ? (sigma_t * tr) : tr;
         float pdf = 0.0f;
+        // TODO Check how to implement numSamples from PBRT
         for (int i = 0; i < 3; i++) {
             pdf += density[i];
         }

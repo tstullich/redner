@@ -71,14 +71,7 @@ struct TBSDFSample {
     T w;
 };
 
-template <typename T>
-struct TBSSRDFSample {
-    TVector2<T> uv;
-    T w;
-};
-
 using BSDFSample = TBSDFSample<Real>;
-using BSSRDFSample = TBSSRDFSample<Real>;
 
 DEVICE
 inline Vector3 get_diffuse_reflectance(const Material &material,
@@ -546,30 +539,6 @@ void d_bsdf(const Material &material,
 
 DEVICE
 inline
-Vector3 bssrdf(const Material &material,
-               const SurfacePoint &shading_point,
-               const Vector3 &wi,
-               const Vector3 &wo,
-               const Real min_roughness) {
-    return Vector3(0.0, 0.0, 0.0);
-}
-
-DEVICE
-inline
-Vector3 bssrdf_sample(const Material &material,
-                      const SurfacePoint &shading_point,
-                      const Vector3 &wi,
-                      const BSSRDFSample &bssrdf_sample,
-                      const Real min_roughness,
-                      const RayDifferential &wi_differential,
-                      RayDifferential &wo_differential,
-                      Real *next_min_roughness = nullptr) {
-    // Only considering homogeneous media for now
-    return Vector3(0.0, 0.0, 0.0);
-}
-
-DEVICE
-inline
 Vector3 cos_hemisphere(const Vector2 &sample) {
     auto phi = 2.f * float(M_PI) * sample[0];
     auto tmp = sqrt(max(1.f - sample[1], Real(0)));
@@ -646,7 +615,7 @@ Vector3 bsdf_sample(const Material &material,
         auto phi = 2.f * Real(M_PI) * bsdf_sample.uv[1];
         auto sin_phi = sin(phi);
         auto cos_phi = cos(phi);
-        
+
         // Sample theta
         auto cos_theta = pow(bsdf_sample.uv[0], 1.0f / (phong_exponent + 2.0f));
         auto sin_theta = sqrt(max(1.f - cos_theta * cos_theta, Real(0)));
@@ -747,7 +716,7 @@ void d_bsdf_sample(const Material &material,
         auto phi = 2.f * Real(M_PI) * bsdf_sample.uv[1];
         auto sin_phi = sin(phi);
         auto cos_phi = cos(phi);
-        
+
         // Sample theta
         auto cos_theta = pow(bsdf_sample.uv[0], 1.0f / (phong_exponent + 2.0f));
         auto sin_theta = sqrt(max(1.f - cos_theta*cos_theta, Real(0)));

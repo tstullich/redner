@@ -51,7 +51,6 @@ set(SRCS aabb.h
          area_light.h
          atomic.h
          bsdf_sample.h
-         bssrdf_sample.h
          buffer.h
          camera.h
          channels.h
@@ -88,7 +87,6 @@ set(SRCS aabb.h
          aabb.cpp
          active_pixels.cpp
          bsdf_sample.cpp
-         bssrdf_sample.cpp
          camera.cpp
          channels.cpp
          edge.cpp
@@ -98,6 +96,11 @@ set(SRCS aabb.h
          material.cpp
          miniz.c
          parallel.cpp
+         medium.h
+         phase_function.h
+         medium_interaction.h
+         medium_interface.h
+         homogeneous_medium.h
          path_contribution.cpp
          pathtracer.cpp
          pcg_sampler.cpp
@@ -114,7 +117,7 @@ if(APPLE)
     # multiple Python installed. If we link a particular Python version
     # here, and we import it with a different Python version later.
     # likely a segmentation fault.
-    # The solution for Linux Mac OS machines, as mentioned in 
+    # The solution for Linux Mac OS machines, as mentioned in
     # https://github.com/pybind/pybind11/blob/master/tools/pybind11Tools.cmake
     # is to not link against Python library at all and resolve the symbols
     # at compile time.
@@ -168,7 +171,7 @@ if (NOT WIN32)
     # multiple Python installed. If we link a particular Python version
     # here, and we import it with a different Python version later.
     # likely a segmentation fault.
-    # The solution for Linux/Mac OS machines, as mentioned in 
+    # The solution for Linux/Mac OS machines, as mentioned in
     # https://github.com/pybind/pybind11/blob/master/tools/pybind11Tools.cmake
     # is to not link against Python library at all and resolve the symbols
     # at compile time.
