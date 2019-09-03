@@ -12,10 +12,10 @@ struct MediumInteraction {
    public:
     MediumInteraction(const SurfacePoint &p, const Vector3f &wo,
                       const Medium *medium, const PhaseFunction *phase)
-        : surfacePoint(p), wo(wo){};
+        : surfacePoint(p), wo(wo), medium(medium), phase(phase){};
 
     const Medium *getMedium() const {
-        // TODO Implement MediumInterface
+        // TODO Implement MediumInterface or check if it's even needed
         return nullptr;
     }
 
@@ -28,6 +28,6 @@ struct MediumInteraction {
    private:
     SurfacePoint surfacePoint;
     Vector3f wo;
-    Medium *medium;
-    PhaseFunction *phase;
+    const Medium *medium;
+    const PhaseFunction *phase;
 };
