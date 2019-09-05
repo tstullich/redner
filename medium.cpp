@@ -20,7 +20,8 @@ Vector3f HomogeneousMedium::sample(const Ray &ray,
     // TODO Check how to implement numSamples from PBRT
     int numSamples = 3;
     // Sample a channel and distance along the ray
-    int channel = std::min(sample.uv[0] * numSamples, numSamples - 1);
+    int channel = std::min(sample.uv[0] * numSamples,
+                           static_cast<double>(numSamples - 1));
     float dist = -std::log(1.0f - sample.uv[1]) / sigma_t[channel];
 
     float t = std::min(dist / length(ray.dir), ray.tmax);

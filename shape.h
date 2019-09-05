@@ -5,6 +5,7 @@
 #include "intersection.h"
 #include "buffer.h"
 #include "ptr.h"
+#include "medium.h"
 
 struct Shape {
     Shape() {}
@@ -15,7 +16,8 @@ struct Shape {
           int num_vertices,
           int num_triangles,
           int material_id,
-          int light_id) :
+          int light_id,
+          ptr<Medium> medium = nullptr) :
         vertices(vertices.get()),
         indices(indices.get()),
         uvs(uvs.get()),
@@ -23,7 +25,8 @@ struct Shape {
         num_vertices(num_vertices),
         num_triangles(num_triangles),
         material_id(material_id),
-        light_id(light_id) {}
+        light_id(light_id),
+        medium(medium) {}
 
     inline bool has_uvs() const {
         return uvs != nullptr;
@@ -41,6 +44,7 @@ struct Shape {
     int num_triangles;
     int material_id;
     int light_id;
+    Medium *medium;
 };
 
 struct DShape {
@@ -166,7 +170,7 @@ inline SurfacePoint sample_shape(const Shape &shape, int index, const Vector2 &s
         Vector3{0, 0, 0}, // TODO: compute proper dpdu
         sample, // TODO: give true light source uv
         Vector2{0, 0}, // TODO: inherit derivatives from previous path vertex
-        Vector2{0, 0}}; 
+        Vector2{0, 0}};
 }
 
 DEVICE

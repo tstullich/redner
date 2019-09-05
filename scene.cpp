@@ -573,6 +573,7 @@ void intersect(const Scene &scene,
                                         ray_differential,
                                         new_ray_differentials[pixel_id]);
                     ray.tmax = rtc_ray_hit.ray.tfar;
+                    ray.medium = shape.medium;
                 }
             }
         }, num_threads);
@@ -748,7 +749,6 @@ struct medium_sampler {
         auto pixel_id = active_pixels[idx];
         auto sample = samples[pixel_id];
         // TODO Implement
-
     }
 
     const FlattenScene scene;
