@@ -26,7 +26,7 @@ struct Shape {
         num_triangles(num_triangles),
         material_id(material_id),
         light_id(light_id),
-        medium(medium) {}
+        medium(medium.get()) {}
 
     inline bool has_uvs() const {
         return uvs != nullptr;

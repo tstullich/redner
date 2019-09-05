@@ -3,9 +3,11 @@
 #include "redner.h"
 #include "vector.h"
 #include "cuda_utils.h"
-#include "medium.h"
 
 #include <limits>
+
+// Forward declarations
+struct Medium;
 
 template <typename T>
 struct TRay {

@@ -3,6 +3,7 @@
 #include "phase_function.h"
 #include "ray.h"
 #include "vector.h"
+#include "intersection.h"
 
 // Forward declarations
 struct MediumInteraction;
