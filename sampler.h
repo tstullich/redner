@@ -6,6 +6,7 @@
 #include "area_light.h"
 #include "material.h"
 #include "edge.h"
+#include "medium.h"
 
 struct Sampler {
     virtual ~Sampler() {}
@@ -21,4 +22,6 @@ struct Sampler {
     virtual void next_primary_edge_samples(BufferView<TPrimaryEdgeSample<double>> samples) = 0;
     virtual void next_secondary_edge_samples(BufferView<TSecondaryEdgeSample<float>> samples) = 0;
     virtual void next_secondary_edge_samples(BufferView<TSecondaryEdgeSample<double>> samples) = 0;
+    virtual void next_medium_samples(BufferView<TMediumSample<float>> samples) = 0;
+    virtual void next_medium_samples(BufferView<TMediumSample<double>> samples) = 0;
 };

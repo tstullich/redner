@@ -17,6 +17,8 @@ struct SobolSampler : public Sampler {
     void next_primary_edge_samples(BufferView<TPrimaryEdgeSample<double>> samples) override;
     void next_secondary_edge_samples(BufferView<TSecondaryEdgeSample<float>> samples) override;
     void next_secondary_edge_samples(BufferView<TSecondaryEdgeSample<double>> samples) override;
+    void next_medium_samples(BufferView<TMediumSample<float>> samples) override;
+    void next_medium_samples(BufferView<TMediumSample<double>> samples) override;
 
     bool use_gpu;
     Buffer<uint64_t> sobol_scramble;

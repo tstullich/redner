@@ -5,6 +5,7 @@
 #include "test_utils.h"
 #include "edge.h"
 #include "thrust_utils.h"
+#include "medium.h"
 
 #include <thrust/execution_policy.h>
 #include <thrust/iterator/constant_iterator.h>
@@ -740,8 +741,35 @@ void sample_point_on_light(const Scene &scene,
         active_pixels.size(), scene.use_gpu);
 }
 
-void transmittance(const Scene &scene, const BufferView<Ray> &rays) {
+// TODO Check if this is the right place for the sampler.
+//      Could move this code into a separate file
+struct medium_sampler {
+    DEVICE void operator()(int idx) {
+        auto pixel_id = active_pixels[idx];
+        auto sample = samples[pixel_id];
+        // TODO Implement
 
+    }
+
+    const FlattenScene scene;
+    const int *active_pixels;
+    const SurfacePoint *shading_points;
+    const SurfacePoint *light_points;
+    const MediumSample *samples;
+};
+
+void sample_medium(const Scene &scene,
+                   const BufferView<int> &active_pixels,
+                   const BufferView<SurfacePoint> &shading_points,
+                   const BufferView<SurfacePoint> &light_points,
+                   const BufferView<MediumSample> &samples) {
+    parallel_for(medium_sampler{
+        get_flatten_scene(scene),
+        active_pixels.begin(),
+        shading_points.begin(),
+        light_points.begin(),
+        samples.begin()},
+        active_pixels.size(), scene.use_gpu);
 }
 
 void test_scene_intersect(bool use_gpu) {

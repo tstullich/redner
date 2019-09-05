@@ -12,8 +12,8 @@ static const float INV_PI = 0.07957747154594766788;
  */
 struct PhaseFunction {
     virtual float p(const Vector3f &wo, const Vector3f &wi) const = 0;
-    virtual float sample_p(const Vector3f &wo, const Vector3f *wi,
-                           const Vector2f &u) const = 0;
+    virtual float sample_p(const Vector3f &wo, Vector3f *wi,
+                           const Vector2f &sample) const = 0;
 };
 
 // An implementation of the Heyney-Greenstein phase function
@@ -21,14 +21,14 @@ struct HeyneyGreenstein : PhaseFunction {
    public:
     HeyneyGreenstein(float g) : g(g){};
 
-    float p(const Vector3f &wo, const Vector3f &wi) const {
+    float p(const Vector3f &wo, const Vector3f &wi) const override {
         return PhaseHG(dot(wo, wi), g);
     }
 
     // This function works much like p() but it is extended
     // to use a sample in the range of [0, 1)^2 to perform MIS
     float sample_p(const Vector3f &wo, Vector3f *wi,
-                   const Vector2f &sample) const {
+                   const Vector2f &sample) const override {
         // Compute cosine theta
         float cosTheta;
         if (std::abs(g) < 1e-3) {
@@ -42,8 +42,7 @@ struct HeyneyGreenstein : PhaseFunction {
         float sinTheta = std::sqrt(std::max(0.0f, 1.0f - cosTheta * cosTheta));
         float phi = 2.0f * M_PI * sample[1];
         Vector3f v1, v2;
-        // TODO Check if coordinateSystem function and sphericalDirection are
-        // needed coordinate_system();
+        coordinate_system(wo, v1, v2);
         *wi = sphericalDirection(sinTheta, cosTheta, phi, v1, v2, -wo);
         return PhaseHG(-cosTheta, g);
     }

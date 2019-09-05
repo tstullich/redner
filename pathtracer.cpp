@@ -49,6 +49,7 @@ struct PathBuffer {
         light_samples = Buffer<LightSample>(use_gpu, max_bounces * num_pixels);
         edge_light_samples = Buffer<LightSample>(use_gpu, 2 * num_pixels);
         bsdf_samples = Buffer<BSDFSample>(use_gpu, max_bounces * num_pixels);
+        medium_samples = Buffer<MediumSample>(use_gpu, max_bounces * num_pixels); // TODO Check if this is the right size
         edge_bsdf_samples = Buffer<BSDFSample>(use_gpu, 2 * num_pixels);
         rays = Buffer<Ray>(use_gpu, (max_bounces + 1) * num_pixels);
         nee_rays = Buffer<Ray>(use_gpu, max_bounces * num_pixels);
@@ -105,6 +106,7 @@ struct PathBuffer {
     Buffer<CameraSample> camera_samples;
     Buffer<LightSample> light_samples, edge_light_samples;
     Buffer<BSDFSample> bsdf_samples, edge_bsdf_samples;
+    Buffer<MediumSample> medium_samples;
     Buffer<Ray> rays, nee_rays;
     Buffer<Ray> edge_rays, edge_nee_rays;
     Buffer<RayDifferential> primary_ray_differentials;
@@ -286,6 +288,7 @@ void render(const Scene &scene,
             auto light_isects = path_buffer.light_isects.view(depth * num_pixels, num_pixels);
             auto light_points = path_buffer.light_points.view(depth * num_pixels, num_pixels);
             auto bsdf_samples = path_buffer.bsdf_samples.view(depth * num_pixels, num_pixels);
+            auto medium_samples = path_buffer.medium_samples.view(depth * num_pixels, num_pixels);
             auto incoming_rays = path_buffer.rays.view(depth * num_pixels, num_pixels);
             auto incoming_ray_differentials =
                 path_buffer.ray_differentials.view(depth * num_pixels, num_pixels);
@@ -320,6 +323,13 @@ void render(const Scene &scene,
                                   nee_rays);
             occluded(scene, active_pixels, nee_rays, optix_rays, optix_hits);
             // TODO Store transmittance between the shading point and light source
+            // Sample intersected media
+            sampler->next_medium_samples(medium_samples);
+            sample_medium(scene,
+                          active_pixels,
+                          shading_points,
+                          light_points,
+                          medium_samples);
 
             // Sample directions based on BRDF
             sampler->next_bsdf_samples(bsdf_samples);

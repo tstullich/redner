@@ -44,7 +44,7 @@ SobolSampler::SobolSampler(bool use_gpu, uint64_t seed, int num_pixels) :
         sobol_matrices = sobol_matrices_gpu;
 #else
         assert(false);
-#endif 
+#endif
     }
 }
 
@@ -198,4 +198,24 @@ void SobolSampler::next_secondary_edge_samples(
         sobol_scramble.begin(),
         (double*)samples.begin()}, samples.size(), use_gpu);
     current_dimension += 4;
+}
+
+void SobolSampler::next_medium_samples(BufferView<TMediumSample<float>> samples) {
+    parallel_for(sobol_sampler<2, float>{
+        current_sample_id,
+        current_dimension,
+        sobol_matrices,
+        sobol_scramble.begin(),
+        (float*)samples.begin()}, samples.size(), use_gpu);
+    current_dimension += 2;
+}
+
+void SobolSampler::next_medium_samples(BufferView<TMediumSample<double>> samples) {
+    parallel_for(sobol_sampler<2, double>{
+        current_sample_id,
+        current_dimension,
+        sobol_matrices,
+        sobol_scramble.begin(),
+        (double*)samples.begin()}, samples.size(), use_gpu);
+    current_dimension += 2;
 }
