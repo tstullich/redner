@@ -10,7 +10,7 @@
  */
 struct MediumInteraction {
    public:
-    MediumInteraction(const SurfacePoint &p, const Vector3f &wo,
+    MediumInteraction(const SurfacePoint &p, const Vector3d &wo,
                       const Medium *medium, const PhaseFunction *phase)
         : surface_point(p), wo(wo), medium(medium), phase(phase){};
 

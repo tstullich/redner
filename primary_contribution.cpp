@@ -15,10 +15,10 @@ struct primary_contribs_accumulator {
         if (incoming_ray.medium) {
             // If ray has a medium associated with it sample to see if intersection
             // is inside of medium
-            // TODO Figure out how to pass in a sample or if this needs to be done elsewhere
-            // auto beta = incoming_ray.medium->sample(incoming_ray, shading_isect, mi);
+            // TODO Fetch beta value from sampled medium
+            auto beta = throughputs[pixel_id]; // Dummy for testing
         }
-        if (shading_isect.valid()) {
+        else if (shading_isect.valid()) {
             const auto &shading_point = shading_points[pixel_id];
             const auto &shading_shape = scene.shapes[shading_isect.shape_id];
             auto wi = -incoming_ray.dir;

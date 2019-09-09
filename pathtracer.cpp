@@ -72,6 +72,7 @@ struct PathBuffer {
         edge_light_points = Buffer<SurfacePoint>(use_gpu, 2 * num_pixels);
         throughputs = Buffer<Vector3>(use_gpu, (max_bounces + 1) * num_pixels);
         edge_throughputs = Buffer<Vector3>(use_gpu, 4 * num_pixels);
+        betas = Buffer<Vector3>(use_gpu, (max_bounces + 1) * num_pixels);
         channel_multipliers = Buffer<Real>(use_gpu,
             2 * channel_info.num_total_dimensions * num_pixels);
         min_roughness = Buffer<Real>(use_gpu, (max_bounces + 1) * num_pixels);
@@ -117,7 +118,7 @@ struct PathBuffer {
     Buffer<SurfacePoint> shading_points, edge_shading_points;
     Buffer<Intersection> light_isects, edge_light_isects;
     Buffer<SurfacePoint> light_points, edge_light_points;
-    Buffer<Vector3> throughputs, edge_throughputs;
+    Buffer<Vector3> throughputs, edge_throughputs, betas;
     Buffer<Real> channel_multipliers;
     Buffer<Real> min_roughness, edge_min_roughness;
 

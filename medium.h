@@ -11,7 +11,7 @@ struct Sampler;
 
 template <typename T>
 struct TMediumSample {
-    TVector2<T> uv;
+    TVector2<T> s;
 };
 
 using MediumSample = TMediumSample<Real>;
@@ -23,9 +23,9 @@ using MediumSample = TMediumSample<Real>;
 struct Medium {
     virtual ~Medium();
     virtual Vector3f transmittance(const Ray &ray,
-                                   const MediumSample &sample) const = 0;
+                                   const Vector2f &sample) const = 0;
     virtual Vector3f sample(const Ray &ray, const SurfacePoint &surface_point,
-                            const MediumSample &sample,
+                            const Vector2f &sample,
                             MediumInteraction *mi) const = 0;
 };
 
@@ -38,9 +38,9 @@ struct HomogeneousMedium : Medium {
    public:
     HomogeneousMedium(const Vector3f &sigma_a, const Vector3f &sigma_s,
                       float g);
-    Vector3f transmittance(const Ray &ray, const MediumSample &sample) const;
+    Vector3f transmittance(const Ray &ray, const Vector2f &sample) const;
     Vector3f sample(const Ray &ray, const SurfacePoint &surface_point,
-                    const MediumSample &sample, MediumInteraction *mi) const;
+                    const Vector2f &sample, MediumInteraction *mi) const;
 
    private:
     // A helper function to calculate e^x component-wise
@@ -48,4 +48,5 @@ struct HomogeneousMedium : Medium {
 
     const Vector3f sigma_a, sigma_s, sigma_t;
     const float g;
+    static const uint NUM_SAMPLES = 2; // Need to change this if we sample more dimensions
 };

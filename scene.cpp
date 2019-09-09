@@ -748,27 +748,39 @@ struct medium_sampler {
     DEVICE void operator()(int idx) {
         auto pixel_id = active_pixels[idx];
         auto sample = samples[pixel_id];
-        // TODO Implement
+        const auto &shading_point = shading_points[pixel_id];
+        const auto &incoming_ray = incoming_rays[pixel_id];
+        if (incoming_ray.medium) {
+            // Sample medium and add it to throughput
+            MediumInteraction mi;
+            betas[pixel_id] = incoming_ray.medium->sample(incoming_ray,
+                                                          sample,
+                                                          shading_point,
+                                                          &mi);
+        }
     }
 
     const FlattenScene scene;
     const int *active_pixels;
     const SurfacePoint *shading_points;
-    const SurfacePoint *light_points;
+    const Ray *incoming_rays;
     const MediumSample *samples;
+    Vector3f *betas;
 };
 
 void sample_medium(const Scene &scene,
                    const BufferView<int> &active_pixels,
                    const BufferView<SurfacePoint> &shading_points,
-                   const BufferView<SurfacePoint> &light_points,
-                   const BufferView<MediumSample> &samples) {
+                   const BufferView<Ray> &incoming_rays,
+                   const BufferView<MediumSample> &samples,
+                   BufferView<Vector3f> betas) {
     parallel_for(medium_sampler{
         get_flatten_scene(scene),
         active_pixels.begin(),
         shading_points.begin(),
-        light_points.begin(),
-        samples.begin()},
+        incoming_rays.begin(),
+        samples.begin(),
+        betas.begin()},
         active_pixels.size(), scene.use_gpu);
 }
 
