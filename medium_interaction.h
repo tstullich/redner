@@ -14,13 +14,12 @@ struct MediumInteraction {
                       const Medium *medium, const PhaseFunction *phase)
         : surface_point(p), wo(wo), medium(medium), phase(phase){};
 
-    bool isValid() const {
+    bool valid() const {
         // If this is a valid interaction inside a medium it is assumed that the
         // phase function has been initialized properly
         return phase != nullptr;
     }
 
-   private:
     SurfacePoint surface_point;
     Vector3f wo;
     const Medium *medium;

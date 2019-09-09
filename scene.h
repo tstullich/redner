@@ -10,6 +10,7 @@
 #include "shape.h"
 #include "material.h"
 #include "medium.h"
+#include "medium_interaction.h"
 #include "envmap.h"
 #include "edge.h"
 #include <vector>
@@ -132,7 +133,8 @@ void sample_medium(const Scene &scene,
                    const BufferView<SurfacePoint> &shading_points,
                    const BufferView<Ray> &incoming_rays,
                    const BufferView<MediumSample> &samples,
-                   BufferView<Vector3f> betas);
+                   BufferView<Vector3> betas,
+                   BufferView<MediumInteraction *> medium_interactions);
 
 void test_scene_intersect(bool use_gpu);
 void test_sample_point_on_light(bool use_gpu);

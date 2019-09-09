@@ -50,6 +50,7 @@ struct PathBuffer {
         edge_light_samples = Buffer<LightSample>(use_gpu, 2 * num_pixels);
         bsdf_samples = Buffer<BSDFSample>(use_gpu, max_bounces * num_pixels);
         medium_samples = Buffer<MediumSample>(use_gpu, max_bounces * num_pixels); // TODO Check if this is the right size
+        medium_interactions = Buffer<MediumInteraction*>(use_gpu, max_bounces * num_pixels); // TODO Check size
         edge_bsdf_samples = Buffer<BSDFSample>(use_gpu, 2 * num_pixels);
         rays = Buffer<Ray>(use_gpu, (max_bounces + 1) * num_pixels);
         nee_rays = Buffer<Ray>(use_gpu, max_bounces * num_pixels);
@@ -108,6 +109,7 @@ struct PathBuffer {
     Buffer<LightSample> light_samples, edge_light_samples;
     Buffer<BSDFSample> bsdf_samples, edge_bsdf_samples;
     Buffer<MediumSample> medium_samples;
+    Buffer<MediumInteraction*> medium_interactions;
     Buffer<Ray> rays, nee_rays;
     Buffer<Ray> edge_rays, edge_nee_rays;
     Buffer<RayDifferential> primary_ray_differentials;
@@ -231,6 +233,8 @@ void render(const Scene &scene,
 
         // Buffer view for first intersection
         auto throughputs = path_buffer.throughputs.view(0, num_pixels);
+        auto betas = path_buffer.betas.view(0, num_pixels);
+        auto mis = path_buffer.medium_interactions.view(0, num_pixels);
         auto camera_samples = path_buffer.camera_samples.view(0, num_pixels);
         auto rays = path_buffer.rays.view(0, num_pixels);
         auto primary_differentials = path_buffer.primary_ray_differentials.view(0, num_pixels);
@@ -329,8 +333,10 @@ void render(const Scene &scene,
             sample_medium(scene,
                           active_pixels,
                           shading_points,
-                          light_points,
-                          medium_samples);
+                          incoming_rays,
+                          medium_samples,
+                          betas,
+                          mis);
 
             // Sample directions based on BRDF
             sampler->next_bsdf_samples(bsdf_samples);

@@ -751,12 +751,12 @@ struct medium_sampler {
         const auto &shading_point = shading_points[pixel_id];
         const auto &incoming_ray = incoming_rays[pixel_id];
         if (incoming_ray.medium) {
-            // Sample medium and add it to throughput
-            MediumInteraction mi;
+            // Sample medium and add it to throughput. This will also initialize
+            // the MediumInteraction pointer in case an interaction with a medium occured
             betas[pixel_id] = incoming_ray.medium->sample(incoming_ray,
-                                                          sample,
                                                           shading_point,
-                                                          &mi);
+                                                          sample,
+                                                          &medium_interactions[pixel_id]);
         }
     }
 
@@ -765,7 +765,8 @@ struct medium_sampler {
     const SurfacePoint *shading_points;
     const Ray *incoming_rays;
     const MediumSample *samples;
-    Vector3f *betas;
+    Vector3 *betas;
+    MediumInteraction *medium_interactions;
 };
 
 void sample_medium(const Scene &scene,
@@ -773,14 +774,16 @@ void sample_medium(const Scene &scene,
                    const BufferView<SurfacePoint> &shading_points,
                    const BufferView<Ray> &incoming_rays,
                    const BufferView<MediumSample> &samples,
-                   BufferView<Vector3f> betas) {
+                   BufferView<Vector3> betas,
+                   BufferView<MediumInteraction*> medium_interactions) {
     parallel_for(medium_sampler{
         get_flatten_scene(scene),
         active_pixels.begin(),
         shading_points.begin(),
         incoming_rays.begin(),
         samples.begin(),
-        betas.begin()},
+        betas.begin(),
+        *medium_interactions.begin()},
         active_pixels.size(), scene.use_gpu);
 }
 

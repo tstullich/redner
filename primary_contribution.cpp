@@ -10,13 +10,13 @@ struct primary_contribs_accumulator {
         const auto &throughput = throughputs[pixel_id];
         const auto &shading_isect = shading_isects[pixel_id];
         const auto &incoming_ray = incoming_rays[pixel_id];
+        const auto &medium_interaction = medium_interactions[pixel_id];
         Vector3 emission = Vector3{0, 0, 0};
-        MediumInteraction *mi;
-        if (incoming_ray.medium) {
-            // If ray has a medium associated with it sample to see if intersection
-            // is inside of medium
-            // TODO Fetch beta value from sampled medium
-            auto beta = throughputs[pixel_id]; // Dummy for testing
+        if (medium_interaction.valid()) {
+            // If a medium interaction has been detected we need to sample
+            // the phase function to determine wo
+            Vector3d wi = -incoming_ray.dir, wo;
+            //medium_interaction.phase->sample_p(incoming_ray, wo, nullptr);
         }
         else if (shading_isect.valid()) {
             const auto &shading_point = shading_points[pixel_id];
@@ -336,6 +336,7 @@ struct primary_contribs_accumulator {
     const RayDifferential *incoming_ray_differentials;
     const Intersection *shading_isects;
     const SurfacePoint *shading_points;
+    const MediumInteraction *medium_interactions;
     const Real weight;
     const ChannelInfo channel_info;
     float *rendered_image;
@@ -567,6 +568,7 @@ void accumulate_primary_contribs(
         const BufferView<RayDifferential> &incoming_ray_differentials,
         const BufferView<Intersection> &shading_isects,
         const BufferView<SurfacePoint> &shading_points,
+        const BufferView<MediumInteraction *> medium_interactions,
         const Real weight,
         const ChannelInfo &channel_info,
         float *rendered_image,
@@ -580,6 +582,7 @@ void accumulate_primary_contribs(
         incoming_ray_differentials.begin(),
         shading_isects.begin(),
         shading_points.begin(),
+        *medium_interactions.begin(),
         weight,
         channel_info,
         rendered_image,
