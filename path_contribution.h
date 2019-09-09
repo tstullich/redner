@@ -8,6 +8,7 @@
 #include "texture.h"
 #include "area_light.h"
 #include "material.h"
+#include "medium_interaction.h"
 
 struct Scene;
 struct ChannelInfo;
@@ -27,6 +28,7 @@ void accumulate_path_contribs(const Scene &scene,
                               const BufferView<SurfacePoint> &bsdf_points,
                               const BufferView<Ray> &bsdf_rays,
                               const BufferView<Real> &min_roughness,
+                              const BufferView<MediumInteraction *> &medium_interactions,
                               const Real weight,
                               const ChannelInfo &channel_info,
                               BufferView<Vector3> next_throughputs,

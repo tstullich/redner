@@ -7,6 +7,7 @@
 #include "area_light.h"
 #include "texture.h"
 #include "matrix.h"
+#include "medium_interaction.h"
 
 struct Scene;
 struct ChannelInfo;
@@ -25,6 +26,7 @@ void accumulate_primary_contribs(
         const BufferView<RayDifferential> &incoming_ray_differentials,
         const BufferView<Intersection> &shading_isects,
         const BufferView<SurfacePoint> &shading_points,
+        const BufferView<MediumInteraction *> &medium_interactions,
         const Real weight,
         const ChannelInfo &channel_info,
         float *rendered_image,

@@ -20,7 +20,7 @@ Vector3 HomogeneousMedium::sample(const Ray &ray,
     // Sample a channel and distance along the ray
     int channel =
         std::min(sample.uv[0] * NUM_SAMPLES, static_cast<double>(NUM_SAMPLES - 1));
-    double dist = -std::log(1.0f - sample.uv[1]) / sigma_t[channel];
+    double dist = -std::log(1.0 - sample.uv[1]) / sigma_t[channel];
 
     float t = std::min(dist / length(ray.dir), ray.tmax);
     bool sampledMedium = t < ray.tmax;
@@ -36,12 +36,12 @@ Vector3 HomogeneousMedium::sample(const Ray &ray,
 
     // Return the weighting factor scattering inside of a homogeneous medium
     Vector3 density = sampledMedium ? (sigma_t * tr) : tr;
-    float pdf = 0.0f;
+    float pdf = 0.0;
     for (int i = 0; i < NUM_SAMPLES; i++) {
         pdf += density[i];
     }
 
-    pdf *= 1.0f / NUM_SAMPLES;
+    pdf *= 1.0 / NUM_SAMPLES;
 
     return sampledMedium ? (tr * sigma_s / pdf) : (tr / pdf);
 }

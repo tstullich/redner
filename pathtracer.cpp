@@ -234,7 +234,7 @@ void render(const Scene &scene,
         // Buffer view for first intersection
         auto throughputs = path_buffer.throughputs.view(0, num_pixels);
         auto betas = path_buffer.betas.view(0, num_pixels);
-        auto mis = path_buffer.medium_interactions.view(0, num_pixels);
+        auto medium_interactions = path_buffer.medium_interactions.view(0, num_pixels);
         auto camera_samples = path_buffer.camera_samples.view(0, num_pixels);
         auto rays = path_buffer.rays.view(0, num_pixels);
         auto primary_differentials = path_buffer.primary_ray_differentials.view(0, num_pixels);
@@ -271,6 +271,7 @@ void render(const Scene &scene,
                                     ray_differentials,
                                     shading_isects,
                                     shading_points,
+                                    medium_interactions,
                                     Real(1) / options.num_samples,
                                     channel_info,
                                     rendered_image.get(),
@@ -336,7 +337,7 @@ void render(const Scene &scene,
                           incoming_rays,
                           medium_samples,
                           betas,
-                          mis);
+                          medium_interactions);
 
             // Sample directions based on BRDF
             sampler->next_bsdf_samples(bsdf_samples);
@@ -377,6 +378,7 @@ void render(const Scene &scene,
                 bsdf_points,
                 next_rays,
                 min_roughness,
+                medium_interactions,
                 Real(1) / options.num_samples,
                 channel_info,
                 next_throughputs,
@@ -554,6 +556,7 @@ void render(const Scene &scene,
                         edge_ray_differentials,
                         edge_shading_isects,
                         edge_shading_points,
+                        medium_interactions,
                         Real(1) / options.num_samples,
                         channel_info,
                         nullptr,
@@ -664,6 +667,7 @@ void render(const Scene &scene,
                             bsdf_points,
                             next_rays,
                             edge_min_roughness,
+                            medium_interactions,
                             Real(1) / options.num_samples,
                             channel_info,
                             next_throughputs,
@@ -804,6 +808,7 @@ void render(const Scene &scene,
                                             ray_differentials,
                                             shading_isects,
                                             shading_points,
+                                            medium_interactions,
                                             Real(1) / options.num_samples,
                                             channel_info,
                                             nullptr,
@@ -901,6 +906,7 @@ void render(const Scene &scene,
                         bsdf_points,
                         next_rays,
                         edge_min_roughness,
+                        medium_interactions,
                         Real(1) / options.num_samples,
                         channel_info,
                         next_throughputs,

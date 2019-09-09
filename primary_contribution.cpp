@@ -15,8 +15,8 @@ struct primary_contribs_accumulator {
         if (medium_interaction.valid()) {
             // If a medium interaction has been detected we need to sample
             // the phase function to determine wo
-            Vector3d wi = -incoming_ray.dir, wo;
-            //medium_interaction.phase->sample_p(incoming_ray, wo, nullptr);
+            Vector3d wo = -incoming_ray.dir, wi;
+            medium_interaction.phase->sample_p(wo, &wi, nullptr);
         }
         else if (shading_isect.valid()) {
             const auto &shading_point = shading_points[pixel_id];
@@ -568,7 +568,7 @@ void accumulate_primary_contribs(
         const BufferView<RayDifferential> &incoming_ray_differentials,
         const BufferView<Intersection> &shading_isects,
         const BufferView<SurfacePoint> &shading_points,
-        const BufferView<MediumInteraction *> medium_interactions,
+        const BufferView<MediumInteraction *> &medium_interactions,
         const Real weight,
         const ChannelInfo &channel_info,
         float *rendered_image,

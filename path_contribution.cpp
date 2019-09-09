@@ -1,6 +1,7 @@
 #include "path_contribution.h"
 #include "scene.h"
 #include "parallel.h"
+#include "medium_interaction.h"
 
 struct path_contribs_accumulator {
     DEVICE void operator()(int idx) {
@@ -16,6 +17,7 @@ struct path_contribs_accumulator {
         const auto &bsdf_point = bsdf_points[pixel_id];
         const auto &bsdf_ray = bsdf_rays[pixel_id];
         const auto &min_rough = min_roughness[pixel_id];
+        const auto &medium_interaction = medium_interactions[pixel_id];
         auto &next_throughput = next_throughputs[pixel_id];
 
         auto wi = -incoming_ray.dir;
@@ -26,6 +28,12 @@ struct path_contribs_accumulator {
         // Next event estimation
         auto nee_contrib = Vector3{0, 0, 0};
         if (light_ray.tmax >= 0) { // tmax < 0 means the ray is blocked
+            if (medium_interaction.valid()) {
+                // Handle an interaction between the light and a medium
+                Vector3 wo(0.0, 0.0, 0.0);
+                //medium_interaction.phase->sample_p(wo, &wi, ) // TODO Add sampling
+                auto m = medium_interaction.phase->p(wo, wi);
+            }
             if (light_isect.valid()) {
                 // area light
                 const auto &light_shape = scene.shapes[light_isect.shape_id];
@@ -146,6 +154,7 @@ struct path_contribs_accumulator {
     const SurfacePoint *bsdf_points;
     const Ray *bsdf_rays;
     const Real *min_roughness;
+    const MediumInteraction *medium_interactions;
     const Real weight;
     const ChannelInfo channel_info;
     Vector3 *next_throughputs;
@@ -616,6 +625,7 @@ void accumulate_path_contribs(const Scene &scene,
                               const BufferView<SurfacePoint> &bsdf_points,
                               const BufferView<Ray> &bsdf_rays,
                               const BufferView<Real> &min_roughness,
+                              const BufferView<MediumInteraction *> &medium_interactions,
                               const Real weight,
                               const ChannelInfo &channel_info,
                               BufferView<Vector3> next_throughputs,
@@ -635,6 +645,7 @@ void accumulate_path_contribs(const Scene &scene,
         bsdf_points.begin(),
         bsdf_rays.begin(),
         min_roughness.begin(),
+        *medium_interactions.begin(),
         weight,
         channel_info,
         next_throughputs.begin(),

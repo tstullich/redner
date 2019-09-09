@@ -30,17 +30,17 @@ struct HenyeyGreenstein : PhaseFunction {
     double sample_p(const Vector3 &wo, Vector3 *wi,
                     const Vector2 &sample) const override {
         // Compute cosine theta
-        float cosTheta;
+        double cosTheta;
         if (std::abs(g) < 1e-3) {
-            cosTheta = 1.0f - 2.0f * sample[0];
+            cosTheta = 1.0 - 2.0 * sample[0];
         } else {
-            float sqrTerm = (1.0f - g * g) / (1.0f - g + 2.0f * g * sample[0]);
-            cosTheta = (1.0f + g * g - sqrTerm * sqrTerm) / (2.0f * g);
+            double sqrTerm = (1.0 - g * g) / (1.0 - g + 2.0 * g * sample[0]);
+            cosTheta = (1.0 + g * g - sqrTerm * sqrTerm) / (2.0 * g);
         }
 
         // Compute the direction wi based on the HG phase function
-        float sinTheta = std::sqrt(std::max(0.0f, 1.0f - cosTheta * cosTheta));
-        float phi = 2.0f * M_PI * sample[1];
+        double sinTheta = std::sqrt(std::max(0.0, 1.0 - cosTheta * cosTheta));
+        double phi = 2.0 * M_PI * sample[1];
         Vector3 v1, v2;
         coordinate_system(wo, v1, v2);
         *wi = sphericalDirection(sinTheta, cosTheta, phi, v1, v2, -wo);
@@ -50,15 +50,16 @@ struct HenyeyGreenstein : PhaseFunction {
    private:
     // Calculate the phase based on the angle between wo and wi
     // and a scattering factor g
-    inline float PhaseHG(float cosTheta, float g) const {
-        float denom = 1.0f + g * g + 2.0f * g * cosTheta;
-        return INV_4PI * (1.0f - g * g) / (denom * std::sqrt(denom));
+    inline double PhaseHG(double cosTheta, float g) const {
+        double denom = 1.0 + g * g + 2.0 * g * cosTheta;
+        return INV_4PI * (1.0 - g * g) / (denom * std::sqrt(denom));
     }
 
     // Calculates the new direction of the outgoing vector given three basis
     // vectors
-    inline Vector3 sphericalDirection(float sinTheta, float cosTheta, float phi,
-                                      const Vector3 &x, const Vector3 &y,
+    inline Vector3 sphericalDirection(double sinTheta, double cosTheta,
+                                      double phi, const Vector3 &x,
+                                      const Vector3 &y,
                                       const Vector3 &z) const {
         return sinTheta * std::cos(phi) * x + sinTheta * std::sin(phi) * y +
                cosTheta * z;
