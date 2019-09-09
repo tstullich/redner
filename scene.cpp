@@ -5,6 +5,7 @@
 #include "test_utils.h"
 #include "edge.h"
 #include "thrust_utils.h"
+#include "medium.h"
 
 #include <thrust/execution_policy.h>
 #include <thrust/iterator/constant_iterator.h>
@@ -109,7 +110,7 @@ Scene::Scene(const Camera &camera,
 
         optix_scene = optix_context->createModel();
         optix_scene->setInstances(
-            (int)shapes.size(), RTP_BUFFER_TYPE_HOST, &optix_instances[0], 
+            (int)shapes.size(), RTP_BUFFER_TYPE_HOST, &optix_instances[0],
             RTP_BUFFER_FORMAT_TRANSFORM_FLOAT4x4, RTP_BUFFER_TYPE_HOST, &transforms[0]);
         optix_scene->update(RTP_MODEL_HINT_NONE);
         optix_scene->finish();
@@ -341,7 +342,7 @@ DScene::DScene(const DCamera &camera,
         this->materials = Buffer<DMaterial>(use_gpu, materials.size());
         for (int material_id = 0; material_id < (int)materials.size(); material_id++) {
             this->materials[material_id] = *materials[material_id];
-            
+
         }
     }
     if (area_lights.size() > 0) {
@@ -572,6 +573,7 @@ void intersect(const Scene &scene,
                                         ray_differential,
                                         new_ray_differentials[pixel_id]);
                     ray.tmax = rtc_ray_hit.ray.tfar;
+                    ray.medium = shape.medium;
                 }
             }
         }, num_threads);
@@ -667,7 +669,7 @@ void occluded(const Scene &scene,
                     rays[pixel_id].tmax = -1;
                 }
             }
-        }, num_threads); 
+        }, num_threads);
     }
 }
 
@@ -740,6 +742,48 @@ void sample_point_on_light(const Scene &scene,
         active_pixels.size(), scene.use_gpu);
 }
 
+// TODO Check if this is the right place for the sampler.
+//      Could move this code into a separate file
+struct medium_sampler {
+    DEVICE void operator()(int idx) {
+        auto pixel_id = active_pixels[idx];
+        auto sample = samples[pixel_id];
+        const auto &shading_point = shading_points[pixel_id];
+        const auto &incoming_ray = incoming_rays[pixel_id];
+        if (incoming_ray.medium) {
+            // Sample medium and add it to throughput
+            MediumInteraction mi;
+            betas[pixel_id] = incoming_ray.medium->sample(incoming_ray,
+                                                          sample,
+                                                          shading_point,
+                                                          &mi);
+        }
+    }
+
+    const FlattenScene scene;
+    const int *active_pixels;
+    const SurfacePoint *shading_points;
+    const Ray *incoming_rays;
+    const MediumSample *samples;
+    Vector3f *betas;
+};
+
+void sample_medium(const Scene &scene,
+                   const BufferView<int> &active_pixels,
+                   const BufferView<SurfacePoint> &shading_points,
+                   const BufferView<Ray> &incoming_rays,
+                   const BufferView<MediumSample> &samples,
+                   BufferView<Vector3f> betas) {
+    parallel_for(medium_sampler{
+        get_flatten_scene(scene),
+        active_pixels.begin(),
+        shading_points.begin(),
+        incoming_rays.begin(),
+        samples.begin(),
+        betas.begin()},
+        active_pixels.size(), scene.use_gpu);
+}
+
 void test_scene_intersect(bool use_gpu) {
     Buffer<Vector3f> vertices(use_gpu, 3);
     vertices[0] = Vector3f{-1.f, 0.f, 1.f};
@@ -794,7 +838,7 @@ void test_scene_intersect(bool use_gpu) {
     Buffer<OptiXRay> optix_rays(use_gpu, 2);
     Buffer<OptiXHit> optix_hits(use_gpu, 2);
     intersect(scene,
-              active_pixels.view(0, active_pixels.size()), 
+              active_pixels.view(0, active_pixels.size()),
               rays.view(0, rays.size()),
               ray_diffs.view(0, rays.size()),
               isects.view(0, rays.size()),

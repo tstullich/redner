@@ -1,35 +1,52 @@
 #pragma once
 
+#include "phase_function.h"
 #include "ray.h"
-#include "sampler.h"
+#include "vector.h"
+#include "intersection.h"
 
-// Forward declaration for Medium
+// Forward declarations
 struct MediumInteraction;
+struct Sampler;
 
+template <typename T>
+struct TMediumSample {
+    TVector2<T> s;
+};
+
+using MediumSample = TMediumSample<Real>;
+
+/*
+ * An interface struct to describe a type of medium. The different types
+ * can be either homogeneous or heterogeneous
+ */
 struct Medium {
-public:
-  virtual ~Medium();
-  virtual Real transmittance(const Ray &ray, Sampler &sampler) = 0;
-  // TODO Check if we need things like MemoryArena and MediumInteraction
-  virtual Real sample(const Ray &ray, Sampler &sampler,
-                      MediumInteraction *mediumInteraction) = 0;
+    virtual ~Medium();
+    virtual Vector3f transmittance(const Ray &ray,
+                                   const Vector2f &sample) const = 0;
+    virtual Vector3f sample(const Ray &ray, const SurfacePoint &surface_point,
+                            const Vector2f &sample,
+                            MediumInteraction *mi) const = 0;
 };
 
-struct PhaseFunction {
-  // TODO Implement
-};
+/**
+ * This struct holds data to represent a homogeneous medium.
+ * Since the medium is assumed to be homogeneous, we use Beer's law in
+ * order to calculate the transmittance. Sampling is done by
+ */
+struct HomogeneousMedium : Medium {
+   public:
+    HomogeneousMedium(const Vector3f &sigma_a, const Vector3f &sigma_s,
+                      float g);
+    Vector3f transmittance(const Ray &ray, const Vector2f &sample) const;
+    Vector3f sample(const Ray &ray, const SurfacePoint &surface_point,
+                    const Vector2f &sample, MediumInteraction *mi) const;
 
-struct MediumInteraction {
-  // See if we need to abstract from Interaction class
-  MediumInteraction(const TVector3<Real> &point, const TVector3<Real> &wo,
-                    Real time, const Medium *medium,
-                    const PhaseFunction *phase) {}
+   private:
+    // A helper function to calculate e^x component-wise
+    Vector3f vecExp(const Vector3f &vec) const;
 
-  bool isValid() const {
-    // If interaction in a medium has occured the phase function should have
-    // been initialized
-    return phase != nullptr;
-  }
-
-  const PhaseFunction *phase;
+    const Vector3f sigma_a, sigma_s, sigma_t;
+    const float g;
+    static const uint NUM_SAMPLES = 2; // Need to change this if we sample more dimensions
 };

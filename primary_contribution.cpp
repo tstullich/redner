@@ -2,6 +2,7 @@
 #include "scene.h"
 #include "channels.h"
 #include "parallel.h"
+#include "medium_interaction.h"
 
 struct primary_contribs_accumulator {
     DEVICE void operator()(int idx) {
@@ -10,7 +11,14 @@ struct primary_contribs_accumulator {
         const auto &shading_isect = shading_isects[pixel_id];
         const auto &incoming_ray = incoming_rays[pixel_id];
         Vector3 emission = Vector3{0, 0, 0};
-        if (shading_isect.valid()) {
+        MediumInteraction *mi;
+        if (incoming_ray.medium) {
+            // If ray has a medium associated with it sample to see if intersection
+            // is inside of medium
+            // TODO Fetch beta value from sampled medium
+            auto beta = throughputs[pixel_id]; // Dummy for testing
+        }
+        else if (shading_isect.valid()) {
             const auto &shading_point = shading_points[pixel_id];
             const auto &shading_shape = scene.shapes[shading_isect.shape_id];
             auto wi = -incoming_ray.dir;

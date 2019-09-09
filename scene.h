@@ -9,6 +9,7 @@
 #include "area_light.h"
 #include "shape.h"
 #include "material.h"
+#include "medium.h"
 #include "envmap.h"
 #include "edge.h"
 #include <vector>
@@ -125,6 +126,13 @@ void sample_point_on_light(const Scene &scene,
                            BufferView<Intersection> light_isects,
                            BufferView<SurfacePoint> light_points,
                            BufferView<Ray> shadow_ray);
+
+void sample_medium(const Scene &scene,
+                   const BufferView<int> &active_pixels,
+                   const BufferView<SurfacePoint> &shading_points,
+                   const BufferView<Ray> &incoming_rays,
+                   const BufferView<MediumSample> &samples,
+                   BufferView<Vector3f> betas);
 
 void test_scene_intersect(bool use_gpu);
 void test_sample_point_on_light(bool use_gpu);
