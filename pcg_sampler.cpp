@@ -141,3 +141,13 @@ void PCGSampler::next_medium_samples(BufferView<TMediumSample<double>> samples) 
     parallel_for(pcg_sampler_double<2>{rng_states.begin(),
         (double*)samples.begin()}, samples.size(), use_gpu);
 }
+
+void PCGSampler::next_phase_samples(BufferView<TPhaseSample<float>> samples) {
+    parallel_for(pcg_sampler_float<2>{rng_states.begin(),
+        (float*)samples.begin()}, samples.size(), use_gpu);
+}
+
+void PCGSampler::next_phase_samples(BufferView<TPhaseSample<double>> samples) {
+    parallel_for(pcg_sampler_double<2>{rng_states.begin(),
+        (double*)samples.begin()}, samples.size(), use_gpu);
+}

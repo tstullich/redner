@@ -23,6 +23,8 @@ struct PCGSampler : public Sampler {
     void next_secondary_edge_samples(BufferView<TSecondaryEdgeSample<double>> samples) override;
     void next_medium_samples(BufferView<TMediumSample<float>> samples) override;
     void next_medium_samples(BufferView<TMediumSample<double>> samples) override;
+    void next_phase_samples(BufferView<TPhaseSample<float>> samples) override;
+    void next_phase_samples(BufferView<TPhaseSample<double>> samples) override;
 
     bool use_gpu;
     Buffer<pcg32_state> rng_states;

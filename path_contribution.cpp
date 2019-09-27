@@ -29,7 +29,7 @@ struct path_contribs_accumulator {
         auto nee_contrib = Vector3{0, 0, 0};
         if (light_ray.tmax >= 0) { // tmax < 0 means the ray is blocked
             if (medium_interaction.valid()) {
-                // Handle an interaction between the light and a medium
+                // Handle an interaction inside a medium
                 Vector3 wo(0.0, 0.0, 0.0);
                 //medium_interaction.phase->sample_p(wo, &wi, ) // TODO Add sampling
                 auto m = medium_interaction.phase->p(wo, wi);

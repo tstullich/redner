@@ -787,6 +787,37 @@ void sample_medium(const Scene &scene,
         active_pixels.size(), scene.use_gpu);
 }
 
+struct phase_sampler {
+    DEVICE void operator()(int idx) {
+        auto pixel_id = active_pixels[idx];
+        auto sample = samples[pixel_id];
+        const auto &incoming_ray = incoming_rays[pixel_id];
+
+        if (incoming_ray.medium) {
+        }
+    }
+
+    const FlattenScene scene;
+    const int *active_pixels;
+    const Ray *incoming_rays;
+    const MediumInteraction *medium_interactions;
+    const PhaseSample *samples;
+};
+
+void sample_phase(const Scene &scene,
+                  const BufferView<int> &active_pixels,
+                  const BufferView<Ray> &incoming_rays,
+                  const BufferView<MediumInteraction*> &medium_interactions,
+                  const BufferView<PhaseSample> &samples) {
+    parallel_for(phase_sampler {
+        get_flatten_scene(scene),
+        active_pixels.begin(),
+        incoming_rays.begin(),
+        *medium_interactions.begin(),
+        samples.begin(),
+    }, active_pixels.size(), scene.use_gpu);
+}
+
 void test_scene_intersect(bool use_gpu) {
     Buffer<Vector3f> vertices(use_gpu, 3);
     vertices[0] = Vector3f{-1.f, 0.f, 1.f};

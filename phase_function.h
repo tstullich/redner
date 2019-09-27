@@ -5,6 +5,13 @@
 // Defining the inverse for 1/4PI here
 static const float INV_4PI = 0.07957747154594766788;
 
+template <typename T>
+struct TPhaseSample {
+    TVector2<T> uv;
+};
+
+using PhaseSample = TPhaseSample<Real>;
+
 /*
  * An interface to store various information for a phase function.
  * Useful when sampling participating media. Wi and Wo are assumed
