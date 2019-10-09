@@ -742,21 +742,29 @@ void sample_point_on_light(const Scene &scene,
         active_pixels.size(), scene.use_gpu);
 }
 
-// TODO Check if this is the right place for the sampler.
-//      Could move this code into a separate file
 struct medium_sampler {
     DEVICE void operator()(int idx) {
         auto pixel_id = active_pixels[idx];
-        auto sample = samples[pixel_id];
+        auto medium_sample = medium_samples[pixel_id];
         const auto &shading_point = shading_points[pixel_id];
         const auto &incoming_ray = incoming_rays[pixel_id];
         if (incoming_ray.medium) {
             // Sample medium and add it to throughput. This will also initialize
             // the MediumInteraction pointer in case an interaction with a medium occured
-            betas[pixel_id] = incoming_ray.medium->sample(incoming_ray,
-                                                          shading_point,
-                                                          sample,
-                                                          &medium_interactions[pixel_id]);
+            // TODO Figure out how to initialize the vector to 1.0
+            betas[pixel_id] *= incoming_ray.medium->sample(incoming_ray,
+                                                           shading_point,
+                                                           medium_sample,
+                                                           &medium_interactions[pixel_id]);
+        }
+
+        if (medium_interactions[pixel_id].valid()) {
+            // We also immediately sample the phase function if there is
+            // an interaction inside a medium
+            const auto &medium_interaction = medium_interactions[pixel_id];
+            auto phase_sample = phase_samples[pixel_id];
+            // TODO Figure out how to store the resulting wi vector and use it
+            medium_interaction.phase->sample_p(-incoming_ray.dir, phase_sample);
         }
     }
 
@@ -764,7 +772,8 @@ struct medium_sampler {
     const int *active_pixels;
     const SurfacePoint *shading_points;
     const Ray *incoming_rays;
-    const MediumSample *samples;
+    const MediumSample *medium_samples;
+    const PhaseSample *phase_samples;
     Vector3 *betas;
     MediumInteraction *medium_interactions;
 };
@@ -773,7 +782,8 @@ void sample_medium(const Scene &scene,
                    const BufferView<int> &active_pixels,
                    const BufferView<SurfacePoint> &shading_points,
                    const BufferView<Ray> &incoming_rays,
-                   const BufferView<MediumSample> &samples,
+                   const BufferView<MediumSample> &medium_samples,
+                   const BufferView<PhaseSample> &phase_samples,
                    BufferView<Vector3> betas,
                    BufferView<MediumInteraction*> medium_interactions) {
     parallel_for(medium_sampler{
@@ -781,41 +791,11 @@ void sample_medium(const Scene &scene,
         active_pixels.begin(),
         shading_points.begin(),
         incoming_rays.begin(),
-        samples.begin(),
+        medium_samples.begin(),
+        phase_samples.begin(),
         betas.begin(),
         *medium_interactions.begin()},
         active_pixels.size(), scene.use_gpu);
-}
-
-struct phase_sampler {
-    DEVICE void operator()(int idx) {
-        auto pixel_id = active_pixels[idx];
-        auto sample = samples[pixel_id];
-        const auto &incoming_ray = incoming_rays[pixel_id];
-
-        if (incoming_ray.medium) {
-        }
-    }
-
-    const FlattenScene scene;
-    const int *active_pixels;
-    const Ray *incoming_rays;
-    const MediumInteraction *medium_interactions;
-    const PhaseSample *samples;
-};
-
-void sample_phase(const Scene &scene,
-                  const BufferView<int> &active_pixels,
-                  const BufferView<Ray> &incoming_rays,
-                  const BufferView<MediumInteraction*> &medium_interactions,
-                  const BufferView<PhaseSample> &samples) {
-    parallel_for(phase_sampler {
-        get_flatten_scene(scene),
-        active_pixels.begin(),
-        incoming_rays.begin(),
-        *medium_interactions.begin(),
-        samples.begin(),
-    }, active_pixels.size(), scene.use_gpu);
 }
 
 void test_scene_intersect(bool use_gpu) {

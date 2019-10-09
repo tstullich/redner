@@ -132,14 +132,10 @@ void sample_medium(const Scene &scene,
                    const BufferView<int> &active_pixels,
                    const BufferView<SurfacePoint> &shading_points,
                    const BufferView<Ray> &incoming_rays,
-                   const BufferView<MediumSample> &samples,
+                   const BufferView<MediumSample> &medium_samples,
+                   const BufferView<PhaseSample> &phase_samples,
                    BufferView<Vector3> betas,
                    BufferView<MediumInteraction *> medium_interactions);
-
-void sample_phase(const Scene &scene,
-                  const BufferView<int> &active_pixels,
-                  const BufferView<Ray> &incoming_rays,
-                  const BufferView<PhaseSample> &samples);
 
 void test_scene_intersect(bool use_gpu);
 void test_sample_point_on_light(bool use_gpu);

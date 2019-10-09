@@ -29,10 +29,7 @@ struct path_contribs_accumulator {
         auto nee_contrib = Vector3{0, 0, 0};
         if (light_ray.tmax >= 0) { // tmax < 0 means the ray is blocked
             if (medium_interaction.valid()) {
-                // Handle an interaction inside a medium
-                Vector3 wo(0.0, 0.0, 0.0);
-                //medium_interaction.phase->sample_p(wo, &wi, ) // TODO Add sampling
-                auto m = medium_interaction.phase->p(wo, wi);
+                // Handle an interaction inside a medium if needed
             }
             if (light_isect.valid()) {
                 // area light
@@ -179,7 +176,7 @@ struct d_path_contribs_accumulator {
         auto &d_incoming_ray = d_incoming_rays[pixel_id];
         auto &d_incoming_ray_differential = d_incoming_ray_differentials[pixel_id];
         auto &d_shading_point = d_shading_points[pixel_id];
-    
+
         auto wi = -incoming_ray.dir;
         auto p = shading_point.position;
         const auto &shading_shape = scene.shapes[shading_isect.shape_id];
@@ -376,9 +373,9 @@ struct d_path_contribs_accumulator {
                 auto d_bsdf_val = d_scatter_bsdf / pdf_bsdf;
                 // XXX: Ignore derivative w.r.t. pdf_bsdf since it causes high variance
                 // when propagating back from many bounces
-                // This is still correct since 
+                // This is still correct since
                 // E[(\nabla f) / p] = \int (\nabla f) / p * p = \int (\nabla f)
-                // An intuitive way to think about this is that we are dividing the pdfs 
+                // An intuitive way to think about this is that we are dividing the pdfs
                 // and multiplying MIS weights also for our gradient estimator
 
                 // auto d_pdf_bsdf = -sum(d_scatter_bsdf * scatter_bsdf) / pdf_bsdf;
@@ -401,7 +398,7 @@ struct d_path_contribs_accumulator {
                         d_throughput += d_path_contrib * scatter_contrib;
                         auto weight = mis_weight / pdf_bsdf;
                         // scatter_contrib = weight * bsdf_val * light_contrib
-                        
+
                         // auto d_weight = sum(d_scatter_contrib * bsdf_val * light_contrib);
                         // Ignore derivatives of MIS weight & pdf_bsdf
                         // weight = mis_weight / pdf_bsdf
@@ -507,7 +504,7 @@ struct d_path_contribs_accumulator {
         } else if (scene.envmap != nullptr) {
             // Hit environment map
             const auto &bsdf_ray = bsdf_rays[pixel_id];
-            
+
             auto wo = bsdf_ray.dir;
             auto pdf_bsdf = bsdf_pdf(material, shading_point, wi, wo, min_rough);
             // wo can be zero if bsdf_sample fails
@@ -528,7 +525,7 @@ struct d_path_contribs_accumulator {
                 d_throughput += d_path_contrib * scatter_contrib;
                 auto weight = mis_weight / pdf_bsdf;
 
-                // scatter_contrib = weight * bsdf_val * light_contrib                
+                // scatter_contrib = weight * bsdf_val * light_contrib
                 // auto d_weight = sum(d_scatter_contrib * bsdf_val * light_contrib);
                 // Ignore derivatives of MIS weight and pdf
                 // XXX: unlike the case of mesh light sources, we don't propagate to

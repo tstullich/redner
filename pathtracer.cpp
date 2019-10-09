@@ -331,18 +331,17 @@ void render(const Scene &scene,
                                   nee_rays);
             occluded(scene, active_pixels, nee_rays, optix_rays, optix_hits);
             // TODO Store transmittance between the shading point and light source
-            // Sample intersected media
+            // Sample intersected media as well as phase function if needed
             sampler->next_medium_samples(medium_samples);
+            sampler->next_phase_samples(phase_samples);
             sample_medium(scene,
                           active_pixels,
                           shading_points,
                           incoming_rays,
                           medium_samples,
+                          phase_samples,
                           betas,
                           medium_interactions);
-
-            sampler->next_phase_samples(phase_samples);
-            sample_phase(scene, active_pixels, incoming_rays, phase_samples);
 
             // Sample directions based on BRDF
             sampler->next_bsdf_samples(bsdf_samples);

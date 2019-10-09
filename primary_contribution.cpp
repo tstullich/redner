@@ -13,10 +13,8 @@ struct primary_contribs_accumulator {
         const auto &medium_interaction = medium_interactions[pixel_id];
         Vector3 emission = Vector3{0, 0, 0};
         if (medium_interaction.valid()) {
-            // If a medium interaction has been detected we need to sample
-            // the phase function to determine wo
-            Vector3d wo = -incoming_ray.dir, wi;
-            medium_interaction.phase->sample_p(wo, &wi, nullptr); // TODO Find a way to sample here
+            // If medium interaction is valid we need to account for it
+
         }
         else if (shading_isect.valid()) {
             const auto &shading_point = shading_points[pixel_id];

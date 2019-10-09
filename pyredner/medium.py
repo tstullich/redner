@@ -1,7 +1,18 @@
 import pyredner
+import torch
 
 class Medium:
     def __init__(self, sigma_a, sigma_s, g):
+        assert(sigma_a.dtype == torch.float32)
+        assert(len(sigma_a.shape) == 1 and sigma_a.shape[0] == 3)
+        assert(sigma_a.device.type == 'cpu')
+        assert(sigma_s.dtype == torch.float32)
+        assert(len(sigma_s.shape) == 1 and sigma_s.shape[0] == 3)
+        assert(sigma_s.device.type == 'cpu')
+        assert(g.dtype == torch.float32)
+        assert(len(g.shape) == 1 and g.shape[0] == 3)
+        assert(g.device.type == 'cpu')
+
         self.sigma_a = sigma_a
         self.sigma_s = sigma_s
         self.g = g

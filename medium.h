@@ -22,8 +22,12 @@ using MediumSample = TMediumSample<Real>;
  */
 struct Medium {
     virtual ~Medium();
+
+    DEVICE
     virtual Vector3 transmittance(const Ray &ray,
                                   const MediumSample &sample) const = 0;
+
+    DEVICE
     virtual Vector3 sample(const Ray &ray, const SurfacePoint &surface_point,
                            const MediumSample &sample,
                            MediumInteraction *mi) const = 0;
@@ -37,7 +41,11 @@ struct Medium {
 struct HomogeneousMedium : Medium {
    public:
     HomogeneousMedium(const Vector3 &sigma_a, const Vector3 &sigma_s, float g);
+
+    DEVICE
     Vector3 transmittance(const Ray &ray, const MediumSample &sample) const;
+
+    DEVICE
     Vector3 sample(const Ray &ray, const SurfacePoint &surface_point,
                    const MediumSample &sample, MediumInteraction *mi) const;
 
