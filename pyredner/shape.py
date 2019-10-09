@@ -32,11 +32,11 @@ def compute_vertex_normal(vertices, indices):
             n = torch.where(length(n).reshape(-1, 1).expand(-1, 3) > 0,
                 n / torch.reshape(length(n), [-1, 1]),
                 torch.zeros(n.shape, dtype=n.dtype, device=n.device))
-        angle = torch.where(dot(side_a, side_b) < 0, 
+        angle = torch.where(dot(side_a, side_b) < 0,
             math.pi - 2.0 * safe_asin(0.5 * length(side_a + side_b)),
             2.0 * safe_asin(0.5 * length(side_b - side_a)))
         sin_angle = torch.sin(angle)
-        
+
         # XXX: Inefficient but it's PyTorch's limitation
         e1e2 = e1_len * e2_len
         # contrib is 0 when e1e2 is 0
@@ -78,7 +78,8 @@ class Shape:
                  material_id,
                  uvs = None,
                  normals = None,
-                 uv_indices = None):
+                 uv_indices = None,
+                 medium = None):
         assert(vertices.dtype == torch.float32)
         assert(indices.dtype == torch.int32)
         assert(vertices.is_contiguous())
@@ -101,7 +102,7 @@ class Shape:
             assert(uv_indices is None or uv_indices.is_cuda)
         else:
             assert(not vertices.is_cuda)
-            assert(not indices.is_cuda)        
+            assert(not indices.is_cuda)
             assert(uvs is None or not uvs.is_cuda)
             assert(normals is None or not normals.is_cuda)
             assert(uv_indices is None or not uv_indices.is_cuda)
@@ -112,6 +113,7 @@ class Shape:
         self.uvs = uvs
         self.normals = normals
         self.uv_indices = uv_indices
+        self.medium = medium
         self.light_id = -1
 
     def state_dict(self):
@@ -122,7 +124,8 @@ class Shape:
             'light_id': self.light_id,
             'uvs': self.uvs,
             'normals': self.normals,
-            'uv_indices': self.uv_indices
+            'uv_indices': self.uv_indices,
+            'medium': self.medium,
         }
 
     @classmethod
@@ -133,6 +136,7 @@ class Shape:
             state_dict['material_id'],
             state_dict['uvs'],
             state_dict['normals'],
-            state_dict['uv_indices'])
+            state_dict['uv_indices'],
+            state_dict['medium'])
         out.light_id = state_dict['light_id']
         return out

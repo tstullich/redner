@@ -17,6 +17,7 @@ void test_d_intersect() {
                 nullptr, // uvs
                 nullptr, // normals
                 nullptr, // uv_indices
+                nullptr, // medium
                 3, // num_vertices
                 1, // num_indices
                 0, // num_uvs
@@ -275,6 +276,7 @@ void test_d_sample_shape() {
                 nullptr, // uvs
                 nullptr, // normals
                 nullptr, // uv_indices
+                nullptr, // medium
                 3, // num_vertices
                 1, // num_indices
                 0, // num_uvs

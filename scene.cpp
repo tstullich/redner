@@ -827,6 +827,7 @@ void test_scene_intersect(bool use_gpu) {
                    nullptr, // uvs
                    nullptr, // normal
                    nullptr, // uv_indices
+                   nullptr, // medium
                    3, // num_vertices
                    0, // num_uv_vertices
                    1, // num_triangles
@@ -909,6 +910,7 @@ void test_sample_point_on_light(bool use_gpu) {
                  nullptr, // uvs
                  nullptr, // normals
                  nullptr, // uv_indices
+                 nullptr, // medium
                  6, // num_vertices
                  0, // num_uv_vertices
                  2, // num_triangles
@@ -919,6 +921,7 @@ void test_sample_point_on_light(bool use_gpu) {
                  nullptr, // uvs
                  nullptr, // normals
                  nullptr, // uv_indices
+                 nullptr, // medium
                  3, // num_vertices
                  0, // num_uv_vertices
                  1, // num_triangles

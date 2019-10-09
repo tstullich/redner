@@ -23,8 +23,8 @@ Vector3 HomogeneousMedium::sample(const Ray &ray,
     double dist = -std::log(1.0 - sample.uv[1]) / sigma_t[channel];
 
     float t = std::min(dist / length(ray.dir), ray.tmax);
-    bool sampledMedium = t < ray.tmax;
-    if (sampledMedium) {
+    bool sampled_medium = t < ray.tmax;
+    if (sampled_medium) {
         // If we are inside the medium we need to sample the
         // phase function. We use HG in this case
         *mi = MediumInteraction(surface_point, -ray.dir, this,
@@ -35,7 +35,7 @@ Vector3 HomogeneousMedium::sample(const Ray &ray,
     Vector3 tr = vecExp(-sigma_t * std::min(t, MAXFLOAT) * length(ray.dir));
 
     // Return the weighting factor scattering inside of a homogeneous medium
-    Vector3 density = sampledMedium ? (sigma_t * tr) : tr;
+    Vector3 density = sampled_medium ? (sigma_t * tr) : tr;
     float pdf = 0.0;
     for (int i = 0; i < NUM_SAMPLES; i++) {
         pdf += density[i];
@@ -43,7 +43,7 @@ Vector3 HomogeneousMedium::sample(const Ray &ray,
 
     pdf *= 1.0 / NUM_SAMPLES;
 
-    return sampledMedium ? (tr * sigma_s / pdf) : (tr / pdf);
+    return sampled_medium ? (tr * sigma_s / pdf) : (tr / pdf);
 }
 
 // A helper function to calculate e^x component-wise

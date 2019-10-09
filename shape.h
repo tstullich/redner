@@ -14,23 +14,23 @@ struct Shape {
           ptr<float> uvs, // optional
           ptr<float> normals, // optional
           ptr<int> uv_indices, // optional, for duplicated uvs
+          ptr<Medium> medium, // optional
           int num_vertices,
           int num_uv_vertices,
           int num_triangles,
           int material_id,
-          int light_id,
-          ptr<Medium> medium = nullptr) :
+          int light_id) :
         vertices(vertices.get()),
         indices(indices.get()),
         uvs(uvs.get()),
         normals(normals.get()),
         uv_indices(uv_indices.get()),
+        medium(medium.get()),
         num_vertices(num_vertices),
         num_uv_vertices(num_uv_vertices),
         num_triangles(num_triangles),
         material_id(material_id),
-        light_id(light_id),
-        medium(medium.get()) {}
+        light_id(light_id) {}
 
     inline bool has_uvs() const {
         return uvs != nullptr;
@@ -45,12 +45,12 @@ struct Shape {
     float *uvs;
     float *normals;
     int *uv_indices;
+    Medium *medium;
     int num_vertices;
     int num_uv_vertices;
     int num_triangles;
     int material_id;
     int light_id;
-    Medium *medium;
 };
 
 struct DShape {

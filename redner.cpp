@@ -10,6 +10,7 @@
 #include "active_pixels.h"
 #include "ptr.h"
 #include "load_serialized.h"
+#include "medium.h"
 
 #include <pybind11/stl.h>
 
@@ -70,6 +71,7 @@ PYBIND11_MODULE(redner, m) {
                       ptr<float>, // uvs
                       ptr<float>, // normals
                       ptr<int>, // uv_indices
+                      ptr<Medium>, // medium
                       int, // num_vertices
                       int, // num_uv_vertices
                       int, // num_triangles
@@ -80,6 +82,11 @@ PYBIND11_MODULE(redner, m) {
         .def_readonly("num_uv_vertices", &Shape::num_uv_vertices)
         .def("has_uvs", &Shape::has_uvs)
         .def("has_normals", &Shape::has_normals);
+
+    // TODO Ask about definitions for this class, difference between
+    // homogeneous vs heterogeneous media
+    //py::class_<Medium>(m, "Medium")
+    //    .def(py::init<ptr<>, ptr<>, ptr<float>>())
 
     py::class_<DShape>(m, "DShape")
         .def(py::init<ptr<float>,

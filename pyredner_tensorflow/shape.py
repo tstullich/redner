@@ -66,7 +66,8 @@ class Shape:
                  material_id: int,
                  uvs: Optional[tf.Tensor] = None,
                  normals: Optional[tf.Tensor] = None,
-                 uv_indices: Optional[tf.Tensor] = None):
+                 uv_indices: Optional[tf.Tensor] = None,
+                 medium: Optional[tf.Tensor] = None):
         assert(tf.executing_eagerly())
         assert(vertices.dtype == tf.float32)
         assert(indices.dtype == tf.int32)
@@ -102,6 +103,7 @@ class Shape:
         self.uvs = uvs
         self.normals = normals
         self.uv_indices = uv_indices
+        self.medium = medium
         self.light_id = -1
 
     def state_dict(self):
@@ -112,7 +114,8 @@ class Shape:
             'uvs': self.uvs,
             'normals': self.normals,
             'uv_indices': self.uv_indices,
-            'light_id': self.light_id
+            'light_id': self.light_id,
+            'medium': self.medium
         }
 
     @classmethod
@@ -123,6 +126,7 @@ class Shape:
             state_dict['uvs'],
             state_dict['normals'],
             state_dict['uv_indices'],
-            state_dict['material_id'])
+            state_dict['material_id'],
+            state_dict['medium'])
         out.light_id = state_dict['light_id']
         return out
