@@ -764,6 +764,8 @@ struct medium_sampler {
             const auto &medium_interaction = medium_interactions[pixel_id];
             auto phase_sample = phase_samples[pixel_id];
             // TODO Figure out how to store the resulting wi vector and use it
+            // It seems incoming_ray is used for w_i this but in PBRT incoming_ray is w_o
+            // Need to clear up this discrepancy
             medium_interaction.phase->sample_p(-incoming_ray.dir, phase_sample);
         }
     }

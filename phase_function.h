@@ -35,6 +35,7 @@ struct HenyeyGreenstein : PhaseFunction {
 
     // This function works much like p() but it is extended
     // to use a sample in the range of [0, 1)^2 to perform MIS
+    // Returns the incident vector wi as a result
     DEVICE Vector3 sample_p(const Vector3 &wo,
                             const PhaseSample &sample) const override {
         // Compute cosine theta
