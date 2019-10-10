@@ -752,10 +752,10 @@ struct medium_sampler {
             // Sample medium and add it to throughput. This will also initialize
             // the MediumInteraction pointer in case an interaction with a medium occured
             // TODO Figure out how to initialize the vector to 1.0
-            betas[pixel_id] *= incoming_ray.medium->sample(incoming_ray,
-                                                           shading_point,
-                                                           medium_sample,
-                                                           &medium_interactions[pixel_id]);
+            betas[pixel_id] = incoming_ray.medium->sample(incoming_ray,
+                                                          shading_point,
+                                                          medium_sample,
+                                                          &medium_interactions[pixel_id]);
         }
 
         if (medium_interactions[pixel_id].valid()) {

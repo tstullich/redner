@@ -330,7 +330,7 @@ void render(const Scene &scene,
                                   light_points,
                                   nee_rays);
             occluded(scene, active_pixels, nee_rays, optix_rays, optix_hits);
-            // TODO Store transmittance between the shading point and light source
+
             // Sample intersected media as well as phase function if needed
             sampler->next_medium_samples(medium_samples);
             sampler->next_phase_samples(phase_samples);

@@ -37,7 +37,7 @@ Vector3 HomogeneousMedium::sample(const Ray &ray,
     // Return the weighting factor scattering inside of a homogeneous medium
     Vector3 density = sampled_medium ? (sigma_t * tr) : tr;
     float pdf = 0.0;
-    for (int i = 0; i < NUM_SAMPLES; i++) {
+    for (int i = 0; i < NUM_SAMPLES; ++i) {
         pdf += density[i];
     }
 
@@ -49,7 +49,7 @@ Vector3 HomogeneousMedium::sample(const Ray &ray,
 // A helper function to calculate e^x component-wise
 Vector3 HomogeneousMedium::vecExp(const Vector3 &vec) const {
     Vector3 ret(0.0, 0.0, 0.0);
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 3; ++i) {
         ret[i] = std::exp(vec[i]);
     }
     return ret;
