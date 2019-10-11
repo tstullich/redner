@@ -1,15 +1,16 @@
 #include "redner.h"
-#include "py_utils.h"
-#include "pathtracer.h"
+#include "active_pixels.h"
+#include "area_light.h"
+#include "automatic_uv_map.h"
 #include "camera.h"
+#include "envmap.h"
+#include "load_serialized.h"
+#include "material.h"
+#include "pathtracer.h"
+#include "ptr.h"
+#include "py_utils.h"
 #include "scene.h"
 #include "shape.h"
-#include "material.h"
-#include "area_light.h"
-#include "envmap.h"
-#include "active_pixels.h"
-#include "ptr.h"
-#include "load_serialized.h"
 
 #include <pybind11/stl.h>
 
@@ -70,8 +71,10 @@ PYBIND11_MODULE(redner, m) {
                       ptr<float>, // uvs
                       ptr<float>, // normals
                       ptr<int>, // uv_indices
+                      ptr<int>, // normal_indices
                       int, // num_vertices
                       int, // num_uv_vertices
+                      int, // num_normal_vertices
                       int, // num_triangles
                       int, // material_id
                       int  // light_id
@@ -182,6 +185,23 @@ PYBIND11_MODULE(redner, m) {
         .def_readwrite("normals", &MitsubaTriMesh::normals);
 
     m.def("load_serialized", &load_serialized, "");
+
+    // For auto uv unwrapping
+    py::class_<UVTriMesh>(m, "UVTriMesh")
+        .def(py::init<ptr<float>, // vertices
+                      ptr<int>, // indices
+                      ptr<float>, // uvs
+                      ptr<int>, // uv_indices
+                      int, // num_vertices
+                      int, // num_uv_vertices
+                      int>()) // num_triangles
+        .def_readwrite("uvs", &UVTriMesh::uvs)
+        .def_readwrite("uv_indices", &UVTriMesh::uv_indices)
+        .def_readwrite("num_uv_vertices", &UVTriMesh::num_uv_vertices);
+    py::class_<TextureAtlas>(m, "TextureAtlas")
+        .def(py::init<>());
+    m.def("automatic_uv_map", &automatic_uv_map, "");
+    m.def("copy_texture_atlas", &copy_texture_atlas, "");
 
     m.def("render", &render, "");
 

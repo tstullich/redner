@@ -1,6 +1,7 @@
 import pyredner
 import torch
 import math
+import redner
 
 def compute_vertex_normal(vertices, indices):
     def dot(v1, v2):
@@ -55,6 +56,41 @@ def compute_vertex_normal(vertices, indices):
     assert(torch.isfinite(normals).all())
     return normals.contiguous()
 
+def compute_uvs(vertices, indices, print_progress = True):
+    """
+        Args: vertices -- N x 3 float tensor
+              indices -- M x 3 int tensor
+        Return: uvs & uvs_indices
+    """
+    vertices = vertices.cpu()
+    indices = indices.cpu()
+
+    uv_trimesh = redner.UVTriMesh(redner.float_ptr(vertices.data_ptr()),
+                                  redner.int_ptr(indices.data_ptr()),
+                                  redner.float_ptr(0),
+                                  redner.int_ptr(0),
+                                  int(vertices.shape[0]),
+                                  0,
+                                  int(indices.shape[0]))
+
+    atlas = redner.TextureAtlas()
+    num_uv_vertices = redner.automatic_uv_map([uv_trimesh], atlas, print_progress)[0]
+
+    uvs = torch.zeros(num_uv_vertices, 2, dtype=torch.float32)
+    uv_indices = torch.zeros_like(indices)
+    uv_trimesh.uvs = redner.float_ptr(uvs.data_ptr())
+    uv_trimesh.uv_indices = redner.int_ptr(uv_indices.data_ptr())
+    uv_trimesh.num_uv_vertices = num_uv_vertices
+
+    redner.copy_texture_atlas(atlas, [uv_trimesh])
+
+    if pyredner.get_use_gpu():
+        vertices = vertices.cuda(device = pyredner.get_device())
+        indices = indices.cuda(device = pyredner.get_device())
+        uvs = uvs.cuda(device = pyredner.get_device())
+        uv_indices = uv_indices.cuda(device = pyredner.get_device())
+    return uvs, uv_indices
+
 class Shape:
     """
         redner supports only triangle meshes for now. It stores a pool of
@@ -69,8 +105,9 @@ class Shape:
             indices (int tensor with size M x 3): vertex indices of triangle faces.
             material_id (integer): index of the assigned material.
             uvs (optional, float tensor with size N' x 2): optional texture coordinates.
-            normals (optional, float tensor with size N x 3): shading normal.
+            normals (optional, float tensor with size N'' x 3): shading normal.
             uv_indices (optional, int tensor with size M x 3): overrides indices when accessing uv coordinates.
+            normal_indices (optional, int tensor with size M x 3): overrides indices when accessing shading normals.
     """
     def __init__(self,
                  vertices,
@@ -78,7 +115,8 @@ class Shape:
                  material_id,
                  uvs = None,
                  normals = None,
-                 uv_indices = None):
+                 uv_indices = None,
+                 normal_indices = None):
         assert(vertices.dtype == torch.float32)
         assert(indices.dtype == torch.int32)
         assert(vertices.is_contiguous())
@@ -92,6 +130,9 @@ class Shape:
         if (uv_indices is not None):
             assert(uv_indices.dtype == torch.int32)
             assert(uv_indices.is_contiguous())
+        if (normal_indices is not None):
+            assert(normal_indices.dtype == torch.int32)
+            assert(normal_indices.is_contiguous())
 
         if pyredner.get_use_gpu():
             assert(vertices.is_cuda)
@@ -99,12 +140,14 @@ class Shape:
             assert(uvs is None or uvs.is_cuda)
             assert(normals is None or normals.is_cuda)
             assert(uv_indices is None or uv_indices.is_cuda)
+            assert(normal_indices is None or normal_indices.is_cuda)
         else:
             assert(not vertices.is_cuda)
             assert(not indices.is_cuda)        
             assert(uvs is None or not uvs.is_cuda)
             assert(normals is None or not normals.is_cuda)
             assert(uv_indices is None or not uv_indices.is_cuda)
+            assert(normal_indices is None or not normal_indices.is_cuda)
 
         self.vertices = vertices
         self.indices = indices
@@ -112,6 +155,7 @@ class Shape:
         self.uvs = uvs
         self.normals = normals
         self.uv_indices = uv_indices
+        self.normal_indices = normal_indices
         self.light_id = -1
 
     def state_dict(self):
@@ -122,7 +166,8 @@ class Shape:
             'light_id': self.light_id,
             'uvs': self.uvs,
             'normals': self.normals,
-            'uv_indices': self.uv_indices
+            'uv_indices': self.uv_indices,
+            'normal_indices': self.normal_indices
         }
 
     @classmethod
@@ -133,6 +178,7 @@ class Shape:
             state_dict['material_id'],
             state_dict['uvs'],
             state_dict['normals'],
-            state_dict['uv_indices'])
+            state_dict['uv_indices'],
+            state_dict['normal_indices'])
         out.light_id = state_dict['light_id']
         return out
