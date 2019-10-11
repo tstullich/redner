@@ -13,10 +13,12 @@ struct Shape {
           ptr<int> indices,
           ptr<float> uvs, // optional
           ptr<float> normals, // optional
-          ptr<int> uv_indices, // optional, for duplicated uvs
+          ptr<int> uv_indices, // optional, overrides uv index access
+          ptr<int> normal_indices, // optional, overrides normal index access
           ptr<Medium> medium, // optional
           int num_vertices,
           int num_uv_vertices,
+          int num_normal_vertices,
           int num_triangles,
           int material_id,
           int light_id) :
@@ -25,9 +27,11 @@ struct Shape {
         uvs(uvs.get()),
         normals(normals.get()),
         uv_indices(uv_indices.get()),
+        normal_indices(normal_indices.get()),
         medium(medium.get()),
         num_vertices(num_vertices),
         num_uv_vertices(num_uv_vertices),
+        num_normal_vertices(num_normal_vertices),
         num_triangles(num_triangles),
         material_id(material_id),
         light_id(light_id) {}
@@ -45,9 +49,11 @@ struct Shape {
     float *uvs;
     float *normals;
     int *uv_indices;
+    int *normal_indices;
     Medium *medium;
     int num_vertices;
     int num_uv_vertices;
+    int num_normal_vertices;
     int num_triangles;
     int material_id;
     int light_id;
@@ -86,6 +92,13 @@ inline Vector3i get_uv_indices(const Shape &shape, int index) {
     return Vector3i{shape.uv_indices[3 * index + 0],
                     shape.uv_indices[3 * index + 1],
                     shape.uv_indices[3 * index + 2]};
+}
+
+DEVICE
+inline Vector3i get_normal_indices(const Shape &shape, int index) {
+    return Vector3i{shape.normal_indices[3 * index + 0],
+                    shape.normal_indices[3 * index + 1],
+                    shape.normal_indices[3 * index + 2]};
 }
 
 DEVICE
@@ -333,6 +346,10 @@ inline SurfacePoint intersect_shape(const Shape &shape,
     if (shape.uv_indices != nullptr) {
         uv_ind = get_uv_indices(shape, index);
     }
+    auto normal_ind = ind;
+    if (shape.normal_indices != nullptr) {
+        normal_ind = get_normal_indices(shape, index);
+    }
     Vector2 uvs0, uvs1, uvs2;
     if (has_uvs(shape)) {
         uvs0 = get_uv(shape, uv_ind[0]);
@@ -380,9 +397,9 @@ inline SurfacePoint intersect_shape(const Shape &shape,
     auto dn_dx = Vector3{0, 0, 0};
     auto dn_dy = Vector3{0, 0, 0};
     if (has_shading_normals(shape)) {
-        auto n0 = get_shading_normal(shape, ind[0]);
-        auto n1 = get_shading_normal(shape, ind[1]);
-        auto n2 = get_shading_normal(shape, ind[2]);
+        auto n0 = get_shading_normal(shape, normal_ind[0]);
+        auto n1 = get_shading_normal(shape, normal_ind[1]);
+        auto n2 = get_shading_normal(shape, normal_ind[2]);
 
         auto nn = w * n0 + u * n1 + v * n2;
 
@@ -450,6 +467,10 @@ inline void d_intersect_shape(
     if (shape.uv_indices != nullptr) {
         uv_ind = get_uv_indices(shape, index);
     }
+    auto normal_ind = ind;
+    if (shape.normal_indices != nullptr) {
+        normal_ind = get_normal_indices(shape, index);
+    }
     Vector2 uvs0, uvs1, uvs2;
     if (has_uvs(shape)) {
         uvs0 = get_uv(shape, uv_ind[0]);
@@ -500,9 +521,9 @@ inline void d_intersect_shape(
     auto dn_dx = Vector3{0, 0, 0};
     auto dn_dy = Vector3{0, 0, 0};
     if (has_shading_normals(shape)) {
-        auto n0 = get_shading_normal(shape, ind[0]);
-        auto n1 = get_shading_normal(shape, ind[1]);
-        auto n2 = get_shading_normal(shape, ind[2]);
+        auto n0 = get_shading_normal(shape, normal_ind[0]);
+        auto n1 = get_shading_normal(shape, normal_ind[1]);
+        auto n2 = get_shading_normal(shape, normal_ind[2]);
         auto nn = w * n0 + u * n1 + v * n2;
 
         // Compute dndx & dndy
@@ -583,9 +604,9 @@ inline void d_intersect_shape(
         if (geom_normal_flipped) {
             d_geom_normal = -d_geom_normal;
         }
-        auto n0 = get_shading_normal(shape, ind[0]);
-        auto n1 = get_shading_normal(shape, ind[1]);
-        auto n2 = get_shading_normal(shape, ind[2]);
+        auto n0 = get_shading_normal(shape, normal_ind[0]);
+        auto n1 = get_shading_normal(shape, normal_ind[1]);
+        auto n2 = get_shading_normal(shape, normal_ind[2]);
         auto d_shading_normal = d_point.shading_frame[2];
         // differentiate through frame construction
         d_coordinate_system(shading_normal, d_point.shading_frame[0], d_point.shading_frame[1],

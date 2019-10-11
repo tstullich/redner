@@ -15,9 +15,17 @@ class WavefrontMaterial:
         self.map_Ns = None
 
 class TriangleMesh:
-    def __init__(self, vertices, indices, uvs, normals):
+    def __init__(self,
+                 indices,
+                 uv_indices,
+                 normal_indices,
+                 vertices,
+                 uvs,
+                 normals):
         self.vertices = vertices
         self.indices = indices
+        self.uv_indices = uv_indices
+        self.normal_indices = normal_indices
         self.uvs = uvs
         self.normals = normals
 
@@ -50,25 +58,51 @@ def load_mtl(filename):
         mtllib[current_mtl.name] = current_mtl
     return mtllib
 
-def load_obj(filename, obj_group = True, flip_tex_coords = True):
+def load_obj(filename,
+             obj_group = True,
+             flip_tex_coords = True,
+             use_common_indices = False):
     """
         Load from a Wavefront obj file as PyTorch tensors.
         XXX: this is slow, maybe move to C++?
+
+        Args: obj_group -- split the meshes based on materials
+              flip_tex_coords -- flip the v coordinate of uv by applying v' = 1 - v
+              use_common_indices -- use the same indices for position, uvs, normals.
+                                    Not recommended since texture seams in the objects sharing
+                                    the same positions would cause the optimization to "tear" the object.
     """
     vertices_pool = []
     uvs_pool = []
     normals_pool = []
     indices = []
+    uv_indices = []
+    normal_indices = []
     vertices = []
-    normals = []
     uvs = []
+    normals = []
     vertices_map = {}
+    uvs_map = {}
+    normals_map = {}
     material_map = {}
     current_mtllib = {}
     current_material_name = None
 
-    def create_mesh(indices, vertices, normals, uvs):
+    def create_mesh(indices,
+                    uv_indices,
+                    normal_indices,
+                    vertices,
+                    uvs,
+                    normals):
         indices = torch.tensor(indices, dtype = torch.int32, device = pyredner.get_device())
+        if len(uv_indices) == 0:
+            uv_indices = None
+        else:
+            uv_indices = torch.tensor(uv_indices, dtype = torch.int32, device = pyredner.get_device())
+        if len(normal_indices) == 0:
+            normal_indices = None
+        else:
+            normal_indices = torch.tensor(normal_indices, dtype = torch.int32, device = pyredner.get_device())
         vertices = torch.tensor(vertices, device = pyredner.get_device())
         if len(uvs) == 0:
             uvs = None
@@ -78,7 +112,12 @@ def load_obj(filename, obj_group = True, flip_tex_coords = True):
             normals = None
         else:
             normals = torch.tensor(normals, device = pyredner.get_device())
-        return TriangleMesh(vertices, indices, uvs, normals)
+        return TriangleMesh(indices,
+                            uv_indices,
+                            normal_indices,
+                            vertices,
+                            uvs,
+                            normals)
 
     mesh_list = []
     light_map = {}
@@ -96,12 +135,19 @@ def load_obj(filename, obj_group = True, flip_tex_coords = True):
         elif splitted[0] == 'usemtl':
             if len(indices) > 0 and obj_group is True:
                 # Flush
-                mesh_list.append((current_material_name, create_mesh(indices, vertices, normals, uvs)))
+                mesh_list.append((current_material_name,
+                    create_mesh(indices, uv_indices, normal_indices,
+                                vertices, uvs, normals)))
                 indices = []
+                uv_indices = []
+                normal_indices = []
                 vertices = []
                 normals = []
                 uvs = []
                 vertices_map = {}
+                uvs_map = {}
+                normals_map = {}
+
             mtl_name = splitted[1]
             current_material_name = mtl_name
             if mtl_name not in material_map:
@@ -165,29 +211,76 @@ def load_obj(filename, obj_group = True, flip_tex_coords = True):
                 ni = None
                 if (num_indices(indices) > 2 and re.split('/', indices)[2] != ''):
                     ni = parse_face_index(indices, 2)
-                key = (pi, uvi, ni)
-                if key in vertices_map:
-                    return vertices_map[key]
+                if use_common_indices:
+                    # vertex, uv, normals share the same indexing
+                    key = (pi, uvi, ni)
+                    if key in vertices_map:
+                        vertex_id = vertices_map[key]
+                        return vertex_id, vertex_id, vertex_id
 
-                vertex_id = len(vertices)
-                vertices_map[key] = vertex_id
-                vertices.append(vertices_pool[pi])
-                if uvi is not None:
-                    uvs.append(uvs_pool[uvi])
-                if ni is not None:
-                    normals.append(normals_pool[ni])
-                return vertex_id
-            vid0 = get_vertex_id(splitted[1])
-            vid1 = get_vertex_id(splitted[2])
-            vid2 = get_vertex_id(splitted[3])
+                    vertex_id = len(vertices)
+                    vertices_map[key] = vertex_id
+                    vertices.append(vertices_pool[pi])
+                    if uvi is not None:
+                        uvs.append(uvs_pool[uvi])
+                    if ni is not None:
+                        normals.append(normals_pool[ni])
+                    return vertex_id, vertex_id, vertex_id
+                else:
+                    # vertex, uv, normals use separate indexing
+                    vertex_id = None
+                    uv_id = None
+                    normal_id = None
+
+                    if pi in vertices_map:
+                        vertex_id = vertices_map[pi]
+                    else:
+                        vertex_id = len(vertices)
+                        vertices.append(vertices_pool[pi])
+                        vertices_map[pi] = vertex_id
+
+                    if uvi is not None:
+                        if uvi in uvs_map:
+                            uv_id = uvs_map[uvi]
+                        else:
+                            uv_id = len(uvs)
+                            uvs.append(uvs_pool[uvi])
+                            uvs_map[uvi] = uv_id
+
+                    if ni is not None:
+                        if ni in normals_map:
+                            normal_id = normals_map[ni]
+                        else:
+                            normal_id = len(normals)
+                            normals.append(normals_pool[ni])
+                            normals_map[ni] = normal_id
+                    return vertex_id, uv_id, normal_id
+
+            vid0, uv_id0, n_id0 = get_vertex_id(splitted[1])
+            vid1, uv_id1, n_id1 = get_vertex_id(splitted[2])
+            vid2, uv_id2, n_id2 = get_vertex_id(splitted[3])
 
             indices.append([vid0, vid1, vid2])
+            if uv_id0 is not None:
+                assert(uv_id1 is not None and uv_id2 is not None)
+                uv_indices.append([uv_id0, uv_id1, uv_id2])
+            if n_id0 is not None:
+                assert(n_id1 is not None and n_id2 is not None)
+                normal_indices.append([n_id0, n_id1, n_id2])
             if (len(splitted) == 5):
-                vid3 = get_vertex_id(splitted[4])
+                vid3, uv_id3, n_id3 = get_vertex_id(splitted[4])
                 indices.append([vid0, vid2, vid3])
-    
+                if uv_id0 is not None:
+                    assert(uv_id3 is not None)
+                    uv_indices.append([uv_id0, uv_id2, uv_id3])
+                if n_id0 is not None:
+                    assert(n_id3 is not None)
+                    normal_indices.append([n_id0, n_id2, n_id3])
+
     mesh_list.append((current_material_name,
-        create_mesh(indices, vertices, normals, uvs)))
+        create_mesh(indices, uv_indices, normal_indices, vertices, uvs, normals)))
     if d != '':
         os.chdir(cwd)
+
+    f.close()
     return material_map, mesh_list, light_map
