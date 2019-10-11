@@ -40,7 +40,7 @@ struct HenyeyGreenstein : PhaseFunction {
                             const PhaseSample &sample) const override {
         // Compute cosine theta
         double cos_theta;
-        if (std::abs(g) < 1e-3) {
+        if (abs(g) < 1e-3) {
             cos_theta = 1.0 - 2.0 * sample.uv[0];
         } else {
             double sqr_term = (1.0 - g * g) / (1.0 - g + 2.0 * g * sample.uv[0]);
@@ -48,7 +48,7 @@ struct HenyeyGreenstein : PhaseFunction {
         }
 
         // Compute the direction wi based on the HG phase function
-        double sin_theta = std::sqrt(max(0.0, 1.0 - cos_theta * cos_theta));
+        double sin_theta = sqrt(max(0.0, 1.0 - cos_theta * cos_theta));
         double phi = 2.0 * M_PI * sample.uv[1];
         Vector3 v1, v2;
         coordinate_system(wo, v1, v2);
@@ -60,7 +60,7 @@ struct HenyeyGreenstein : PhaseFunction {
     // and a scattering factor g
     DEVICE inline double PhaseHG(double cos_theta, float g) const {
         double denom = 1.0 + g * g + 2.0 * g * cos_theta;
-        return INV_4PI * (1.0 - g * g) / (denom * std::sqrt(denom));
+        return INV_4PI * (1.0 - g * g) / (denom * sqrt(denom));
     }
 
     // Calculates the new direction of the outgoing vector given three basis
@@ -69,7 +69,7 @@ struct HenyeyGreenstein : PhaseFunction {
                                              double phi, const Vector3 &x,
                                              const Vector3 &y,
                                              const Vector3 &z) const {
-        return sin_theta * std::cos(phi) * x + sin_theta * std::sin(phi) * y +
+        return sin_theta * cos(phi) * x + sin_theta * sin(phi) * y +
                cos_theta * z;
     }
 

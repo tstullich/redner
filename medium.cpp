@@ -8,9 +8,8 @@ HomogeneousMedium::HomogeneousMedium(const Vector3 &sigma_a,
 Vector3 HomogeneousMedium::transmittance(const Ray &ray,
                                          const MediumSample &sample) const {
     // Use Beer's Law to calculate transmittance
-    return vecExp(
-        -sigma_t *
-        std::min(static_cast<float>(ray.tmax * length(ray.dir)), MAXFLOAT));
+    return vecExp(-sigma_t * min(static_cast<float>(ray.tmax * length(ray.dir)),
+                                 MAXFLOAT));
 }
 
 Vector3 HomogeneousMedium::sample(const Ray &ray,
@@ -18,11 +17,11 @@ Vector3 HomogeneousMedium::sample(const Ray &ray,
                                   const MediumSample &sample,
                                   MediumInteraction *mi) const {
     // Sample a channel and distance along the ray
-    int channel =
-        std::min(sample.uv[0] * NUM_SAMPLES, static_cast<double>(NUM_SAMPLES - 1));
-    double dist = -std::log(1.0 - sample.uv[1]) / sigma_t[channel];
+    int channel = min(sample.uv[0] * NUM_SAMPLES,
+                           static_cast<double>(NUM_SAMPLES - 1));
+    double dist = -log(1.0 - sample.uv[1]) / sigma_t[channel];
 
-    float t = std::min(dist / length(ray.dir), ray.tmax);
+    float t = min(dist / length(ray.dir), ray.tmax);
     bool sampled_medium = t < ray.tmax;
     if (sampled_medium) {
         // If we are inside the medium we need to sample the
@@ -32,7 +31,7 @@ Vector3 HomogeneousMedium::sample(const Ray &ray,
     }
 
     // Compute the transmittance and sampling density
-    Vector3 tr = vecExp(-sigma_t * std::min(t, MAXFLOAT) * length(ray.dir));
+    Vector3 tr = vecExp(-sigma_t * min(t, MAXFLOAT) * length(ray.dir));
 
     // Return the weighting factor scattering inside of a homogeneous medium
     Vector3 density = sampled_medium ? (sigma_t * tr) : tr;
@@ -50,7 +49,7 @@ Vector3 HomogeneousMedium::sample(const Ray &ray,
 Vector3 HomogeneousMedium::vecExp(const Vector3 &vec) const {
     Vector3 ret(0.0, 0.0, 0.0);
     for (int i = 0; i < 3; ++i) {
-        ret[i] = std::exp(vec[i]);
+        ret[i] = exp(vec[i]);
     }
     return ret;
 }
