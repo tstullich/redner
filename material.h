@@ -6,6 +6,9 @@
 #include "buffer.h"
 #include "ptr.h"
 #include "texture.h"
+#include "medium.h"
+#include "medium_interaction.h"
+#include "phase_function.h"
 
 #include <tuple>
 
@@ -689,6 +692,16 @@ Vector3 bsdf_sample(const Material &material,
         wo_differential.dir_dy = 2 * (dot(wi, m) * dmdy + widotm_dy * m) - wi_dy;
         return dir;
     }
+}
+
+DEVICE
+inline
+Vector3 phase_sample(const Ray &incoming_ray,
+                     const MediumInteraction &medium_interaction,
+                     const PhaseSample &phase_sample) {
+    // TODO It seems incoming_ray is used for w_i this but in PBRT incoming_ray is w_o
+    // Need to clear up this discrepancy
+    return medium_interaction.phase->sample_p(-incoming_ray.dir, phase_sample);
 }
 
 DEVICE

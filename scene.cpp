@@ -749,24 +749,12 @@ struct medium_sampler {
         const auto &shading_point = shading_points[pixel_id];
         const auto &incoming_ray = incoming_rays[pixel_id];
         if (incoming_ray.medium) {
-            // Sample medium and add it to throughput. This will also initialize
+            // Sample medium and accumulate it to throughput. This will also initialize
             // the MediumInteraction pointer in case an interaction with a medium occured
-            // TODO Figure out how to initialize the vector to 1.0
-            betas[pixel_id] = incoming_ray.medium->sample(incoming_ray,
-                                                          shading_point,
-                                                          medium_sample,
-                                                          &medium_interactions[pixel_id]);
-        }
-
-        if (medium_interactions[pixel_id].valid()) {
-            // We also immediately sample the phase function if there is
-            // an interaction inside a medium
-            const auto &medium_interaction = medium_interactions[pixel_id];
-            auto phase_sample = phase_samples[pixel_id];
-            // TODO Figure out how to store the resulting wi vector and use it
-            // It seems incoming_ray is used for w_i this but in PBRT incoming_ray is w_o
-            // Need to clear up this discrepancy
-            medium_interaction.phase->sample_p(-incoming_ray.dir, phase_sample);
+            throughputs[pixel_id] *= incoming_ray.medium->sample(incoming_ray,
+                                                                 shading_point,
+                                                                 medium_sample,
+                                                                 &medium_interactions[pixel_id]);
         }
     }
 
@@ -775,8 +763,7 @@ struct medium_sampler {
     const SurfacePoint *shading_points;
     const Ray *incoming_rays;
     const MediumSample *medium_samples;
-    const PhaseSample *phase_samples;
-    Vector3 *betas;
+    Vector3 *throughputs;
     MediumInteraction *medium_interactions;
 };
 
@@ -785,8 +772,7 @@ void sample_medium(const Scene &scene,
                    const BufferView<SurfacePoint> &shading_points,
                    const BufferView<Ray> &incoming_rays,
                    const BufferView<MediumSample> &medium_samples,
-                   const BufferView<PhaseSample> &phase_samples,
-                   BufferView<Vector3> betas,
+                   BufferView<Vector3> throughputs,
                    BufferView<MediumInteraction*> medium_interactions) {
     parallel_for(medium_sampler{
         get_flatten_scene(scene),
@@ -794,8 +780,7 @@ void sample_medium(const Scene &scene,
         shading_points.begin(),
         incoming_rays.begin(),
         medium_samples.begin(),
-        phase_samples.begin(),
-        betas.begin(),
+        throughputs.begin(),
         *medium_interactions.begin()},
         active_pixels.size(), scene.use_gpu);
 }

@@ -10,13 +10,8 @@ struct primary_contribs_accumulator {
         const auto &throughput = throughputs[pixel_id];
         const auto &shading_isect = shading_isects[pixel_id];
         const auto &incoming_ray = incoming_rays[pixel_id];
-        const auto &medium_interaction = medium_interactions[pixel_id];
         Vector3 emission = Vector3{0, 0, 0};
-        if (medium_interaction.valid()) {
-            // If medium interaction is valid we need to account for it
-
-        }
-        else if (shading_isect.valid()) {
+        if (shading_isect.valid()) {
             const auto &shading_point = shading_points[pixel_id];
             const auto &shading_shape = scene.shapes[shading_isect.shape_id];
             auto wi = -incoming_ray.dir;

@@ -74,7 +74,6 @@ struct PathBuffer {
         edge_light_points = Buffer<SurfacePoint>(use_gpu, 2 * num_pixels);
         throughputs = Buffer<Vector3>(use_gpu, (max_bounces + 1) * num_pixels);
         edge_throughputs = Buffer<Vector3>(use_gpu, 4 * num_pixels);
-        betas = Buffer<Vector3>(use_gpu, (max_bounces + 1) * num_pixels);
         channel_multipliers = Buffer<Real>(use_gpu,
             2 * channel_info.num_total_dimensions * num_pixels);
         min_roughness = Buffer<Real>(use_gpu, (max_bounces + 1) * num_pixels);
@@ -122,7 +121,7 @@ struct PathBuffer {
     Buffer<SurfacePoint> shading_points, edge_shading_points;
     Buffer<Intersection> light_isects, edge_light_isects;
     Buffer<SurfacePoint> light_points, edge_light_points;
-    Buffer<Vector3> throughputs, edge_throughputs, betas;
+    Buffer<Vector3> throughputs, edge_throughputs;
     Buffer<Real> channel_multipliers;
     Buffer<Real> min_roughness, edge_min_roughness;
 
@@ -235,9 +234,10 @@ void render(const Scene &scene,
 
         // Buffer view for first intersection
         auto throughputs = path_buffer.throughputs.view(0, num_pixels);
-        auto betas = path_buffer.betas.view(0, num_pixels);
         auto medium_interactions = path_buffer.medium_interactions.view(0, num_pixels);
         auto camera_samples = path_buffer.camera_samples.view(0, num_pixels);
+        auto medium_samples = path_buffer.medium_samples.view(0, num_pixels);
+        auto phase_samples = path_buffer.phase_samples.view(0, num_pixels);
         auto rays = path_buffer.rays.view(0, num_pixels);
         auto primary_differentials = path_buffer.primary_ray_differentials.view(0, num_pixels);
         auto ray_differentials = path_buffer.ray_differentials.view(0, num_pixels);
@@ -265,6 +265,17 @@ void render(const Scene &scene,
                   ray_differentials,
                   optix_rays,
                   optix_hits);
+
+        // Sample intersected media as well as phase function if needed
+        sampler->next_medium_samples(medium_samples);
+        sample_medium(scene,
+                      active_pixels,
+                      shading_points,
+                      rays,
+                      medium_samples,
+                      throughputs,
+                      medium_interactions);
+
         accumulate_primary_contribs(scene,
                                     primary_active_pixels,
                                     throughputs,
@@ -295,8 +306,6 @@ void render(const Scene &scene,
             auto light_isects = path_buffer.light_isects.view(depth * num_pixels, num_pixels);
             auto light_points = path_buffer.light_points.view(depth * num_pixels, num_pixels);
             auto bsdf_samples = path_buffer.bsdf_samples.view(depth * num_pixels, num_pixels);
-            auto medium_samples = path_buffer.medium_samples.view(depth * num_pixels, num_pixels);
-            auto phase_samples = path_buffer.phase_samples.view(depth * num_pixels, num_pixels);
             auto incoming_rays = path_buffer.rays.view(depth * num_pixels, num_pixels);
             auto incoming_ray_differentials =
                 path_buffer.ray_differentials.view(depth * num_pixels, num_pixels);
@@ -333,18 +342,18 @@ void render(const Scene &scene,
 
             // Sample intersected media as well as phase function if needed
             sampler->next_medium_samples(medium_samples);
-            sampler->next_phase_samples(phase_samples);
             sample_medium(scene,
-                          active_pixels,
-                          shading_points,
-                          incoming_rays,
-                          medium_samples,
-                          phase_samples,
-                          betas,
-                          medium_interactions);
+                        active_pixels,
+                        shading_points,
+                        rays,
+                        medium_samples,
+                        throughputs,
+                        medium_interactions);
 
             // Sample directions based on BRDF
             sampler->next_bsdf_samples(bsdf_samples);
+            // Sample phase functions for medium interactions
+            sampler->next_phase_samples(phase_samples);
             bsdf_sample(scene,
                         active_pixels,
                         incoming_rays,
@@ -352,6 +361,8 @@ void render(const Scene &scene,
                         shading_isects,
                         shading_points,
                         bsdf_samples,
+                        phase_samples,
+                        medium_interactions,
                         min_roughness,
                         next_rays,
                         bsdf_ray_differentials,

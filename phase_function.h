@@ -52,7 +52,7 @@ struct HenyeyGreenstein : PhaseFunction {
         double phi = 2.0 * M_PI * sample.uv[1];
         Vector3 v1, v2;
         coordinate_system(wo, v1, v2);
-        return sphericalDirection(sin_theta, cos_theta, phi, v1, v2, -wo);
+        return spherical_direction(sin_theta, cos_theta, phi, v1, v2, -wo);
     }
 
    private:
@@ -65,10 +65,11 @@ struct HenyeyGreenstein : PhaseFunction {
 
     // Calculates the new direction of the outgoing vector given three basis
     // vectors
-    DEVICE inline Vector3 sphericalDirection(double sin_theta, double cos_theta,
-                                             double phi, const Vector3 &x,
-                                             const Vector3 &y,
-                                             const Vector3 &z) const {
+    DEVICE inline Vector3 spherical_direction(double sin_theta,
+                                              double cos_theta,
+                                              double phi, const Vector3 &x,
+                                              const Vector3 &y,
+                                              const Vector3 &z) const {
         return sin_theta * cos(phi) * x + sin_theta * sin(phi) * y +
                cos_theta * z;
     }

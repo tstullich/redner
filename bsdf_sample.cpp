@@ -1,6 +1,9 @@
 #include "bsdf_sample.h"
 #include "scene.h"
 #include "parallel.h"
+#include "phase_function.h"
+#include "medium.h"
+#include "medium_interaction.h"
 
 struct bsdf_sampler {
     DEVICE void operator()(int idx) {
@@ -10,18 +13,28 @@ struct bsdf_sampler {
         const auto &material = scene.materials[shape.material_id];
         const auto &incoming_ray = incoming_rays[pixel_id];
         const auto &shading_point = shading_points[pixel_id];
+        const auto &medium_interaction = medium_interactions[pixel_id];
 
-        next_rays[pixel_id] = Ray{
-            shading_points[pixel_id].position,
-            bsdf_sample(
-                material,
-                shading_point,
-                -incoming_ray.dir,
-                bsdf_samples[pixel_id],
-                min_roughness[pixel_id],
-                incoming_ray_differentials[pixel_id],
-                bsdf_ray_differentials[pixel_id],
-                &next_min_roughness[pixel_id])};
+        if (medium_interaction.valid()) {
+            // Sample phase function for new direction
+            next_rays[pixel_id] = Ray {
+                shading_points[pixel_id].position,
+                phase_sample(incoming_ray,
+                             medium_interaction,
+                             phase_samples[pixel_id])};
+        } else {
+            next_rays[pixel_id] = Ray{
+                shading_points[pixel_id].position,
+                bsdf_sample(
+                    material,
+                    shading_point,
+                    -incoming_ray.dir,
+                    bsdf_samples[pixel_id],
+                    min_roughness[pixel_id],
+                    incoming_ray_differentials[pixel_id],
+                    bsdf_ray_differentials[pixel_id],
+                    &next_min_roughness[pixel_id])};
+        }
     }
 
     const FlattenScene scene;
@@ -31,6 +44,8 @@ struct bsdf_sampler {
     const Intersection *shading_isects;
     const SurfacePoint *shading_points;
     const BSDFSample *bsdf_samples;
+    const PhaseSample *phase_samples;
+    const MediumInteraction *medium_interactions;
     const Real *min_roughness;
     Ray *next_rays;
     RayDifferential *bsdf_ray_differentials;
@@ -44,6 +59,8 @@ void bsdf_sample(const Scene &scene,
                  const BufferView<Intersection> &shading_isects,
                  const BufferView<SurfacePoint> &shading_points,
                  const BufferView<BSDFSample> &bsdf_samples,
+                 const BufferView<PhaseSample> &phase_samples,
+                 const BufferView<MediumInteraction *> &medium_interactions,
                  const BufferView<Real> &min_roughness,
                  BufferView<Ray> next_rays,
                  BufferView<RayDifferential> bsdf_ray_differentials,
@@ -56,6 +73,8 @@ void bsdf_sample(const Scene &scene,
                      shading_isects.begin(),
                      shading_points.begin(),
                      bsdf_samples.begin(),
+                     phase_samples.begin(),
+                     *medium_interactions.begin(),
                      min_roughness.begin(),
                      next_rays.begin(),
                      bsdf_ray_differentials.begin(),
