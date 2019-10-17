@@ -3,6 +3,7 @@
 #include "intersection.h"
 #include "phase_function.h"
 #include "ray.h"
+#include "redner.h"
 #include "vector.h"
 
 // Forward declarations

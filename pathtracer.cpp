@@ -266,7 +266,7 @@ void render(const Scene &scene,
                   optix_rays,
                   optix_hits);
 
-        // Sample intersected media as well as phase function if needed
+        // Sample intersected media
         sampler->next_medium_samples(medium_samples);
         sample_medium(scene,
                       active_pixels,

@@ -12,6 +12,11 @@ Vector3 HomogeneousMedium::transmittance(const Ray &ray,
                                  MAXFLOAT));
 }
 
+/**
+ * Sample the given medium to see if the ray is affected by it. The
+ * transmittance is automatically calculated and encoded in the returned
+ * Vector3
+ */
 Vector3 HomogeneousMedium::sample(const Ray &ray,
                                   const SurfacePoint &surface_point,
                                   const MediumSample &sample,

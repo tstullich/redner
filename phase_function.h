@@ -15,13 +15,15 @@ using PhaseSample = TPhaseSample<Real>;
 /*
  * An interface to store various information for a phase function.
  * Useful when sampling participating media. Wi and Wo are assumed
- * to be pointing outward, as is the convention in the PBRT book
+ * to be pointing outward, as is the convention in the PBRT book from
+ * which this method was adapted
  */
 struct PhaseFunction {
     DEVICE virtual double p(const Vector3 &wo, const Vector3 &wi) const = 0;
 
-    DEVICE virtual Vector3 sample_p(const Vector3 &wo,
-                                    const PhaseSample &sample) const = 0;
+    DEVICE virtual double sample_p(const Vector3 &wo,
+                                   Vector3 *wi,
+                                   const PhaseSample &sample) const = 0;
 };
 
 // An implementation of the Henyey-Greenstein phase function
@@ -35,9 +37,10 @@ struct HenyeyGreenstein : PhaseFunction {
 
     // This function works much like p() but it is extended
     // to use a sample in the range of [0, 1)^2 to perform MIS
-    // Returns the incident vector wi as a result
-    DEVICE Vector3 sample_p(const Vector3 &wo,
-                            const PhaseSample &sample) const override {
+    // Returns the the weighting factor as result
+    DEVICE double sample_p(const Vector3 &wo,
+                           Vector3 *wi,
+                           const PhaseSample &sample) const override {
         // Compute cosine theta
         double cos_theta;
         if (abs(g) < 1e-3) {
@@ -52,7 +55,8 @@ struct HenyeyGreenstein : PhaseFunction {
         double phi = 2.0 * M_PI * sample.uv[1];
         Vector3 v1, v2;
         coordinate_system(wo, v1, v2);
-        return spherical_direction(sin_theta, cos_theta, phi, v1, v2, -wo);
+        *wi = spherical_direction(sin_theta, cos_theta, phi, v1, v2, -wo);
+        return PhaseHG(-cos_theta, g);
     }
 
    private:
@@ -74,5 +78,7 @@ struct HenyeyGreenstein : PhaseFunction {
                cos_theta * z;
     }
 
+    // The factor that determines forward and backward scattering for
+    // the Henyey-Greenstein phase function
     const float g;
 };
