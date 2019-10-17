@@ -701,8 +701,8 @@ Vector3 phase_sample(const Ray &incoming_ray,
                      const PhaseSample &phase_sample) {
     // TODO It seems incoming_ray is used for w_i this but in PBRT incoming_ray is w_o
     // Need to clear up this discrepancy
-    Vector3 wi = Vector3(0.0, 0.0, 0.0);
-    auto weight = medium_interaction.phase->sample_p(-incoming_ray.dir, &wi, phase_sample);
+    Vector3 wi = Vector3(0.0f, 0.0f, 0.0f);
+    medium_interaction.phase->sample_p(-incoming_ray.dir, &wi, phase_sample);
     return wi;
 }
 
