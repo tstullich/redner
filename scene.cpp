@@ -453,6 +453,7 @@ __global__ void intersect_shape_kernel(
             intersect_shape(shape, tri_id, ray, ray_differential,
                 new_ray_differentials[pixel_id]);
         rays[pixel_id].tmax = hits[idx].t;
+        rays[pixel_id].medium = shape.medium;
     } else {
         out_isects[pixel_id].shape_id = -1;
         out_isects[pixel_id].tri_id = -1;
