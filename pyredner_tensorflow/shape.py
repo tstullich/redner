@@ -96,6 +96,23 @@ def compute_uvs(vertices, indices, print_progress = True):
     return uvs, uv_indices
 
 class Shape:
+    """
+        redner supports only triangle meshes for now. It stores a pool of
+        vertices and access the pool using integer index. Some times the
+        two vertices can have the same 3D position but different texture
+        coordinates, because UV mapping creates seams and need to duplicate
+        vertices. In this can we can use an additional "uv_indices" array
+        to access the uv pool.
+
+        Args:
+            vertices (float tensor with size N x 3): 3D position of vertices.
+            indices (int tensor with size M x 3): vertex indices of triangle faces.
+            material_id (integer): index of the assigned material.
+            uvs (optional, float tensor with size N' x 2): optional texture coordinates.
+            normals (optional, float tensor with size N'' x 3): shading normal.
+            uv_indices (optional, int tensor with size M x 3): overrides indices when accessing uv coordinates.
+            normal_indices (optional, int tensor with size M x 3): overrides indices when accessing shading normals.
+    """
     def __init__(self,
                  vertices: tf.Tensor,
                  indices: tf.Tensor,
@@ -104,7 +121,8 @@ class Shape:
                  normals: Optional[tf.Tensor] = None,
                  uv_indices: Optional[tf.Tensor] = None,
                  normal_indices: Optional[tf.Tensor] = None,
-                 medium: Optional[tf.Tensor] = None):
+                 medium: Optional[tf.Tensor] = None,
+                 colors: Optional[tf.Tensor] = None):
         assert(tf.executing_eagerly())
         assert(vertices.dtype == tf.float32)
         assert(indices.dtype == tf.int32)
@@ -112,6 +130,13 @@ class Shape:
             assert(uvs.dtype == tf.float32)
         if normals is not None:
             assert(normals.dtype == tf.float32)
+        if uv_indices is not None:
+            assert(uv_indices.dtype == tf.int32)
+        if normal_indices is not None:
+            assert(normal_indices.dtype == tf.int32)
+        if colors is not None:
+            assert(colors.dtype == tf.float32)
+
         if pyredner.get_use_gpu():
             # Automatically copy all tensors to GPU
             # tf.Variable doesn't support .gpu(), so we'll wrap it with an identity().
@@ -125,6 +150,8 @@ class Shape:
                 uv_indices = tf.identity(uv_indices).gpu(pyredner.get_gpu_device_id())
             if normal_indices is not None:
                 normal_indices = tf.identity(normal_indices).gpu(pyredner.get_gpu_device_id())
+            if colors is not None:
+                colors = tf.identity(colors).gpu(pyredner.get_gpu_device_id())
         else:
             # Automatically copy to CPU
             vertices = tf.identity(vertices).cpu()
@@ -137,6 +164,8 @@ class Shape:
                 uv_indices = tf.identity(uv_indices).cpu()
             if normal_indices is not None:
                 normal_indices = tf.identity(uv_indices).cpu()
+            if colors is not None:
+                colors = tf.identity(colors).cpu()
 
         self.vertices = vertices
         self.indices = indices
@@ -146,6 +175,7 @@ class Shape:
         self.uv_indices = uv_indices
         self.normal_indices = normal_indices
         self.medium = medium
+        self.colors = colors
         self.light_id = -1
 
     def state_dict(self):
@@ -159,6 +189,7 @@ class Shape:
             'light_id': self.light_id,
             'normal_indices': self.normal_indices,
             'medium': self.medium,
+            'colors': self.colors,
             'light_id': self.light_id
         }
 
@@ -167,11 +198,13 @@ class Shape:
         out = cls(
             state_dict['vertices'],
             state_dict['indices'],
+            state_dict['material_id'],
             state_dict['uvs'],
             state_dict['normals'],
             state_dict['uv_indices'],
             state_dict['material_id'],
             state_dict['normal_indices'],
-            state_dict['medium'])
+            state_dict['medium'],
+            state_dict['colors'])
         out.light_id = state_dict['light_id']
         return out

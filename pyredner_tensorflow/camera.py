@@ -7,8 +7,11 @@ import pyredner_tensorflow as pyredner
 
 class Camera:
     """
-        redner supports a perspective camera and a fisheye camera.
-        Both of them employ a look at transform.
+        redner supports four types of cameras:
+            perspective, orthographic, fisheye, and panorama.
+        The camera takes a look at transform or a cam_to_world matrix to
+        transform from camera local space to world space. It also can optionally
+        take an intrinsic matrix that models field of view and camera skew.
 
         Note:
             The Camera constructor converts all variables into a CPU device,
@@ -23,21 +26,27 @@ class Camera:
             clip_near (float): the near clipping plane of the camera, need to > 0
             resolution (length 2 tuple): the size of the output image in (height, width)
             cam_to_world (4x4 matrix): overrides position, look_at, up vectors.
-            cam_to_ndc (3x3 matrix): a matrix that transforms
-                [-1, 1/aspect_ratio] x [1, -1/aspect_ratio] to [0, 1] x [0, 1]
-                where aspect_ratio = width / height
+            intrinsic_mat (3x3 matrix):
+                A matrix that transforms a point in camera space before the point
+                is projected to 2D screen space. Used for modelling field of view and
+                camera skewing. After the multiplication the point should be in
+                [-1, 1/aspect_ratio] x [1, -1/aspect_ratio] in homogeneous coordinates.
+                The projection is then carried by the specific camera types.
+                Perspective camera normalizes the homogeneous coordinates, while
+                orthogonal camera drop the Z coordinate.
+                This matrix overrides fov.
             camera_type (render.camera_type): the type of the camera (perspective, orthographic, or fisheye)
             fisheye (bool): whether the camera is a fisheye camera (legacy parameter just to ensure compatibility).
     """
     def __init__(self,
-                 position: tf.Tensor,
-                 look_at: tf.Tensor,
-                 up: tf.Tensor,
-                 fov: tf.Tensor,
-                 clip_near: float,
-                 resolution: Tuple[int],
+                 position: tf.Tensor = None,
+                 look_at: tf.Tensor = None,
+                 up: tf.Tensor = None,
+                 fov: tf.Tensor = None,
+                 clip_near: float = 1e-4,
+                 resolution: Tuple[int] = (256, 256),
                  cam_to_world: tf.Tensor = None,
-                 cam_to_ndc: tf.Tensor = None,
+                 intrinsic_mat: tf.Tensor = None,
                  camera_type = redner.CameraType.perspective,
                  fisheye: bool = False):
         assert(tf.executing_eagerly())
@@ -51,6 +60,8 @@ class Camera:
             assert(fov.dtype == tf.float32)
             assert(len(fov.shape) == 1 and fov.shape[0] == 1)
         assert(isinstance(clip_near, float))
+        if position is None and look_at is None and up is None:
+            assert(cam_to_world is  not None)
 
         with tf.device('/device:cpu:' + str(pyredner.get_cpu_device_id())):
             self.position = tf.identity(position).cpu()
@@ -62,17 +73,17 @@ class Camera:
                 self.world_to_cam = tf.linalg.inv(self.cam_to_world)
             else:
                 self.world_to_cam = None
-            if cam_to_ndc is None:
+            if intrinsic_mat is None:
                 if camera_type == redner.CameraType.perspective:
                     fov_factor = 1.0 / tf.tan(transform.radians(0.5 * fov))
                     o = tf.convert_to_tensor(np.ones([1], dtype=np.float32), dtype=tf.float32)
                     diag = tf.concat([fov_factor, fov_factor, o], 0)
-                    self._cam_to_ndc = tf.linalg.tensor_diag(diag)
+                    self._intrinsic_mat = tf.linalg.tensor_diag(diag)
                 else:
-                    self._cam_to_ndc = tf.eye(3, dtype=tf.float32)   
+                    self._intrinsic_mat = tf.eye(3, dtype=tf.float32)   
             else:
-                self._cam_to_ndc = tf.identity(cam_to_ndc).cpu()
-            self.ndc_to_cam = tf.linalg.inv(self.cam_to_ndc)
+                self._intrinsic_mat = tf.identity(intrinsic_mat).cpu()
+            self.intrinsic_mat_inv = tf.linalg.inv(self._intrinsic_mat)
             self.clip_near = clip_near
             self.resolution = resolution
             self.camera_type = camera_type
@@ -90,18 +101,18 @@ class Camera:
             fov_factor = 1.0 / tf.tan(transform.radians(0.5 * self._fov))
             o = tf.convert_to_tensor(np.ones([1], dtype=np.float32), dtype=tf.float32)
             diag = tf.concat([fov_factor, fov_factor, o], 0)
-            self._cam_to_ndc = tf.linalg.tensor_diag(diag)
-            self.ndc_to_cam = tf.linalg.inv(self._cam_to_ndc)
+            self._intrinsic_mat = tf.linalg.tensor_diag(diag)
+            self.intrinsic_mat_inv = tf.linalg.inv(self._intrinsic_mat)
 
     @property
-    def cam_to_ndc(self):
-        return self._cam_to_ndc
+    def intrinsic_mat(self):
+        return self._intrinsic_mat
 
-    @cam_to_ndc.setter
-    def cam_to_ndc(self, value):
+    @intrinsic_mat.setter
+    def intrinsic_mat(self, value):
         with tf.device('/device:cpu:' + str(pyredner.get_cpu_device_id())):
-            self._cam_to_ndc = tf.identity(value).cpu()
-            self.ndc_to_cam = tf.linalg.inv(self._cam_to_ndc)
+            self._intrinsic_mat = tf.identity(value).cpu()
+            self.intrinsic_mat_inv = tf.linalg.inv(self._intrinsic_mat)
 
     @property
     def cam_to_world(self):
@@ -120,8 +131,7 @@ class Camera:
             'fov': self.fov,
             'cam_to_world': self._cam_to_world,
             'world_to_cam': self.world_to_cam,
-            'cam_to_ndc': self._cam_to_ndc,
-            'ndc_to_cam': self.ndc_to_cam,
+            'intrinsic_mat': self._intrinsic_mat,
             'clip_near': self.clip_near,
             'resolution': self.resolution,
             'camera_type': self.camera_type
@@ -134,10 +144,8 @@ class Camera:
         out.look_at = state_dict['look_at']
         out.up = state_dict['up']
         out.fov = state_dict['fov']
-        out._cam_to_world = state_dict['cam_to_world']
-        out.world_to_cam = state_dict['world_to_cam']
-        out._cam_to_ndc = state_dict['cam_to_ndc']
-        out.ndc_to_cam = state_dict['ndc_to_cam']
+        out.cam_to_world = state_dict['cam_to_world']
+        out.intrinsic_mat = state_dict['intrinsic_mat']
         out.clip_near = state_dict['clip_near']
         out.resolution = state_dict['resolution']
         out.camera_type = state_dict['camera_type']

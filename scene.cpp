@@ -815,6 +815,7 @@ void test_scene_intersect(bool use_gpu) {
                    nullptr, // uv_indices
                    nullptr, // normal_indices
                    nullptr, // medium
+                   nullptr, // colors
                    3, // num_vertices
                    0, // num_uv_vertices
                    0, // num_normal_vertices
@@ -902,6 +903,7 @@ void test_sample_point_on_light(bool use_gpu) {
                  nullptr, // uv_indices
                  nullptr, // normal_indices
                  nullptr, // medium
+                 nullptr, // colors
                  6, // num_vertices
                  0, // num_uv_vertices
                  0, // num_normal_vertices
@@ -915,6 +917,7 @@ void test_sample_point_on_light(bool use_gpu) {
                  nullptr, // uv_indices
                  nullptr, // normal_indices
                  nullptr, // medium
+                 nullptr, // colors
                  3, // num_vertices
                  0, // num_uv_vertices
                  0, // num_normal_vertices
