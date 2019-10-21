@@ -16,12 +16,14 @@ struct Material {
              Texture3 specular_reflectance,
              Texture1 roughness,
              Texture3 normal_map,
-             bool two_sided)
+             bool two_sided,
+             bool use_vertex_color)
         : diffuse_reflectance(diffuse_reflectance),
           specular_reflectance(specular_reflectance),
           roughness(roughness),
           normal_map(normal_map),
-          two_sided(two_sided) {}
+          two_sided(two_sided),
+          use_vertex_color(use_vertex_color) {}
 
     inline std::tuple<int, int, int> get_diffuse_size() const {
         return std::make_tuple(
@@ -56,6 +58,7 @@ struct Material {
     Texture1 roughness;
     Texture3 normal_map;
     bool two_sided;
+    bool use_vertex_color;
 };
 
 struct DMaterial {
@@ -269,8 +272,7 @@ Vector3 bsdf(const Material &material,
              const SurfacePoint &shading_point,
              const Vector3 &wi,
              const Vector3 &wo,
-             const Real min_roughness,
-             bool debug = false) {
+             const Real min_roughness) {
     // To address the discrepancy between shading normal and geometry normal,
     // we use the strategy recommended by Veach: we define the BSDFs
     // over the whole spherical domain, instead of just the hemisphere domain.
@@ -310,8 +312,10 @@ Vector3 bsdf(const Material &material,
         return Vector3{0, 0, 0};
     }
 
-    auto diffuse_reflectance = get_diffuse_reflectance(material, shading_point);
-    auto specular_reflectance = get_specular_reflectance(material, shading_point);
+    auto diffuse_reflectance = material.use_vertex_color ?
+        shading_point.color : get_diffuse_reflectance(material, shading_point);
+    auto specular_reflectance = material.use_vertex_color ?
+        Vector3{0, 0, 0} : get_specular_reflectance(material, shading_point);
     auto roughness = max(get_roughness(material, shading_point), min_roughness);
     auto diffuse_contrib = diffuse_reflectance * shading_wo / Real(M_PI);
     auto specular_contrib = Vector3{0, 0, 0};
@@ -406,11 +410,16 @@ void d_bsdf(const Material &material,
         return;
     }
 
-    auto diffuse_reflectance = get_diffuse_reflectance(material, shading_point);
+    auto diffuse_reflectance = material.use_vertex_color ?
+        shading_point.color : get_diffuse_reflectance(material, shading_point);
     // diffuse_contrib = diffuse_reflectance * shading_wo / Real(M_PI)
     auto d_diffuse_reflectance = d_output * (shading_wo / Real(M_PI));
-    d_get_diffuse_reflectance(material, shading_point, d_diffuse_reflectance,
-                              d_material.diffuse_reflectance, d_shading_point);
+    if (material.use_vertex_color) {
+        d_shading_point.color += d_diffuse_reflectance;
+    } else {
+        d_get_diffuse_reflectance(material, shading_point, d_diffuse_reflectance,
+                                  d_material.diffuse_reflectance, d_shading_point);
+    }
     auto d_shading_wo = d_output * sum(diffuse_reflectance) / Real(M_PI);
     // shading_wo = fabs(dot(shading_frame.n, wo))
     if (dot(shading_frame.n, wo) < 0)  {
@@ -419,7 +428,8 @@ void d_bsdf(const Material &material,
     d_wo += shading_frame.n * d_shading_wo;
     d_n += wo * d_shading_wo;
 
-    auto specular_reflectance = get_specular_reflectance(material, shading_point);
+    auto specular_reflectance = material.use_vertex_color ?
+        Vector3{0, 0, 0} : get_specular_reflectance(material, shading_point);
     auto roughness = max(get_roughness(material, shading_point), min_roughness);
     assert(roughness > 0.f);
     if (sum(specular_reflectance) > 0.f) {
@@ -593,8 +603,7 @@ Vector3 bsdf_sample(const Material &material,
                     const Real min_roughness,
                     const RayDifferential &wi_differential,
                     RayDifferential &wo_differential,
-                    Real *next_min_roughness = nullptr,
-                    bool debug = false) {
+                    Real *next_min_roughness = nullptr) {
     if (next_min_roughness != nullptr) {
         *next_min_roughness = min_roughness;
     }
@@ -617,8 +626,10 @@ Vector3 bsdf_sample(const Material &material,
         }
     }
 
-    auto diffuse_reflectance = get_diffuse_reflectance(material, shading_point);
-    auto specular_reflectance = get_specular_reflectance(material, shading_point);
+    auto diffuse_reflectance = material.use_vertex_color ?
+        shading_point.color : get_diffuse_reflectance(material, shading_point);
+    auto specular_reflectance = material.use_vertex_color ?
+        Vector3{0, 0, 0} : get_specular_reflectance(material, shading_point);
     auto diffuse_weight = luminance(diffuse_reflectance);
     auto specular_weight = luminance(specular_reflectance);
     auto weight_sum = diffuse_weight + specular_weight;
@@ -724,8 +735,10 @@ void d_bsdf_sample(const Material &material,
         }
     }
 
-    auto diffuse_reflectance = get_diffuse_reflectance(material, shading_point);
-    auto specular_reflectance = get_specular_reflectance(material, shading_point);
+    auto diffuse_reflectance = material.use_vertex_color ?
+        shading_point.color : get_diffuse_reflectance(material, shading_point);
+    auto specular_reflectance = material.use_vertex_color ?
+        Vector3{0, 0, 0} : get_specular_reflectance(material, shading_point);
     // TODO: this is wrong for black materials
     auto diffuse_weight = luminance(diffuse_reflectance);
     auto specular_weight = luminance(specular_reflectance);
@@ -930,8 +943,10 @@ inline Real bsdf_pdf(const Material &material,
         }
     }
 
-    auto diffuse_reflectance = get_diffuse_reflectance(material, shading_point);
-    auto specular_reflectance = get_specular_reflectance(material, shading_point);
+    auto diffuse_reflectance = material.use_vertex_color ?
+        shading_point.color : get_diffuse_reflectance(material, shading_point);
+    auto specular_reflectance = material.use_vertex_color ?
+        Vector3{0, 0, 0} : get_specular_reflectance(material, shading_point);
     auto diffuse_weight = luminance(diffuse_reflectance);
     auto specular_weight = luminance(specular_reflectance);
     auto weight_sum = diffuse_weight + specular_weight;
@@ -1002,8 +1017,10 @@ inline void d_bsdf_pdf(const Material &material,
         }
     }
 
-    auto diffuse_reflectance = get_diffuse_reflectance(material, shading_point);
-    auto specular_reflectance = get_specular_reflectance(material, shading_point);
+    auto diffuse_reflectance = material.use_vertex_color ?
+        shading_point.color : get_diffuse_reflectance(material, shading_point);
+    auto specular_reflectance = material.use_vertex_color ?
+        Vector3{0, 0, 0} : get_specular_reflectance(material, shading_point);
     auto diffuse_weight = luminance(diffuse_reflectance);
     auto specular_weight = luminance(specular_reflectance);
     auto weight_sum = diffuse_weight + specular_weight;
