@@ -28,9 +28,6 @@ struct path_contribs_accumulator {
         // Next event estimation
         auto nee_contrib = Vector3{0, 0, 0};
         if (light_ray.tmax >= 0) { // tmax < 0 means the ray is blocked
-            if (medium_interaction.valid()) {
-                // Handle an interaction inside a medium if needed
-            }
             if (light_isect.valid()) {
                 // area light
                 const auto &light_shape = scene.shapes[light_isect.shape_id];
@@ -40,17 +37,27 @@ struct path_contribs_accumulator {
                 if (light_shape.light_id >= 0) {
                     const auto &light = scene.area_lights[light_shape.light_id];
                     if (light.two_sided || dot(-wo, light_point.shading_frame.n) > 0) {
-                        auto bsdf_val = bsdf(material, shading_point, wi, wo, min_rough);
                         auto geometry_term = fabs(dot(wo, light_point.geom_normal)) / dist_sq;
                         auto light_contrib = light.intensity;
                         auto light_pmf = scene.light_pmf[light_shape.light_id];
                         auto light_area = scene.light_areas[light_shape.light_id];
                         auto pdf_nee = light_pmf / light_area;
-                        auto pdf_bsdf =
-                            bsdf_pdf(material, shading_point, wi, wo, min_rough) * geometry_term;
-                        auto mis_weight = Real(1 / (1 + square((double)pdf_bsdf / (double)pdf_nee)));
-                        nee_contrib =
-                            (mis_weight * geometry_term / pdf_nee) * bsdf_val * light_contrib;
+                        if (medium_interaction.valid()) {
+                            // Compute phase function instead of the bsdf if medium interaction is valid
+                            auto phase_val = Vector3{1.0f, 1.0f, 1.0f}; // TODO Check if this is needed
+                            auto pdf_phase = medium_interaction.phase->p(wo, wi);
+                            auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
+                            nee_contrib =
+                                (mis_weight * geometry_term / pdf_nee) * phase_val * light_contrib;
+                        } else {
+                            auto bsdf_val = bsdf(material, shading_point, wi, wo, min_rough);
+                            auto pdf_bsdf =
+                                bsdf_pdf(material, shading_point, wi, wo, min_rough) * geometry_term;
+
+                            auto mis_weight = Real(1 / (1 + square((double)pdf_bsdf / (double)pdf_nee)));
+                            nee_contrib =
+                                (mis_weight * geometry_term / pdf_nee) * bsdf_val * light_contrib;
+                        }
                     }
                 }
             } else if (scene.envmap != nullptr) {
@@ -60,22 +67,58 @@ struct path_contribs_accumulator {
                 auto light_pmf = scene.light_pmf[envmap_id];
                 auto pdf_nee = envmap_pdf(*scene.envmap, wo) * light_pmf;
                 if (pdf_nee > 0) {
-                    auto bsdf_val = bsdf(material, shading_point, wi, wo, min_rough);
                     // XXX: For now we don't use ray differentials for envmap
                     //      A proper approach might be to use a filter radius based on sampling density?
                     RayDifferential ray_diff{Vector3{0, 0, 0}, Vector3{0, 0, 0},
-                                             Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+                                            Vector3{0, 0, 0}, Vector3{0, 0, 0}};
                     auto light_contrib = envmap_eval(*scene.envmap, wo, ray_diff);
-                    auto pdf_bsdf = bsdf_pdf(material, shading_point, wi, wo, min_rough);
-                    auto mis_weight = Real(1 / (1 + square((double)pdf_bsdf / (double)pdf_nee)));
-                    nee_contrib = (mis_weight / pdf_nee) * bsdf_val * light_contrib;
+                    if (medium_interaction.valid()) {
+                        // Importance sample the phase function
+                        auto phase_val = Vector3{1.0f, 1.0f, 1.0f}; // TODO Check if this is needed
+                        auto pdf_phase = medium_interaction.phase->p(wo, wi);
+                        auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
+                        nee_contrib = (mis_weight / pdf_nee) * phase_val * light_contrib;
+                    } else {
+                        auto bsdf_val = bsdf(material, shading_point, wi, wo, min_rough);
+                        auto pdf_bsdf = bsdf_pdf(material, shading_point, wi, wo, min_rough);
+                        auto mis_weight = Real(1 / (1 + square((double)pdf_bsdf / (double)pdf_nee)));
+                        nee_contrib = (mis_weight / pdf_nee) * bsdf_val * light_contrib;
+                    }
                 }
             }
         }
-        // BSDF importance sampling
+
+        // BSDF importance sampling or phase function importance sampling
         auto scatter_contrib = Vector3{0, 0, 0};
         auto scatter_bsdf = Vector3{0, 0, 0};
-        if (bsdf_isect.valid()) {
+        if (medium_interaction.valid()) {
+            // Importance sample the phase function of the medium
+            auto dir = bsdf_point.position - p;
+            auto dist_sq = length_squared(dir);
+            auto wo = dir / sqrt(dist_sq); // TODO Check if this also applies for phase
+            auto pdf_phase = medium_interaction.phase->p(wo, wi);
+            if (pdf_phase > 1e-20f) {
+                const auto &bsdf_shape = scene.shapes[bsdf_isect.shape_id];
+                auto phase_val = Vector3{1.0, 1.0, 1.0}; // TODO Check actual value
+                if (bsdf_shape.light_id >= 0) {
+                    const auto &light = scene.area_lights[bsdf_shape.light_id];
+                    if (light.two_sided || dot(-wo, bsdf_point.shading_frame.n) > 0) {
+                        auto light_contrib = light.intensity;
+                        auto light_pmf = scene.light_pmf[bsdf_shape.light_id];
+                        auto light_area = scene.light_areas[bsdf_shape.light_id];
+                        auto inv_area = 1 / light_area;
+                        auto geometry_term = fabs(dot(wo, bsdf_point.geom_normal)) / dist_sq;
+                        auto pdf_nee = (light_pmf * inv_area) / geometry_term;
+                        auto mis_weight = Real(1 / (1 + square((double)pdf_nee / (double)pdf_phase)));
+                        scatter_contrib = (mis_weight / pdf_phase) * phase_val * light_contrib;
+                    }
+                }
+                scatter_bsdf = phase_val / pdf_phase;
+                next_throughput = throughput * scatter_bsdf;
+            } else {
+                next_throughput = Vector3{0, 0, 0};
+            }
+        } else if (bsdf_isect.valid()) {
             const auto &bsdf_shape = scene.shapes[bsdf_isect.shape_id];
             auto dir = bsdf_point.position - p;
             auto dist_sq = length_squared(dir);

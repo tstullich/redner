@@ -31,6 +31,7 @@ struct HenyeyGreenstein : PhaseFunction {
    public:
     HenyeyGreenstein(float g) : g(g){};
 
+    // Returns the PDF of the phase function without doing MIS
     DEVICE double p(const Vector3 &wo, const Vector3 &wi) const override {
         return PhaseHG(dot(wo, wi), g);
     }

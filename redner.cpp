@@ -92,10 +92,11 @@ PYBIND11_MODULE(redner, m) {
         .def("has_uvs", &Shape::has_uvs)
         .def("has_normals", &Shape::has_normals);
 
-    // TODO Ask about definitions for this class, difference between
-    // homogeneous vs heterogeneous media
-    //py::class_<Medium>(m, "Medium")
-    //    .def(py::init<ptr<>, ptr<>, ptr<float>>())
+    // TODO Ask about correct definitions for this class
+    py::class_<Medium>(m, "Medium")
+        .def(py::init<Vector3f, // sigma_a
+                      Vector3f, // sigma_s
+                      float>()); // forward/backward scattering factor
 
     py::class_<DShape>(m, "DShape")
         .def(py::init<ptr<float>,

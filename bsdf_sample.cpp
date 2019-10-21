@@ -19,7 +19,7 @@ struct bsdf_sampler {
             // Sample phase function for new direction
             next_rays[pixel_id] = Ray {
                 shading_points[pixel_id].position,
-                phase_sample(incoming_ray,
+                phase_sample(-incoming_ray.dir,
                              medium_interaction,
                              phase_samples[pixel_id])};
         } else {

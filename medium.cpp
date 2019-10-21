@@ -38,7 +38,7 @@ Vector3 HomogeneousMedium::sample(const Ray &ray,
     // Compute the transmittance and sampling density
     Vector3 tr = vecExp(-sigma_t * min(t, MAXFLOAT) * length(ray.dir));
 
-    // Return the weighting factor scattering inside of a homogeneous medium
+    // Return the weighting factor for scattering inside of a homogeneous medium
     Vector3 density = sampled_medium ? (sigma_t * tr) : tr;
     float pdf = 0.0;
     for (int i = 0; i < NUM_SAMPLES; ++i) {

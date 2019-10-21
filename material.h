@@ -696,14 +696,14 @@ Vector3 bsdf_sample(const Material &material,
 
 DEVICE
 inline
-Vector3 phase_sample(const Ray &incoming_ray,
+Vector3 phase_sample(const Vector3 &wi,
                      const MediumInteraction &medium_interaction,
                      const PhaseSample &phase_sample) {
     // TODO It seems incoming_ray is used for w_i this but in PBRT incoming_ray is w_o
     // Need to clear up this discrepancy
-    Vector3 wi = Vector3(0.0f, 0.0f, 0.0f);
-    medium_interaction.phase->sample_p(-incoming_ray.dir, &wi, phase_sample);
-    return wi;
+    Vector3 wo = Vector3(0.0f, 0.0f, 0.0f);
+    medium_interaction.phase->sample_p(wi, &wo, phase_sample);
+    return wo;
 }
 
 DEVICE
