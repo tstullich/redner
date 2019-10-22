@@ -20,10 +20,10 @@ Vector3 HomogeneousMedium::transmittance(const Ray &ray,
 Vector3 HomogeneousMedium::sample(const Ray &ray,
                                   const SurfacePoint &surface_point,
                                   const MediumSample &sample,
-                                  MediumInteraction *mi) const {
+                                  ptr<MediumInteraction> mi) const {
     // Sample a channel and distance along the ray
-    int channel = min(sample.uv[0] * NUM_SAMPLES,
-                           static_cast<double>(NUM_SAMPLES - 1));
+    int channel =
+        min(sample.uv[0] * NUM_SAMPLES, static_cast<double>(NUM_SAMPLES - 1));
     double dist = -log(1.0 - sample.uv[1]) / sigma_t[channel];
 
     float t = min(dist / length(ray.dir), ray.tmax);

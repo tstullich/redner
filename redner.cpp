@@ -95,8 +95,10 @@ PYBIND11_MODULE(redner, m) {
         .def("has_normals", &Shape::has_normals)
         .def("has_colors", &Shape::has_colors);
 
-    // TODO Ask about correct definitions for this class
-    py::class_<Medium>(m, "Medium")
+    py::class_<Medium, PyMedium>(m, "Medium")
+        .def(py::init<>());
+
+    py::class_<HomogeneousMedium, Medium>(m, "HomogeneousMedium")
         .def(py::init<Vector3f, // sigma_a
                       Vector3f, // sigma_s
                       float>()); // forward/backward scattering factor
