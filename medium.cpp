@@ -32,7 +32,7 @@ Vector3 HomogeneousMedium::sample(const Ray &ray,
         // If we are inside the medium we need to sample the
         // phase function. We use HG in this case
         *mi = MediumInteraction(surface_point, -ray.dir, this,
-                                HenyeyGreenstein(g));
+                                new HenyeyGreenstein(g));
     }
 
     // Compute the transmittance and sampling density
@@ -41,7 +41,7 @@ Vector3 HomogeneousMedium::sample(const Ray &ray,
     // Return the weighting factor for scattering inside of a homogeneous medium
     Vector3 density = sampled_medium ? (sigma_t * tr) : tr;
     float pdf = 0.0;
-    for (int i = 0; i < NUM_SAMPLES; ++i) {
+    for (uint i = 0; i < NUM_SAMPLES; ++i) {
         pdf += density[i];
     }
 

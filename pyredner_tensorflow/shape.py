@@ -112,6 +112,7 @@ class Shape:
             normals (optional, float tensor with size N'' x 3): shading normal.
             uv_indices (optional, int tensor with size M x 3): overrides indices when accessing uv coordinates.
             normal_indices (optional, int tensor with size M x 3): overrides indices when accessing shading normals.
+            medium (optional, float tensor with size  3): a medium that can be used to simulate various effects.
     """
     def __init__(self,
                  vertices: tf.Tensor,
@@ -189,8 +190,7 @@ class Shape:
             'light_id': self.light_id,
             'normal_indices': self.normal_indices,
             'medium': self.medium,
-            'colors': self.colors,
-            'light_id': self.light_id
+            'colors': self.colors
         }
 
     @classmethod

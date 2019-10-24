@@ -100,6 +100,7 @@ set(SRCS aabb.h
          miniz.c
          parallel.cpp
          medium.h
+         medium.cpp
          phase_function.h
          medium_interaction.h
          medium_interface.h

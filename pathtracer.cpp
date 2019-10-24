@@ -343,12 +343,12 @@ void render(const Scene &scene,
             // Sample intersected media as well as phase function if needed
             sampler->next_medium_samples(medium_samples);
             sample_medium(scene,
-                        active_pixels,
-                        shading_points,
-                        rays,
-                        medium_samples,
-                        throughputs,
-                        medium_interactions);
+                          active_pixels,
+                          shading_points,
+                          rays,
+                          medium_samples,
+                          throughputs,
+                          medium_interactions);
 
             // Sample directions based on BRDF
             sampler->next_bsdf_samples(bsdf_samples);
