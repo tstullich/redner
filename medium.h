@@ -24,8 +24,6 @@ using MediumSample = TMediumSample<Real>;
  * can be either homogeneous or heterogeneous
  */
 struct Medium {
-    virtual ~Medium();
-
     DEVICE
     virtual Vector3 transmittance(const Ray &ray,
                                   const MediumSample &sample) const = 0;
