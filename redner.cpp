@@ -22,6 +22,8 @@ PYBIND11_MODULE(redner, m) {
         .def(py::init<std::size_t>());
     py::class_<ptr<int>>(m, "int_ptr")
         .def(py::init<std::size_t>());
+    py::class_<ptr<Medium>>(m, "med_ptr")
+        .def(py::init<std::size_t>());
 
     py::enum_<CameraType>(m, "CameraType")
         .value("perspective", CameraType::Perspective)

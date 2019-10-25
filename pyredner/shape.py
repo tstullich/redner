@@ -108,6 +108,7 @@ class Shape:
             normals (optional, float tensor with size N'' x 3): shading normal.
             uv_indices (optional, int tensor with size M x 3): overrides indices when accessing uv coordinates.
             normal_indices (optional, int tensor with size M x 3): overrides indices when accessing shading normals.
+            medium (optional, float tensor 2 x 3): an optional medium that can be used to simulate participating media.
             colors (optional, float tensor with size N x 3): optional vertex color.
     """
     def __init__(self,

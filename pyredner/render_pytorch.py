@@ -114,6 +114,7 @@ class RenderFunction(torch.autograd.Function):
             args.append(shape.normals)
             args.append(shape.uv_indices)
             args.append(shape.normal_indices)
+            args.append(shape.medium)
             args.append(shape.colors)
             args.append(shape.material_id)
             args.append(shape.light_id)
@@ -249,6 +250,8 @@ class RenderFunction(torch.autograd.Function):
             current_index += 1
             normal_indices = args[current_index]
             current_index += 1
+            medium = args[current_index]
+            current_index += 1
             colors = args[current_index]
             current_index += 1
             material_id = args[current_index]
@@ -272,6 +275,8 @@ class RenderFunction(torch.autograd.Function):
                 redner.float_ptr(normals.data_ptr() if normals is not None else 0),
                 redner.int_ptr(uv_indices.data_ptr() if uv_indices is not None else 0),
                 redner.int_ptr(normal_indices.data_ptr() if normal_indices is not None else 0),
+                # TODO Figure out how to properly represent medium class
+                redner.med_ptr(medium.sigma_a.data_ptr() if medium is not None else 0),
                 redner.float_ptr(colors.data_ptr() if colors is not None else 0),
                 int(vertices.shape[0]),
                 int(uvs.shape[0]) if uvs is not None else 0,

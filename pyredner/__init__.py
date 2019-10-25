@@ -13,3 +13,4 @@ from .save_obj import save_obj
 from .load_mitsuba import load_mitsuba
 from .transform import gen_rotate_matrix
 from .utils import *
+from .medium import *
