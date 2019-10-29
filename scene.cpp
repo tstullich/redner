@@ -750,12 +750,15 @@ struct medium_sampler {
         const auto &shading_point = shading_points[pixel_id];
         const auto &incoming_ray = incoming_rays[pixel_id];
         if (incoming_ray.medium) {
+            auto medium_interaction = &medium_interactions[pixel_id] == nullptr ?
+                                      new MediumInteraction() : &medium_interactions[pixel_id];
             // Sample medium and accumulate it to throughput. This will also initialize
             // the MediumInteraction pointer in case an interaction with a medium occured
             throughputs[pixel_id] *= incoming_ray.medium->sample(incoming_ray,
                                                                  shading_point,
                                                                  medium_sample,
-                                                                 &medium_interactions[pixel_id]);
+                                                                 medium_interaction);
+            medium_interactions[pixel_id] = *medium_interaction;
         }
     }
 
