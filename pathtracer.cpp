@@ -102,6 +102,9 @@ struct PathBuffer {
 
         tmp_light_samples = Buffer<LightSample>(use_gpu, num_pixels);
         tmp_bsdf_samples = Buffer<BSDFSample>(use_gpu, num_pixels);
+
+        generic_texture_buffer = Buffer<Real>(use_gpu,
+            channel_info.max_generic_texture_dimension * num_pixels);
     }
 
     int num_pixels;
@@ -149,6 +152,9 @@ struct PathBuffer {
     // For sharing RNG between pixels
     Buffer<LightSample> tmp_light_samples;
     Buffer<BSDFSample> tmp_bsdf_samples;
+
+    // For temporary storing generic texture values per thread
+    Buffer<Real> generic_texture_buffer;
 };
 
 // 1 2 3 4 5 -> 1 1 2 2 3 3 4 4 5 5
@@ -193,7 +199,9 @@ void render(const Scene &scene,
     if (d_rendered_image.get() != nullptr) {
         initialize_ltc_table(scene.use_gpu);
     }
-    ChannelInfo channel_info(options.channels, scene.use_gpu);
+    ChannelInfo channel_info(options.channels,
+                             scene.use_gpu,
+                             scene.max_generic_texture_dimension);
 
     // Some common variables
     const auto &camera = scene.camera;
@@ -204,7 +212,10 @@ void render(const Scene &scene,
     // tracer is that we need to store all the intermediate states
     // for later computation of derivatives.
     // Therefore we allocate a big buffer here for the storage.
-    PathBuffer path_buffer(max_bounces, num_pixels, scene.use_gpu, channel_info);
+    PathBuffer path_buffer(max_bounces,
+                           num_pixels,
+                           scene.use_gpu,
+                           channel_info);
     auto num_active_pixels = std::vector<int>((max_bounces + 1) * num_pixels, 0);
     std::unique_ptr<Sampler> sampler, edge_sampler;
     switch (options.sampler_type) {
@@ -246,6 +257,8 @@ void render(const Scene &scene,
         auto primary_active_pixels = path_buffer.primary_active_pixels.view(0, num_pixels);
         auto active_pixels = path_buffer.active_pixels.view(0, num_pixels);
         auto min_roughness = path_buffer.min_roughness.view(0, num_pixels);
+        auto generic_texture_buffer =
+            path_buffer.generic_texture_buffer.view(0, path_buffer.generic_texture_buffer.size());
 
         // Initialization
         init_paths(throughputs, min_roughness, scene.use_gpu);
@@ -288,7 +301,8 @@ void render(const Scene &scene,
                                     Real(1) / options.num_samples,
                                     channel_info,
                                     rendered_image.get(),
-                                    BufferView<Real>()); // edge_contrib
+                                    BufferView<Real>(), // edge_contrib
+                                    generic_texture_buffer);
         // Stream compaction: remove invalid intersection
         update_active_pixels(primary_active_pixels, shading_isects, active_pixels, scene.use_gpu);
         std::fill(num_active_pixels.begin(), num_active_pixels.end(), 0);
@@ -575,7 +589,8 @@ void render(const Scene &scene,
                         Real(1) / options.num_samples,
                         channel_info,
                         nullptr,
-                        edge_contribs);
+                        edge_contribs,
+                        generic_texture_buffer);
                     // Stream compaction: remove invalid intersections
                     update_active_pixels(edge_active_pixels,
                                          edge_shading_isects,
@@ -747,6 +762,7 @@ void render(const Scene &scene,
                                               Real(1) / options.num_samples,
                                               channel_info,
                                               d_rendered_image.get(),
+                                              generic_texture_buffer,
                                               d_scene.get(),
                                               d_rays,
                                               d_ray_differentials,
@@ -828,8 +844,9 @@ void render(const Scene &scene,
                                             medium_interactions,
                                             Real(1) / options.num_samples,
                                             channel_info,
-                                            nullptr,
-                                            edge_contribs);
+                                            nullptr, // rendered_image
+                                            edge_contribs,
+                                            generic_texture_buffer);
                 // Stream compaction: remove invalid intersections
                 update_active_pixels(active_pixels, shading_isects, active_pixels, scene.use_gpu);
                 auto active_pixels_size = active_pixels.size();

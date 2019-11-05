@@ -63,7 +63,9 @@ PYBIND11_MODULE(redner, m) {
                       bool,
                       int,
                       bool,
-                      bool>());
+                      bool>())
+        .def_readonly("max_generic_texture_dimension",
+            &Scene::max_generic_texture_dimension);
 
     py::class_<DScene, std::shared_ptr<DScene>>(m, "DScene")
         .def(py::init<const DCamera &,
@@ -113,35 +115,48 @@ PYBIND11_MODULE(redner, m) {
 
     py::class_<Texture1>(m, "Texture1")
         .def(py::init<ptr<float>,
-                      int,
-                      int,
-                      int,
+                      int, // width
+                      int, // height
+                      int, // channels
+                      int, // num_levels
                       ptr<float>>());
 
     py::class_<Texture3>(m, "Texture3")
         .def(py::init<ptr<float>,
-                      int,
-                      int,
-                      int,
+                      int, // width
+                      int, // height
+                      int, // channels
+                      int, // num_levels
+                      ptr<float>>());
+
+    py::class_<TextureN>(m, "TextureN")
+        .def(py::init<ptr<float>,
+                      int, // width
+                      int, // height
+                      int, // channels
+                      int, // num_levels
                       ptr<float>>());
 
     py::class_<Material>(m, "Material")
         .def(py::init<Texture3, // diffuse
                       Texture3, // specular
                       Texture1, // roughness
+                      TextureN, // generic_texture
                       Texture3, // normal_map
                       bool, // two_sided
                       bool>()) // use_vertex_color
         .def("get_diffuse_size", &Material::get_diffuse_size)
         .def("get_specular_size", &Material::get_specular_size)
         .def("get_roughness_size", &Material::get_roughness_size)
+        .def("get_generic_size", &Material::get_generic_size)
         .def("get_normal_map_size", &Material::get_normal_map_size);
 
     py::class_<DMaterial>(m, "DMaterial")
-        .def(py::init<Texture3,
-                      Texture3,
-                      Texture1,
-                      Texture3>());
+        .def(py::init<Texture3, // diffuse
+                      Texture3, // specular
+                      Texture1, // roughness
+                      TextureN, // generic_texture
+                      Texture3>()); // normal_map
 
     py::class_<AreaLight>(m, "AreaLight")
         .def(py::init<int,
@@ -174,6 +189,7 @@ PYBIND11_MODULE(redner, m) {
         .value("diffuse_reflectance", Channels::diffuse_reflectance)
         .value("specular_reflectance", Channels::specular_reflectance)
         .value("roughness", Channels::roughness)
+        .value("generic_texture", Channels::generic_texture)
         .value("vertex_color", Channels::vertex_color)
         .value("shape_id", Channels::shape_id)
         .value("material_id", Channels::material_id);
