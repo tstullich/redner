@@ -51,11 +51,12 @@ set(SRCS aabb.h
          area_light.h
          atomic.h
          automatic_uv_map.h
-         bsdf_sample.h
+         bsdf_or_phase_sample.h
          buffer.h
          camera.h
          channels.h
          cuda_utils.h
+         directional_sample.h
          edge.h
          edge_tree.h
          envmap.h
@@ -65,11 +66,14 @@ set(SRCS aabb.h
          load_serialized.h
          material.h
          matrix.h
+         medium.h
+         medium_interface.h
          miniz.h
          parallel.h
          path_contribution.h
          pathtracer.h
          pcg_sampler.h
+         phase_function.h
          primary_contribution.h
          primary_intersection.h
          ptr.h
@@ -89,7 +93,7 @@ set(SRCS aabb.h
          aabb.cpp
          active_pixels.cpp
          automatic_uv_map.cpp
-         bsdf_sample.cpp
+         bsdf_or_phase_sample.cpp
          camera.cpp
          channels.cpp
          edge.cpp
@@ -97,13 +101,9 @@ set(SRCS aabb.h
          envmap.cpp
          load_serialized.cpp
          material.cpp
+         medium.cpp
          miniz.c
          parallel.cpp
-         medium.h
-         medium.cpp
-         phase_function.h
-         medium_interaction.h
-         medium_interface.h
          path_contribution.cpp
          pathtracer.cpp
          pcg_sampler.cpp
@@ -136,13 +136,14 @@ if(CUDA_FOUND)
     set_source_files_properties(
         aabb.cpp
         active_pixels.cpp
-        bsdf_sample.cpp
+        bsdf_or_phase_sample.cpp
         camera.cpp
         channels.cpp
         edge.cpp
         edge_tree.cpp
         envmap.cpp
         material.cpp
+        medium.cpp
         parallel.cpp
         path_contribution.cpp
         pathtracer.cpp

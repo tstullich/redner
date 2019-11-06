@@ -76,12 +76,14 @@ class RenderFunction(torch.autograd.Function):
         num_shapes = len(scene.shapes)
         num_materials = len(scene.materials)
         num_lights = len(scene.area_lights)
+        num_mediums = len(scene.mediums)
         for light_id, light in enumerate(scene.area_lights):
             scene.shapes[light.shape_id].light_id = light_id
         args = []
         args.append(num_shapes)
         args.append(num_materials)
         args.append(num_lights)
+        args.append(num_mediums)
         assert(cam.position is None or torch.isfinite(cam.position).all())
         assert(cam.look_at is None or torch.isfinite(cam.look_at).all())
         assert(cam.up is None or torch.isfinite(cam.up).all())
@@ -103,6 +105,7 @@ class RenderFunction(torch.autograd.Function):
         args.append(cam.clip_near)
         args.append(cam.resolution)
         args.append(cam.camera_type)
+        args.append(cam.medium_id)
         for shape in scene.shapes:
             assert(torch.isfinite(shape.vertices).all())
             if (shape.uvs is not None):
@@ -115,10 +118,10 @@ class RenderFunction(torch.autograd.Function):
             args.append(shape.normals)
             args.append(shape.uv_indices)
             args.append(shape.normal_indices)
-            args.append(shape.medium)
             args.append(shape.colors)
             args.append(shape.material_id)
             args.append(shape.light_id)
+            args.append(shape.medium_id)
         for material in scene.materials:
             assert(torch.isfinite(material.diffuse_reflectance.mipmap).all())
             assert(torch.isfinite(material.diffuse_reflectance.uv_scale).all())
@@ -176,6 +179,15 @@ class RenderFunction(torch.autograd.Function):
             args.append(None)
             args.append(None)
             args.append(None)
+        for medium in scene.mediums:
+            if isinstance(medium, pyredner.HomogeneousMedium):
+                args.append(redner.medium_type.homogeneous)
+                args.append(medium.sigma_a)
+                args.append(medium.sigma_s)
+                args.append(medium.g)
+            else:
+                assert(False)
+
         args.append(num_samples)
         args.append(max_bounces)
         args.append(channels)
@@ -200,6 +212,8 @@ class RenderFunction(torch.autograd.Function):
         current_index += 1
         num_lights = args[current_index]
         current_index += 1
+        num_mediums = args[current_index]
+        current_index += 1
 
         cam_position = args[current_index]
         current_index += 1
@@ -221,6 +235,8 @@ class RenderFunction(torch.autograd.Function):
         current_index += 1
         camera_type = args[current_index]
         current_index += 1
+        medium_id = args[current_index]
+        current_index += 1
         if cam_to_world is None:
             camera = redner.Camera(resolution[1],
                                    resolution[0],
@@ -232,7 +248,8 @@ class RenderFunction(torch.autograd.Function):
                                    redner.float_ptr(intrinsic_mat_inv.data_ptr()),
                                    redner.float_ptr(intrinsic_mat.data_ptr()),
                                    clip_near,
-                                   camera_type)
+                                   camera_type,
+                                   medium_id)
         else:
             camera = redner.Camera(resolution[1],
                                    resolution[0],
@@ -244,7 +261,9 @@ class RenderFunction(torch.autograd.Function):
                                    redner.float_ptr(intrinsic_mat_inv.data_ptr()),
                                    redner.float_ptr(intrinsic_mat.data_ptr()),
                                    clip_near,
-                                   camera_type)
+                                   camera_type,
+                                   medium_id)
+        mediums = []
         shapes = []
         for i in range(num_shapes):
             vertices = args[current_index]
@@ -259,13 +278,13 @@ class RenderFunction(torch.autograd.Function):
             current_index += 1
             normal_indices = args[current_index]
             current_index += 1
-            medium = args[current_index]
-            current_index += 1
             colors = args[current_index]
             current_index += 1
             material_id = args[current_index]
             current_index += 1
             light_id = args[current_index]
+            current_index += 1
+            medium_id = args[current_index]
             current_index += 1
             assert(vertices.is_contiguous())
             assert(indices.is_contiguous())
@@ -284,15 +303,14 @@ class RenderFunction(torch.autograd.Function):
                 redner.float_ptr(normals.data_ptr() if normals is not None else 0),
                 redner.int_ptr(uv_indices.data_ptr() if uv_indices is not None else 0),
                 redner.int_ptr(normal_indices.data_ptr() if normal_indices is not None else 0),
-                # TODO Figure out how to properly represent medium class
-                redner.med_ptr(medium.sigma_a.data_ptr() if medium is not None else 0),
                 redner.float_ptr(colors.data_ptr() if colors is not None else 0),
                 int(vertices.shape[0]),
                 int(uvs.shape[0]) if uvs is not None else 0,
                 int(normals.shape[0]) if normals is not None else 0,
                 int(indices.shape[0]),
                 material_id,
-                light_id))
+                light_id,
+                medium_id))
         materials = []
         for i in range(num_materials):
             diffuse_reflectance = args[current_index]
@@ -442,6 +460,27 @@ class RenderFunction(torch.autograd.Function):
         else:
             current_index += 7
 
+        mediums = []
+        for i in range(num_mediums):
+            medium_type = args[current_index]
+            current_index += 1
+            if medium_type == redner.medium_type.homogeneous:
+                sigma_a = args[current_index]
+                current_index += 1
+                sigma_s = args[current_index]
+                current_index += 1
+                g = args[current_index]
+                current_index += 1
+                sigma_a = sigma_a.cpu()
+                sigma_s = sigma_s.cpu()
+                g = g.cpu()
+                mediums.append(redner.Medium(redner.HomogeneousMedium(\
+                    redner.Vector3f(sigma_a[0], sigma_a[1], sigma_a[2]),
+                    redner.Vector3f(sigma_s[0], sigma_s[1], sigma_s[2]),
+                    float(g))))
+            else:
+                assert(False)
+
         # Options
         num_samples = args[current_index]
         current_index += 1
@@ -462,6 +501,7 @@ class RenderFunction(torch.autograd.Function):
                              materials,
                              area_lights,
                              envmap,
+                             mediums,
                              pyredner.get_use_gpu(),
                              pyredner.get_device().index if pyredner.get_device().index is not None else -1,
                              use_primary_edge_sampling,
@@ -506,6 +546,7 @@ class RenderFunction(torch.autograd.Function):
         ctx.materials = materials
         ctx.area_lights = area_lights
         ctx.envmap = envmap
+        ctx.mediums = mediums
         ctx.scene = scene
         ctx.options = options
         ctx.num_samples = num_samples
@@ -710,11 +751,22 @@ class RenderFunction(torch.autograd.Function):
                 d_envmap_tex,
                 redner.float_ptr(d_world_to_env.data_ptr()))
 
+        d_mediums = []
+        for m in ctx.mediums:
+            if m.type == redner.medium_type.homogeneous:
+                d_mediums.append(redner.Medium(redner.HomogeneousMedium(\
+                    redner.Vector3f(0, 0, 0),
+                    redner.Vector3f(0, 0, 0),
+                    0)))
+            else:
+                assert(False)
+
         d_scene = redner.DScene(d_camera,
                                 d_shapes,
                                 d_materials,
                                 d_area_lights,
                                 d_envmap,
+                                d_mediums,
                                 pyredner.get_use_gpu(),
                                 pyredner.get_device().index if pyredner.get_device().index is not None else -1)
         if not get_use_correlated_random_number():
@@ -785,6 +837,7 @@ class RenderFunction(torch.autograd.Function):
         ret_list.append(None) # clip near
         ret_list.append(None) # resolution
         ret_list.append(None) # camera_type
+        ret_list.append(None) # medium id
 
         num_shapes = len(ctx.shapes)
         for i in range(num_shapes):
@@ -797,6 +850,7 @@ class RenderFunction(torch.autograd.Function):
             ret_list.append(d_colors_list[i])
             ret_list.append(None) # material id
             ret_list.append(None) # light id
+            ret_list.append(None) # medium id
 
         num_materials = len(ctx.materials)
         for i in range(num_materials):
@@ -835,6 +889,20 @@ class RenderFunction(torch.autograd.Function):
             ret_list.append(None)
             ret_list.append(None)
             ret_list.append(None)
+
+        for d_m in d_mediums:
+            ret_list.append(None) # type
+            if d_m.type == redner.medium_type.homogeneous:
+                sigma_a = torch.tensor((d_m.sigma_a.x, d_m.sigma_a.y, d_m.sigma_a.z),
+                                       dtype = torch.float32, device = pyredner.get_device())
+                sigma_s = torch.tensor((d_m.sigma_s.x, d_m.sigma_s.y, d_m.sigma_s.z),
+                                       dtype = torch.float32, device = pyredner.get_device())
+                g = torch.tensor(d_m.g, dtype = torch.float32, device = pyredner.get_device())
+                ret_list.append(sigma_a)
+                ret_list.append(sigma_s)
+                ret_list.append(g)
+            else:
+                assert(False)
 
         ret_list.append(None) # num samples
         ret_list.append(None) # num bounces

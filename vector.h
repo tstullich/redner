@@ -528,6 +528,12 @@ inline T sum(const TVector3<T> &v) {
 
 template <typename T>
 DEVICE
+inline TVector3<T> exp(const TVector3<T> &v) {
+    return TVector3<T>(exp(v[0]), exp(v[1]), exp(v[2]));
+}
+
+template <typename T>
+DEVICE
 void coordinate_system(const TVector3<T> &n, TVector3<T> &x, TVector3<T> &y) {
     if (n[2] < -1.f + 1e-6f) {
         x = TVector3<T>{T(0), T(-1), T(0)};

@@ -1,85 +1,100 @@
 #pragma once
 
+#include "redner.h"
 #include "vector.h"
+#include "directional_sample.h"
 
-// Defining the inverse for 1/4PI here
-static const float INV_4PI = 0.07957747154594766788;
-
-template <typename T>
-struct TPhaseSample {
-    TVector2<T> uv;
+enum class PhaseFunctionType {
+    HenyeyGreenstein
 };
 
-using PhaseSample = TPhaseSample<Real>;
+struct HenyeyGreenstein {
+    float g;
+};
 
-/*
- * An interface to store various information for a phase function.
- * Useful when sampling participating media. Wi and Wo are assumed
- * to be pointing outward, as is the convention in the PBRT book from
- * which this method was adapted
- */
 struct PhaseFunction {
-    DEVICE virtual double p(const Vector3 &wo, const Vector3 &wi) const = 0;
-
-    DEVICE virtual double sample_p(const Vector3 &wo,
-                                   Vector3 *wi,
-                                   const PhaseSample &sample) const = 0;
-};
-
-// An implementation of the Henyey-Greenstein phase function
-struct HenyeyGreenstein : PhaseFunction {
-   public:
-    HenyeyGreenstein(float g) : g(g){};
-
-    // Returns the PDF of the phase function without doing MIS
-    DEVICE double p(const Vector3 &wo, const Vector3 &wi) const override {
-        return PhaseHG(dot(wo, wi), g);
+    DEVICE inline
+    PhaseFunction() {
+        type = PhaseFunctionType::HenyeyGreenstein;
+        this->hg.g = 0;
     }
 
-    // This function works much like p() but it is extended
-    // to use a sample in the range of [0, 1)^2 to perform MIS
-    // Returns the the weighting factor as result
-    DEVICE double sample_p(const Vector3 &wo,
-                           Vector3 *wi,
-                           const PhaseSample &sample) const override {
+    DEVICE inline
+    PhaseFunction(const HenyeyGreenstein &hg) {
+        type = PhaseFunctionType::HenyeyGreenstein;
+        this->hg = hg;
+    }
+
+    PhaseFunctionType type;
+    union {
+        HenyeyGreenstein hg;
+    };
+};
+
+// Calculate the phase function based on the angle between wo and wi
+// and a scattering factor g
+DEVICE inline Real phase_HG(Real cos_theta, float g) {
+    auto denom = 1 + g * g + 2 * g * cos_theta;
+    return Real(INV_4PI) * (1 - g * g) / (denom * sqrt(denom));
+}
+
+// Evaluate the phase function at a point given incoming and outgoing direction.
+// The directions are assumed to be pointed outwards.
+DEVICE
+inline
+Real phase_function(const PhaseFunction &phase_function,
+                    const Vector3 &wo,
+                    const Vector3 &wi) {
+    if (phase_function.type == PhaseFunctionType::HenyeyGreenstein) {
+        auto hg = phase_function.hg;
+        return phase_HG(dot(wo, wi), hg.g);
+    }  else {
+        return 0;
+    }
+}
+
+// Given an incoming direction, sample an outgoing direction for a phase function.
+// The directions are assumed to be pointed outwards.
+DEVICE
+inline
+Vector3 phase_function_sample(const PhaseFunction &phase_function,
+                              const Vector3 &wi,
+                              const DirectionalSample &sample) {
+    if (phase_function.type == PhaseFunctionType::HenyeyGreenstein) {
+        auto hg = phase_function.hg;
+        auto g = hg.g;
         // Compute cosine theta
-        double cos_theta;
-        if (abs(g) < 1e-3) {
-            cos_theta = 1.0 - 2.0 * sample.uv[0];
+        Real cos_theta = 0;
+        if (fabs(g) < 1e-3f) {
+            cos_theta = 1 - 2 * sample.uv[0];
         } else {
-            double sqr_term = (1.0 - g * g) / (1.0 - g + 2.0 * g * sample.uv[0]);
-            cos_theta = (1.0 + g * g - sqr_term * sqr_term) / (2.0 * g);
+            Real sqr_term = (1 - g * g) / (1 - g + 2 * g * sample.uv[0]);
+            cos_theta = (1 + g * g - sqr_term * sqr_term) / (2 * g);
         }
 
         // Compute the direction wi based on the HG phase function
-        double sin_theta = sqrt(max(0.0, 1.0 - cos_theta * cos_theta));
-        double phi = 2.0 * M_PI * sample.uv[1];
-        Vector3 v1, v2;
-        coordinate_system(wo, v1, v2);
-        *wi = spherical_direction(sin_theta, cos_theta, phi, v1, v2, -wo);
-        return PhaseHG(-cos_theta, g);
+        Real sin_theta = sqrt(max(Real(0), 1 - cos_theta * cos_theta));
+        Real phi = Real(2 * M_PI) * sample.uv[1];
+        Vector3 v0, v1;
+        coordinate_system(wi, v0, v1);
+        return sin_theta * cos(phi) * v0 +
+               sin_theta * sin(phi) * v1 +
+               cos_theta * -wi;
+    } else {
+        return Vector3{0, 0, 0};
     }
+}
 
-   private:
-    // Calculate the phase based on the angle between wo and wi
-    // and a scattering factor g
-    DEVICE inline double PhaseHG(double cos_theta, float g) const {
-        double denom = 1.0 + g * g + 2.0 * g * cos_theta;
-        return INV_4PI * (1.0 - g * g) / (denom * sqrt(denom));
+// PDF evaluation.
+DEVICE
+inline
+Real phase_function_pdf(const PhaseFunction &phase_function,
+                        const Vector3 &wo,
+                        const Vector3 &wi) {
+    if (phase_function.type == PhaseFunctionType::HenyeyGreenstein) {
+        auto hg = phase_function.hg;
+        return phase_HG(dot(wo, wi), hg.g);
+    }  else {
+        return 0;
     }
-
-    // Calculates the new direction of the outgoing vector given three basis
-    // vectors
-    DEVICE inline Vector3 spherical_direction(double sin_theta,
-                                              double cos_theta,
-                                              double phi, const Vector3 &x,
-                                              const Vector3 &y,
-                                              const Vector3 &z) const {
-        return sin_theta * cos(phi) * x + sin_theta * sin(phi) * y +
-               cos_theta * z;
-    }
-
-    // The factor that determines forward and backward scattering for
-    // the Henyey-Greenstein phase function
-    const float g;
-};
+}

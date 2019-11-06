@@ -18,14 +18,14 @@ void test_d_intersect() {
                 nullptr, // normals
                 nullptr, // uv_indices
                 nullptr, // normal_indices
-                nullptr, // medium
                 nullptr, // color
                 3, // num_vertices
                 0, // num_uv_vertices
                 0, // num_normal_vertices
                 1, // num_triangles
-                0,
-                -1};
+                0, // material_id
+                -1, // light_id
+                -1}; // medium_id
     SurfacePoint d_point;
     d_point.position = Vector3{1, 1, 1};
     d_point.geom_normal = Vector3{1, 1, 1};
@@ -283,14 +283,14 @@ void test_d_sample_shape() {
                 nullptr, // normals
                 nullptr, // uv_indices
                 nullptr, // normal_indices
-                nullptr, // medium
                 nullptr, // color
                 3, // num_vertices
                 0, // num_uv_vertices
                 0, // num_normal_vertices
                 1, // num_triangles
-                0,
-                -1};
+                0, // material_id
+                -1, // light_id
+                -1}; // medium_id
     auto sample = Vector2{0.5, 0.5};
     SurfacePoint d_point;
     d_point.position = Vector3{1, 1, 1};

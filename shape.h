@@ -5,7 +5,6 @@
 #include "intersection.h"
 #include "buffer.h"
 #include "ptr.h"
-#include "medium.h"
 
 struct Shape {
     Shape() {}
@@ -15,28 +14,28 @@ struct Shape {
           ptr<float> normals, // optional
           ptr<int> uv_indices, // optional, overrides uv index access
           ptr<int> normal_indices, // optional, overrides normal index access
-          ptr<Medium> medium, // optional
           ptr<float> colors, // optional, used when the material specifies so.
           int num_vertices,
           int num_uv_vertices,
           int num_normal_vertices,
           int num_triangles,
           int material_id,
-          int light_id) :
+          int light_id,
+          int medium_id) :
         vertices(vertices.get()),
         indices(indices.get()),
         uvs(uvs.get()),
         normals(normals.get()),
         uv_indices(uv_indices.get()),
         normal_indices(normal_indices.get()),
-        medium(medium.get()),
         colors(colors.get()),
         num_vertices(num_vertices),
         num_uv_vertices(num_uv_vertices),
         num_normal_vertices(num_normal_vertices),
         num_triangles(num_triangles),
         material_id(material_id),
-        light_id(light_id) {}
+        light_id(light_id),
+        medium_id(medium_id) {}
 
     inline bool has_uvs() const {
         return uvs != nullptr;
@@ -56,7 +55,6 @@ struct Shape {
     float *normals;
     int *uv_indices;
     int *normal_indices;
-    Medium *medium;
     float *colors;
     int num_vertices;
     int num_uv_vertices;
@@ -64,6 +62,7 @@ struct Shape {
     int num_triangles;
     int material_id;
     int light_id;
+    int medium_id;
 };
 
 struct DShape {

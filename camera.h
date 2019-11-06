@@ -8,6 +8,8 @@
 #include "ptr.h"
 #include "atomic.h"
 
+struct Intersection;
+
 enum class CameraType {
     Perspective,
     Orthographic,
@@ -28,13 +30,15 @@ struct Camera {
            ptr<float> intrinsic_mat_inv,
            ptr<float> intrinsic_mat,
            float clip_near,
-           CameraType camera_type)
+           CameraType camera_type,
+           int medium_id)
         : width(width),
           height(height),
           intrinsic_mat_inv(intrinsic_mat_inv.get()),
           intrinsic_mat(intrinsic_mat.get()),
           clip_near(clip_near),
-          camera_type(camera_type) {
+          camera_type(camera_type),
+          medium_id(medium_id) {
         if (cam_to_world_.get()) {
             cam_to_world = Matrix4x4(cam_to_world_.get());
             world_to_cam = Matrix4x4(world_to_cam_.get());
@@ -58,6 +62,7 @@ struct Camera {
     Matrix3x3 intrinsic_mat;
     float clip_near;
     CameraType camera_type;
+    int medium_id;
 };
 
 struct DCamera {
@@ -370,12 +375,6 @@ inline void d_sample_primary_ray(const Camera &camera,
         }
     }
 }
-
-void sample_primary_rays(const Camera &cam,
-                         const BufferView<CameraSample> &samples,
-                         BufferView<Ray> rays,
-                         BufferView<RayDifferential> ray_differentials,
-                         bool use_gpu);
 
 template <typename T>
 DEVICE
@@ -858,6 +857,13 @@ inline bool in_screen(const Camera &cam, const Vector2 &pt) {
         return dist_sq < 0.25f;
     }
 }
+
+void sample_primary_rays(const Camera &camera,
+                         const BufferView<CameraSample> &samples,
+                         BufferView<Ray> rays,
+                         BufferView<RayDifferential> ray_differentials,
+                         BufferView<Intersection> isect,
+                         bool use_gpu);
 
 void test_sample_primary_rays(bool use_gpu);
 void test_camera_derivatives();

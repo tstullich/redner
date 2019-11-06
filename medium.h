@@ -1,16 +1,18 @@
 #pragma once
 
+#include "redner.h"
 #include "intersection.h"
+#include "buffer.h"
 #include "phase_function.h"
 #include "ptr.h"
 #include "py_utils.h"
 #include "ray.h"
-#include "redner.h"
 #include "vector.h"
 
 // Forward declarations
 struct MediumInteraction;
 struct Sampler;
+struct Scene;
 
 template <typename T>
 struct TMediumSample {
@@ -19,74 +21,57 @@ struct TMediumSample {
 
 using MediumSample = TMediumSample<Real>;
 
-/*
- * An interface struct to describe a type of medium. The different types
- * can be either homogeneous or heterogeneous
- */
+enum class MediumType {
+    homogeneous
+};
+
+struct HomogeneousMedium {
+    HomogeneousMedium(const Vector3f &sigma_a,
+                      const Vector3f &sigma_s,
+                      float g)
+        : sigma_a(sigma_a), sigma_s(sigma_s), sigma_t(sigma_a + sigma_s), g(g) {}
+
+    Vector3f sigma_a, sigma_s, sigma_t;
+    float g;
+};
+
 struct Medium {
-    DEVICE
-    virtual Vector3 transmittance(const Ray &ray,
-                                  const MediumSample &sample) const = 0;
-
-    DEVICE
-    virtual Vector3 sample(const Ray &ray, const SurfacePoint &surface_point,
-                           const MediumSample &sample,
-                           ptr<MediumInteraction> mi) const = 0;
-};
-
-/*
- * This class is supposed to provide an interface such that the virtual
- * interface functions can be picked up by pybind. If this class is not
- * provided we are not able to provide a proper base class for the
- * different abstractions of the Medium class. Technically these functions
- * should not be directly called within Python but it's necessary we
- * provide bindings for them, otherwise pybind cannot create an instance
- * of the Medium class.
- */
-struct PyMedium : Medium {
-   public:
-    using Medium::Medium;
-
-    DEVICE
-    Vector3 transmittance(const Ray &ray,
-                          const MediumSample &sample) const override {
-        PYBIND11_OVERLOAD_PURE(Vector3, Medium, transmittance, ray, sample);
+    Medium(const HomogeneousMedium &homogeneous) {
+        type = MediumType::homogeneous;
+        this->homogeneous = homogeneous;
     }
 
-    DEVICE
-    Vector3 sample(const Ray &ray, const SurfacePoint &surface_point,
-                   const MediumSample &sample,
-                   ptr<MediumInteraction> mi) const override {
-        PYBIND11_OVERLOAD_PURE(Vector3, Medium, sample, ray, surface_point,
-                               sample, mi);
+    MediumType type;
+    union {
+        HomogeneousMedium homogeneous;
+    };
+};
+
+DEVICE
+inline
+PhaseFunction get_phase_function(const Medium &medium) {
+    if (medium.type == MediumType::homogeneous) {
+        return PhaseFunction(HenyeyGreenstein{medium.homogeneous.g});
+    } else {
+        return PhaseFunction();
     }
-};
+}
 
-/*
- * This struct holds data to represent a homogeneous medium.
- * Since the medium is assumed to be homogeneous, we use Beer's law in
- * order to calculate the transmittance. MIS is also implemented in
- * the sample() function
- */
-struct HomogeneousMedium : Medium {
-   public:
-    HomogeneousMedium(const Vector3 &sigma_a, const Vector3 &sigma_s, float g);
+// Sample a distance inside the medium and compute the transmittance.
+// Update intersection data as well.
+void sample_medium(const Scene &scene,
+                   const BufferView<int> &active_pixels,
+                   const BufferView<Intersection> &surface_isects,
+                   const BufferView<Ray> &incoming_rays,
+                   const BufferView<MediumSample> &medium_samples,
+                   BufferView<Intersection> medium_isects,
+                   BufferView<Vector3> medium_points,
+                   BufferView<Vector3> throughputs);
 
-    DEVICE
-    Vector3 transmittance(const Ray &ray,
-                          const MediumSample &sample) const override;
-
-    DEVICE
-    Vector3 sample(const Ray &ray, const SurfacePoint &surface_point,
-                   const MediumSample &sample,
-                   ptr<MediumInteraction> mi) const override;
-
-   private:
-    // A helper function to calculate e^x component-wise
-    Vector3 vecExp(const Vector3 &vec) const;
-
-    const Vector3 sigma_a, sigma_s, sigma_t;
-    const float g;
-    // Need to change this if we sample more dimensions
-    static const uint NUM_SAMPLES = 2;
-};
+// Evaluate the transmittance between two points.
+void evaluate_transmisttance(const Scene &scene,
+                             const BufferView<int> &active_pixels,
+                             const BufferView<Ray> &rays,
+                             const BufferView<Intersection> &medium_isects,
+                             const BufferView<MediumSample> &medium_samples,
+                             BufferView<Vector3> transmittances);

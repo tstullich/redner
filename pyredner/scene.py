@@ -1,12 +1,13 @@
 import pyredner
 
 class Scene:
-    def __init__(self, camera, shapes, materials, area_lights, envmap = None):
+    def __init__(self, camera, shapes, materials, area_lights, envmap = None, mediums = []):
         self.camera = camera
         self.shapes = shapes
         self.materials = materials
         self.area_lights = area_lights
         self.envmap = envmap
+        self.mediums = mediums
 
     def state_dict(self):
         return {
@@ -14,7 +15,8 @@ class Scene:
             'shapes': [s.state_dict() for s in self.shapes],
             'materials': [m.state_dict() for m in self.materials],
             'area_lights': [l.state_dict() for l in self.area_lights],
-            'envmap': self.envmap.state_dict() if self.envmap is not None else None
+            'envmap': self.envmap.state_dict() if self.envmap is not None else None,
+            'medium': [m.state_dict() for m in self.mediums]
         }
 
     @classmethod
@@ -25,5 +27,6 @@ class Scene:
             [pyredner.Shape.load_state_dict(s) for s in state_dict['shapes']],
             [pyredner.Material.load_state_dict(m) for m in state_dict['materials']],
             [pyredner.AreaLight.load_state_dict(l) for l in state_dict['area_lights']],
-            pyredner.EnvironmentMap.load_state_dict(envmap_dict) if envmap_dict is not None else None)
+            pyredner.EnvironmentMap.load_state_dict(envmap_dict) if envmap_dict is not None else None,
+            [pyredner.Medium.load_state_dict(m) for m in state_dict['mediums']])
 

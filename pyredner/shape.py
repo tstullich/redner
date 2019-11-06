@@ -119,8 +119,8 @@ class Shape:
                  normals = None,
                  uv_indices = None,
                  normal_indices = None,
-                 medium = None,
-                 colors = None):
+                 colors = None,
+                 medium_id = -1):
         assert(vertices.dtype == torch.float32)
         assert(indices.dtype == torch.int32)
         assert(vertices.is_contiguous())
@@ -165,9 +165,9 @@ class Shape:
         self.normals = normals
         self.uv_indices = uv_indices
         self.normal_indices = normal_indices
-        self.medium = medium
         self.colors = colors
         self.light_id = -1
+        self.medium_id = medium_id
 
     def state_dict(self):
         return {
@@ -179,8 +179,8 @@ class Shape:
             'normals': self.normals,
             'uv_indices': self.uv_indices,
             'normal_indices': self.normal_indices,
-            'medium': self.medium,
-            'colors': self.colors
+            'colors': self.colors,
+            'medium_id': self.medium_id
         }
 
     @classmethod
@@ -193,7 +193,7 @@ class Shape:
             state_dict['normals'],
             state_dict['uv_indices'],
             state_dict['normal_indices'],
-            state_dict['medium'],
-            state_dict['colors'])
+            state_dict['colors'],
+            state_dict['medium_id'],)
         out.light_id = state_dict['light_id']
         return out

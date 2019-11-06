@@ -10,7 +10,6 @@
 #include "shape.h"
 #include "material.h"
 #include "medium.h"
-#include "medium_interaction.h"
 #include "envmap.h"
 #include "edge.h"
 #include <vector>
@@ -27,6 +26,7 @@ struct Scene {
           const std::vector<const Material*> &materials,
           const std::vector<const AreaLight*> &area_lights,
           const std::shared_ptr<const EnvironmentMap> &envmap,
+          const std::vector<const Medium*> &mediums,
           bool use_gpu,
           int gpu_index,
           bool use_primary_edge_sampling,
@@ -39,6 +39,7 @@ struct Scene {
     Buffer<Material> materials;
     Buffer<AreaLight> area_lights;
     EnvironmentMap *envmap;
+    Buffer<Medium> mediums;
 
     // Is the scene stored in GPU or CPU
     bool use_gpu;
@@ -77,6 +78,7 @@ struct FlattenScene {
     Shape *shapes;
     Material *materials;
     AreaLight *area_lights;
+    Medium *mediums;
     int num_lights;
     Real *light_pmf;
     Real *light_cdf;
@@ -95,6 +97,7 @@ struct DScene {
            const std::vector<DMaterial*> &materials,
            const std::vector<DAreaLight*> &lights,
            const std::shared_ptr<DEnvironmentMap> &envmap,
+           const std::vector<Medium*> &mediums,
            bool use_gpu,
            int gpu_index);
     ~DScene();
@@ -104,6 +107,7 @@ struct DScene {
     Buffer<DMaterial> materials;
     Buffer<DAreaLight> area_lights;
     DEnvironmentMap *envmap;
+    Buffer<Medium> mediums;
     bool use_gpu;
     int gpu_index;
 };
@@ -119,7 +123,7 @@ void intersect(const Scene &scene,
                BufferView<RayDifferential> new_ray_differentials,
                BufferView<OptiXRay> optix_rays,
                BufferView<OptiXHit> optix_hits);
-// Set ray.tmax to negative if occluded
+// ray.maxt is set to < 0 if occluded
 void occluded(const Scene &scene,
               const BufferView<int> &active_pixels,
               BufferView<Ray> rays,
@@ -127,19 +131,13 @@ void occluded(const Scene &scene,
               BufferView<OptiXHit> optix_hits);
 void sample_point_on_light(const Scene &scene,
                            const BufferView<int> &active_pixels,
-                           const BufferView<SurfacePoint> &shading_points,
+                           const BufferView<SurfacePoint> &surface_points,
+                           const BufferView<Intersection> &medium_isects,
+                           const BufferView<Vector3> &medium_points,
                            const BufferView<LightSample> &samples,
                            BufferView<Intersection> light_isects,
                            BufferView<SurfacePoint> light_points,
                            BufferView<Ray> shadow_ray);
-
-void sample_medium(const Scene &scene,
-                   const BufferView<int> &active_pixels,
-                   const BufferView<SurfacePoint> &shading_points,
-                   const BufferView<Ray> &incoming_rays,
-                   const BufferView<MediumSample> &medium_samples,
-                   BufferView<Vector3> throughputs,
-                   BufferView<MediumInteraction *> medium_interactions);
 
 void test_scene_intersect(bool use_gpu);
 void test_sample_point_on_light(bool use_gpu);

@@ -11,7 +11,8 @@ void init_active_pixels(const BufferView<Ray> &rays,
                         bool use_gpu,
                         ThrustCachedAllocator &thrust_alloc);
 void update_active_pixels(const BufferView<int> &active_pixels,
-                          const BufferView<Intersection> &isects,
+                          const BufferView<Intersection> &surface_isects,
+                          const BufferView<Intersection> &medium_isects,
                           BufferView<int> &new_active,
                           bool use_gpu);
 

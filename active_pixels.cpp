@@ -28,20 +28,24 @@ void init_active_pixels(const BufferView<Ray> &rays,
 }
 
 struct is_valid_intersection {
-    is_valid_intersection(const Intersection *isects) : isects(isects) {}
+    is_valid_intersection(const Intersection *surface_isects,
+                          const Intersection *medium_isects) :
+        surface_isects(surface_isects), medium_isects(medium_isects) {}
 
     DEVICE bool operator()(int pixel_id) {
-        return isects[pixel_id].valid();
+        return surface_isects[pixel_id].valid() || medium_isects[pixel_id].valid();
     }
 
-    const Intersection *isects;
+    const Intersection *surface_isects;
+    const Intersection *medium_isects;
 };
 
 void update_active_pixels(const BufferView<int> &active_pixels,
-                          const BufferView<Intersection> &isects,
+                          const BufferView<Intersection> &surface_isects,
+                          const BufferView<Intersection> &medium_isects,
                           BufferView<int> &new_active_pixels,
                           bool use_gpu) {
-    auto op = is_valid_intersection{isects.begin()};
+    auto op = is_valid_intersection{surface_isects.begin(), medium_isects.begin()};
     auto new_end = DISPATCH(use_gpu, thrust::copy_if,
         active_pixels.begin(), active_pixels.end(),
         new_active_pixels.begin(), op);
@@ -62,6 +66,7 @@ void test_active_pixels(bool use_gpu) {
     equal_or_error(__FILE__, __LINE__, num_pixels, active_pixels.size());
     auto isects_buffer = Buffer<Intersection>(use_gpu, num_pixels);
     auto isects = isects_buffer.view(0, num_pixels);
+    auto isects_medium = isects;
     for (int i = 0; i < num_pixels; i++) {
         if (i % 2 == 0) {
             isects[i] = Intersection{0, 0};
@@ -71,6 +76,7 @@ void test_active_pixels(bool use_gpu) {
     }
     update_active_pixels(active_pixels,
                          isects,
+                         isects_medium,
                          active_pixels,
                          use_gpu);
     equal_or_error(__FILE__, __LINE__, num_pixels / 2, active_pixels.size());

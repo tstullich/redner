@@ -1,13 +1,13 @@
 #pragma once
 
 #include "buffer.h"
-#include "vector.h"
-#include "camera.h"
 #include "area_light.h"
-#include "material.h"
+#include "camera.h"
+#include "directional_sample.h"
 #include "edge.h"
+#include "material.h"
 #include "medium.h"
-#include "phase_function.h"
+#include "vector.h"
 
 struct Sampler {
     virtual ~Sampler() {}
@@ -17,14 +17,12 @@ struct Sampler {
     virtual void next_camera_samples(BufferView<TCameraSample<double>> samples) = 0;
     virtual void next_light_samples(BufferView<TLightSample<float>> samples) = 0;
     virtual void next_light_samples(BufferView<TLightSample<double>> samples) = 0;
-    virtual void next_bsdf_samples(BufferView<TBSDFSample<float>> samples) = 0;
-    virtual void next_bsdf_samples(BufferView<TBSDFSample<double>> samples) = 0;
+    virtual void next_directional_samples(BufferView<TDirectionalSample<float>> samples) = 0;
+    virtual void next_directional_samples(BufferView<TDirectionalSample<double>> samples) = 0;
     virtual void next_primary_edge_samples(BufferView<TPrimaryEdgeSample<float>> samples) = 0;
     virtual void next_primary_edge_samples(BufferView<TPrimaryEdgeSample<double>> samples) = 0;
     virtual void next_secondary_edge_samples(BufferView<TSecondaryEdgeSample<float>> samples) = 0;
     virtual void next_secondary_edge_samples(BufferView<TSecondaryEdgeSample<double>> samples) = 0;
     virtual void next_medium_samples(BufferView<TMediumSample<float>> samples) = 0;
     virtual void next_medium_samples(BufferView<TMediumSample<double>> samples) = 0;
-    virtual void next_phase_samples(BufferView<TPhaseSample<float>> samples) = 0;
-    virtual void next_phase_samples(BufferView<TPhaseSample<double>> samples) = 0;
 };

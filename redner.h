@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <atomic>
+
 #ifdef __NVCC__ 
     #define DEVICE __device__ __host__ 
 #else
@@ -23,13 +26,13 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-#include <cstdint>
-#include <atomic>
-
 // We use Real for most of the internal computation.
 // However, for PyTorch interfaces, Optix Prime and Embree queries
 // we use float
 using Real = double;
+
+constexpr Real INV_4PI = 0.07957747154594766788;
+constexpr Real MaxFloat = 1e30;
 
 template <typename T>
 DEVICE

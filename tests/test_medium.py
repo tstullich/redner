@@ -1,8 +1,15 @@
 import pyredner
 import torch
+import redner
 
 pyredner.set_use_gpu(False)
 #pyredner.set_use_gpu(torch.cuda.is_available())
+
+mediums = [pyredner.HomogeneousMedium(\
+    # sigma_a = torch.tensor([2.19, 2.62, 3.00]),
+    sigma_a = torch.tensor([0.01, 0.01, 0.01]),
+    sigma_s = torch.tensor([0.02, 0.02, 0.01]),
+    g = torch.tensor([0.0]))]
 
 cam = pyredner.Camera(position = torch.tensor([0.0, 0.0, -5.0]),
                       look_at = torch.tensor([0.0, 0.0, 0.0]),
@@ -10,7 +17,7 @@ cam = pyredner.Camera(position = torch.tensor([0.0, 0.0, -5.0]),
                       fov = torch.tensor([45.0]), # in degree
                       clip_near = 1e-2, # needs to > 0
                       resolution = (256, 256),
-                      fisheye = False)
+                      medium_id = 0)
 
 mat_grey = pyredner.Material(\
     diffuse_reflectance = \
@@ -26,9 +33,7 @@ shape_triangle = pyredner.Shape(\
         device = pyredner.get_device()),
     uvs = None,
     normals = None,
-    material_id = 0,
-    medium = pyredner.HomogeneousMedium(torch.tensor([2.19, 2.62, 3.00]),
-        torch.tensor([0.0021, 0.0041, 0.0071]), torch.tensor([0.7])))
+    material_id = 0)
 
 shape_light = pyredner.Shape(\
     vertices = torch.tensor([[-1.0, -1.0, -7.0],
@@ -48,11 +53,16 @@ light = pyredner.AreaLight(shape_id = 1,
                            intensity = torch.tensor([20.0,20.0,20.0]))
 area_lights = [light]
 # Finally we construct our scene using all the variables we setup previously.
-scene = pyredner.Scene(cam, shapes, materials, area_lights)
+scene = pyredner.Scene(cam,
+                       shapes,
+                       materials,
+                       area_lights,
+                       mediums = mediums)
 scene_args = pyredner.RenderFunction.serialize_scene(\
     scene = scene,
-    num_samples = 16,
-    max_bounces = 1)
+    num_samples = 256,
+    max_bounces = 1,
+    sampler_type = redner.SamplerType.sobol)
 
 render = pyredner.RenderFunction.apply
 img = render(0, *scene_args)

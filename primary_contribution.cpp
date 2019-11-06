@@ -2,7 +2,6 @@
 #include "scene.h"
 #include "channels.h"
 #include "parallel.h"
-#include "medium_interaction.h"
 
 struct primary_contribs_accumulator {
     DEVICE void operator()(int idx) {
@@ -391,7 +390,6 @@ struct primary_contribs_accumulator {
     const RayDifferential *incoming_ray_differentials;
     const Intersection *shading_isects;
     const SurfacePoint *shading_points;
-    const MediumInteraction *medium_interactions;
     const Real weight;
     const ChannelInfo channel_info;
     float *rendered_image;
@@ -661,7 +659,6 @@ void accumulate_primary_contribs(
         const BufferView<RayDifferential> &incoming_ray_differentials,
         const BufferView<Intersection> &shading_isects,
         const BufferView<SurfacePoint> &shading_points,
-        const BufferView<MediumInteraction *> &medium_interactions,
         const Real weight,
         const ChannelInfo &channel_info,
         float *rendered_image,
@@ -676,7 +673,6 @@ void accumulate_primary_contribs(
         incoming_ray_differentials.begin(),
         shading_isects.begin(),
         shading_points.begin(),
-        *medium_interactions.begin(),
         weight,
         channel_info,
         rendered_image,

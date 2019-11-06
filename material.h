@@ -1,14 +1,12 @@
 #pragma once
 
 #include "redner.h"
-#include "vector.h"
-#include "intersection.h"
 #include "buffer.h"
+#include "directional_sample.h"
+#include "intersection.h"
 #include "ptr.h"
 #include "texture.h"
-#include "medium.h"
-#include "medium_interaction.h"
-#include "phase_function.h"
+#include "vector.h"
 
 #include <tuple>
 
@@ -82,14 +80,6 @@ struct DMaterial {
     TextureN generic_texture;
     Texture3 normal_map;
 };
-
-template <typename T>
-struct TBSDFSample {
-    TVector2<T> uv;
-    T w;
-};
-
-using BSDFSample = TBSDFSample<Real>;
 
 DEVICE
 inline Vector3 get_diffuse_reflectance(const Material &material,
@@ -663,7 +653,7 @@ inline
 Vector3 bsdf_sample(const Material &material,
                     const SurfacePoint &shading_point,
                     const Vector3 &wi,
-                    const BSDFSample &bsdf_sample,
+                    const DirectionalSample &bsdf_sample,
                     const Real min_roughness,
                     const RayDifferential &wi_differential,
                     RayDifferential &wo_differential,
@@ -768,22 +758,10 @@ Vector3 bsdf_sample(const Material &material,
 
 DEVICE
 inline
-Vector3 phase_sample(const Vector3 &wi,
-                     const MediumInteraction &medium_interaction,
-                     const PhaseSample &phase_sample) {
-    // TODO It seems incoming_ray is used for w_i this but in PBRT incoming_ray is w_o
-    // Need to clear up this discrepancy
-    Vector3 wo = Vector3(0.0f, 0.0f, 0.0f);
-    medium_interaction.phase->sample_p(wi, &wo, phase_sample);
-    return wo;
-}
-
-DEVICE
-inline
 void d_bsdf_sample(const Material &material,
                    const SurfacePoint &shading_point,
                    const Vector3 &wi,
-                   const BSDFSample &bsdf_sample,
+                   const DirectionalSample &bsdf_sample,
                    const Real min_roughness,
                    const RayDifferential &wi_differential,
                    const Vector3 &d_wo,

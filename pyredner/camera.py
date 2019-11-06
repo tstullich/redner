@@ -47,7 +47,8 @@ class Camera:
                  cam_to_world = None,
                  intrinsic_mat = None,
                  camera_type = redner.CameraType.perspective,
-                 fisheye = False):
+                 fisheye = False,
+                 medium_id = -1):
         if position is not None:
             assert(position.dtype == torch.float32)
             assert(len(position.shape) == 1 and position.shape[0] == 3)
@@ -93,6 +94,7 @@ class Camera:
         self.camera_type = camera_type
         if fisheye:
             self.camera_type = redner.camera_type.fisheye
+        self.medium_id = medium_id
 
     @property
     def fov(self):
@@ -135,7 +137,8 @@ class Camera:
             'intrinsic_mat': self._intrinsic_mat,
             'clip_near': self.clip_near,
             'resolution': self.resolution,
-            'camera_type': self.camera_type
+            'camera_type': self.camera_type,
+            'medium_id': self.medium_id
         }
 
     @classmethod
@@ -150,4 +153,5 @@ class Camera:
         out.clip_near = state_dict['clip_near']
         out.resolution = state_dict['resolution']
         out.camera_type = state_dict['camera_type']
+        out.medium_id = state_dict['medium_id']
         return out

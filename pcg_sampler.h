@@ -15,16 +15,14 @@ struct PCGSampler : public Sampler {
     void next_camera_samples(BufferView<TCameraSample<double>> samples) override;
     void next_light_samples(BufferView<TLightSample<float>> samples) override;
     void next_light_samples(BufferView<TLightSample<double>> samples) override;
-    void next_bsdf_samples(BufferView<TBSDFSample<float>> samples) override;
-    void next_bsdf_samples(BufferView<TBSDFSample<double>> samples) override;
+    void next_directional_samples(BufferView<TDirectionalSample<float>> samples) override;
+    void next_directional_samples(BufferView<TDirectionalSample<double>> samples) override;
     void next_primary_edge_samples(BufferView<TPrimaryEdgeSample<float>> samples) override;
     void next_primary_edge_samples(BufferView<TPrimaryEdgeSample<double>> samples) override;
     void next_secondary_edge_samples(BufferView<TSecondaryEdgeSample<float>> samples) override;
     void next_secondary_edge_samples(BufferView<TSecondaryEdgeSample<double>> samples) override;
     void next_medium_samples(BufferView<TMediumSample<float>> samples) override;
     void next_medium_samples(BufferView<TMediumSample<double>> samples) override;
-    void next_phase_samples(BufferView<TPhaseSample<float>> samples) override;
-    void next_phase_samples(BufferView<TPhaseSample<double>> samples) override;
 
     bool use_gpu;
     Buffer<pcg32_state> rng_states;

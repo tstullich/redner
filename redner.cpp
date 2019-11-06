@@ -22,8 +22,6 @@ PYBIND11_MODULE(redner, m) {
         .def(py::init<std::size_t>());
     py::class_<ptr<int>>(m, "int_ptr")
         .def(py::init<std::size_t>());
-    py::class_<ptr<Medium>>(m, "med_ptr")
-        .def(py::init<std::size_t>());
 
     py::enum_<CameraType>(m, "CameraType")
         .value("perspective", CameraType::Perspective)
@@ -42,7 +40,8 @@ PYBIND11_MODULE(redner, m) {
                       ptr<float>, // ndc_to_cam
                       ptr<float>, // cam_to_ndc
                       float, // clip_near
-                      CameraType>())
+                      CameraType,
+                      int>()) // medium_id
         .def_readonly("use_look_at", &Camera::use_look_at);
 
     py::class_<DCamera>(m, "DCamera")
@@ -60,6 +59,7 @@ PYBIND11_MODULE(redner, m) {
                       const std::vector<const Material*> &,
                       const std::vector<const AreaLight*> &,
                       const std::shared_ptr<const EnvironmentMap> &,
+                      const std::vector<const Medium*> &,
                       bool,
                       int,
                       bool,
@@ -73,6 +73,7 @@ PYBIND11_MODULE(redner, m) {
                       const std::vector<DMaterial*> &,
                       const std::vector<DAreaLight*> &,
                       const std::shared_ptr<DEnvironmentMap> &,
+                      const std::vector<Medium*> &,
                       bool,
                       int>());
 
@@ -83,15 +84,14 @@ PYBIND11_MODULE(redner, m) {
                       ptr<float>, // normals
                       ptr<int>, // uv_indices
                       ptr<int>, // normal_indices
-                      ptr<Medium>, // medium
                       ptr<float>, // colors
                       int, // num_vertices
                       int, // num_uv_vertices
                       int, // num_normal_vertices
                       int, // num_triangles
                       int, // material_id
-                      int  // light_id
-                      >())
+                      int, // light_id
+                      int>()) // medium_id
         .def_readonly("num_vertices", &Shape::num_vertices)
         .def_readonly("num_uv_vertices", &Shape::num_uv_vertices)
         .def_readonly("num_normal_vertices", &Shape::num_normal_vertices)
@@ -99,13 +99,20 @@ PYBIND11_MODULE(redner, m) {
         .def("has_normals", &Shape::has_normals)
         .def("has_colors", &Shape::has_colors);
 
-    py::class_<Medium, PyMedium>(m, "Medium")
-        .def(py::init<>());
-
-    py::class_<HomogeneousMedium, Medium>(m, "HomogeneousMedium")
+    py::class_<HomogeneousMedium>(m, "HomogeneousMedium")
         .def(py::init<Vector3f, // sigma_a
                       Vector3f, // sigma_s
-                      float>()); // forward/backward scattering factor
+                      float>()) // forward/backward scattering factor
+        .def_readonly("sigma_a", &HomogeneousMedium::sigma_a)
+        .def_readonly("sigma_s", &HomogeneousMedium::sigma_s)
+        .def_readonly("g", &HomogeneousMedium::g);
+
+    py::class_<Medium>(m, "Medium")
+        .def(py::init<HomogeneousMedium>())
+        .def_readonly("type", &Medium::type);
+
+    py::enum_<MediumType>(m, "medium_type")
+        .value("homogeneous", MediumType::homogeneous);
 
     py::class_<DShape>(m, "DShape")
         .def(py::init<ptr<float>,
@@ -214,6 +221,7 @@ PYBIND11_MODULE(redner, m) {
         .def_readwrite("y", &Vector2f::y);
 
     py::class_<Vector3f>(m, "Vector3f")
+        .def(py::init<float, float, float>())
         .def_readwrite("x", &Vector3f::x)
         .def_readwrite("y", &Vector3f::y)
         .def_readwrite("z", &Vector3f::z);

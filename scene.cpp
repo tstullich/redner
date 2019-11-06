@@ -64,6 +64,7 @@ Scene::Scene(const Camera &camera,
              const std::vector<const Material*> &materials,
              const std::vector<const AreaLight*> &area_lights,
              const std::shared_ptr<const EnvironmentMap> &envmap,
+             const std::vector<const Medium*> &mediums,
              bool use_gpu,
              int gpu_index,
              bool use_primary_edge_sampling,
@@ -281,6 +282,13 @@ Scene::Scene(const Camera &camera,
         this->envmap = nullptr;
     }
 
+    if (mediums.size() > 0) {
+        this->mediums = Buffer<Medium>(use_gpu, mediums.size());
+        for (int medium_id = 0; medium_id < (int)mediums.size(); medium_id++) {
+            this->mediums[medium_id] = *mediums[medium_id];
+        }
+    }
+
     max_generic_texture_dimension = 0;
     for (int material_id = 0; material_id < (int)materials.size(); material_id++) {
         if (materials[material_id]->generic_texture.texels != nullptr) {
@@ -325,6 +333,7 @@ DScene::DScene(const DCamera &camera,
                const std::vector<DMaterial*> &materials,
                const std::vector<DAreaLight*> &area_lights,
                const std::shared_ptr<DEnvironmentMap> &envmap,
+               const std::vector<Medium*> &mediums,
                bool use_gpu,
                int gpu_index) : use_gpu(use_gpu), gpu_index(gpu_index) {
 #ifdef __NVCC__
@@ -374,6 +383,12 @@ DScene::DScene(const DCamera &camera,
     } else {
         this->envmap = nullptr;
     }
+    if (mediums.size() > 0) {
+        this->mediums = Buffer<Medium>(use_gpu, mediums.size());
+        for (int medium_id = 0; medium_id < (int)mediums.size(); medium_id++) {
+            this->mediums[medium_id] = *mediums[medium_id];
+        }
+    }
 #ifdef __NVCC__
     if (old_device_id != -1) {
         checkCuda(cudaSetDevice(old_device_id));
@@ -404,6 +419,7 @@ FlattenScene get_flatten_scene(const Scene &scene) {
     return FlattenScene{scene.shapes.data,
                         scene.materials.data,
                         scene.area_lights.data,
+                        scene.mediums.data,
                         scene.envmap != nullptr ?
                             (int)scene.area_lights.size() + 1 :
                             (int)scene.area_lights.size(),
@@ -440,7 +456,7 @@ __global__ void intersect_shape_kernel(
         const Shape *shapes,
         const int *active_pixels,
         const OptiXHit *hits,
-        Ray *rays,
+        const Ray *rays,
         const RayDifferential *ray_differentials,
         Intersection *out_isects,
         SurfacePoint *out_points,
@@ -463,7 +479,6 @@ __global__ void intersect_shape_kernel(
             intersect_shape(shape, tri_id, ray, ray_differential,
                 new_ray_differentials[pixel_id]);
         rays[pixel_id].tmax = hits[idx].t;
-        rays[pixel_id].medium = shape.medium;
     } else {
         out_isects[pixel_id].shape_id = -1;
         out_isects[pixel_id].tri_id = -1;
@@ -474,7 +489,7 @@ __global__ void intersect_shape_kernel(
 void intersect_shape(const Shape *shapes,
                      const BufferView<int> &active_pixels,
                      const BufferView<OptiXHit> &optix_hits,
-                     BufferView<Ray> rays,
+                     const BufferView<Ray> &rays,
                      const BufferView<RayDifferential> &ray_differentials,
                      BufferView<Intersection> isects,
                      BufferView<SurfacePoint> points,
@@ -584,7 +599,6 @@ void intersect(const Scene &scene,
                                         ray_differential,
                                         new_ray_differentials[pixel_id]);
                     ray.tmax = rtc_ray_hit.ray.tfar;
-                    ray.medium = shape.medium;
                 }
             }
         }, num_threads);
@@ -602,22 +616,22 @@ __global__ void update_occluded_rays_kernel(int N,
     }
 
     if (optix_hits[idx].t >= 0.f) {
-        // Invalidate ray if occluded
+        // Set maxt to negative if occluded.
         auto pixel_id = active_pixels[idx];
-        rays[pixel_id].tmax = -1;
+        rays[pixel_id].maxt = -1;
     }
 }
 
 void update_occluded_rays(const BufferView<int> &active_pixels,
                           const BufferView<OptiXHit> &optix_hits,
-                          BufferView<Ray> rays) {
+                          BufferView<Vector3> transmittances) {
     auto block_size = 256;
     auto block_count = idiv_ceil(active_pixels.size(), block_size);
     update_occluded_rays_kernel<<<block_count, block_size>>>(
         active_pixels.size(),
         active_pixels.begin(),
         optix_hits.begin(),
-        rays.begin());
+        transmittances.begin());
 }
 #endif
 
@@ -658,7 +672,7 @@ void occluded(const Scene &scene,
             for (int work_id = id_offset; work_id < work_end; work_id++) {
                 auto id = work_id;
                 auto pixel_id = active_pixels[id];
-                const Ray &ray = rays[pixel_id];
+                Ray &ray = rays[pixel_id];
                 RTCIntersectContext rtc_context;
                 rtcInitIntersectContext(&rtc_context);
                 RTCRay rtc_ray;
@@ -677,7 +691,8 @@ void occluded(const Scene &scene,
                 rtcOccluded1(scene.embree_scene, &rtc_context, &rtc_ray);
                 if (rtc_ray.tfar < 0) {
                     // intersections[pixel_id] = Intersection{-1, -1};
-                    rays[pixel_id].tmax = -1;
+                    // Set tmax to negative if occluded.
+                    ray.tmax = -1;
                 }
             }
         }, num_threads);
@@ -687,6 +702,9 @@ void occluded(const Scene &scene,
 struct light_point_sampler {
     DEVICE void operator()(int idx) {
         auto pixel_id = active_pixels[idx];
+        auto p = medium_points != nullptr ?
+            medium_points[pixel_id] : surface_points[pixel_id].position;
+        shadow_rays[pixel_id].org = p;
         // Select light source by binary search on light_cdf
         auto sample = samples[pixel_id];
         const Real *light_ptr =
@@ -700,7 +718,6 @@ struct light_point_sampler {
             light_isects[pixel_id].shape_id = -1;
             light_isects[pixel_id].tri_id = -1;
             light_points[pixel_id] = SurfacePoint::zero();
-            shadow_rays[pixel_id].org = shading_points[pixel_id].position;
             shadow_rays[pixel_id].dir = envmap_sample(*(scene.envmap), sample.uv);
             shadow_rays[pixel_id].tmin = 1e-3f;
             shadow_rays[pixel_id].tmax = infinity<Real>();
@@ -716,19 +733,19 @@ struct light_point_sampler {
             light_isects[pixel_id].shape_id = light.shape_id;
             light_isects[pixel_id].tri_id = tri_id;
             light_points[pixel_id] = sample_shape(shape, tri_id, sample.uv);
-            shadow_rays[pixel_id].org = shading_points[pixel_id].position;
             shadow_rays[pixel_id].dir = normalize(
-                light_points[pixel_id].position - shading_points[pixel_id].position);
+                light_points[pixel_id].position - p);
             // Shadow epislon. Sorry.
             shadow_rays[pixel_id].tmin = 1e-3f;
             shadow_rays[pixel_id].tmax = (1 - 1e-3f) *
-                length(light_points[pixel_id].position - shading_points[pixel_id].position);
+                length(light_points[pixel_id].position - p);
         }
     }
 
     const FlattenScene scene;
     const int *active_pixels;
-    const SurfacePoint *shading_points;
+    const SurfacePoint *surface_points;
+    const Vector3 *medium_points;
     const LightSample *samples;
     Intersection *light_isects;
     SurfacePoint *light_points;
@@ -737,7 +754,9 @@ struct light_point_sampler {
 
 void sample_point_on_light(const Scene &scene,
                            const BufferView<int> &active_pixels,
-                           const BufferView<SurfacePoint> &shading_points,
+                           const BufferView<SurfacePoint> &surface_points,
+                           const BufferView<Intersection> &medium_isects,
+                           const BufferView<Vector3> &medium_points,
                            const BufferView<LightSample> &samples,
                            BufferView<Intersection> light_isects,
                            BufferView<SurfacePoint> light_points,
@@ -745,57 +764,12 @@ void sample_point_on_light(const Scene &scene,
     parallel_for(light_point_sampler{
         get_flatten_scene(scene),
         active_pixels.begin(),
-        shading_points.begin(),
+        surface_points.begin(),
+        medium_points.begin(),
         samples.begin(),
         light_isects.begin(),
         light_points.begin(),
         shadow_ray.begin()},
-        active_pixels.size(), scene.use_gpu);
-}
-
-struct medium_sampler {
-    DEVICE void operator()(int idx) {
-        auto pixel_id = active_pixels[idx];
-        auto medium_sample = medium_samples[pixel_id];
-        const auto &shading_point = shading_points[pixel_id];
-        const auto &incoming_ray = incoming_rays[pixel_id];
-        if (incoming_ray.medium) {
-            auto medium_interaction = &medium_interactions[pixel_id] == nullptr ?
-                                      new MediumInteraction() : &medium_interactions[pixel_id];
-            // Sample medium and accumulate it to throughput. This will also initialize
-            // the MediumInteraction pointer in case an interaction with a medium occured
-            throughputs[pixel_id] *= incoming_ray.medium->sample(incoming_ray,
-                                                                 shading_point,
-                                                                 medium_sample,
-                                                                 medium_interaction);
-            medium_interactions[pixel_id] = *medium_interaction;
-        }
-    }
-
-    const FlattenScene scene;
-    const int *active_pixels;
-    const SurfacePoint *shading_points;
-    const Ray *incoming_rays;
-    const MediumSample *medium_samples;
-    Vector3 *throughputs;
-    MediumInteraction *medium_interactions;
-};
-
-void sample_medium(const Scene &scene,
-                   const BufferView<int> &active_pixels,
-                   const BufferView<SurfacePoint> &shading_points,
-                   const BufferView<Ray> &incoming_rays,
-                   const BufferView<MediumSample> &medium_samples,
-                   BufferView<Vector3> throughputs,
-                   BufferView<MediumInteraction*> medium_interactions) {
-    parallel_for(medium_sampler{
-        get_flatten_scene(scene),
-        active_pixels.begin(),
-        shading_points.begin(),
-        incoming_rays.begin(),
-        medium_samples.begin(),
-        throughputs.begin(),
-        *medium_interactions.begin()},
         active_pixels.size(), scene.use_gpu);
 }
 
@@ -827,14 +801,14 @@ void test_scene_intersect(bool use_gpu) {
                    nullptr, // normal
                    nullptr, // uv_indices
                    nullptr, // normal_indices
-                   nullptr, // medium
                    nullptr, // colors
                    3, // num_vertices
                    0, // num_uv_vertices
                    0, // num_normal_vertices
                    1, // num_triangles
-                   0,
-                   -1};
+                   0, // material_id
+                   -1, // light_id
+                   -1}; // medium_id
     auto pos = Vector3f{0, 0, 0};
     auto look = Vector3f{0, 0, 1};
     auto up = Vector3f{0, 1, 0};
@@ -849,8 +823,9 @@ void test_scene_intersect(bool use_gpu) {
         &n2c.data[0][0],
         &c2n.data[0][0],
         1e-2f,
-        CameraType::Perspective};
-    Scene scene{camera, {&triangle}, {}, {}, {}, use_gpu, 0, false, false};
+        CameraType::Perspective,
+        -1}; // medium_id
+    Scene scene{camera, {&triangle}, {}, {}, {}, {}, use_gpu, 0, false, false};
     parallel_init();
 
     Buffer<int> active_pixels(use_gpu, 2);
@@ -915,28 +890,28 @@ void test_sample_point_on_light(bool use_gpu) {
                  nullptr, // normals
                  nullptr, // uv_indices
                  nullptr, // normal_indices
-                 nullptr, // medium
                  nullptr, // colors
                  6, // num_vertices
                  0, // num_uv_vertices
                  0, // num_normal_vertices
                  2, // num_triangles
-                 0,
-                 0};
+                 0, // material_id
+                 0, // light_id
+                 -1}; // medium_id
     Shape shape1{(float*)vertices1.data,
                  (int*)indices1.data,
                  nullptr, // uvs
                  nullptr, // normals
                  nullptr, // uv_indices
                  nullptr, // normal_indices
-                 nullptr, // medium
                  nullptr, // colors
                  3, // num_vertices
                  0, // num_uv_vertices
                  0, // num_normal_vertices
                  1, // num_triangles
-                 0,
-                 0};
+                 0, // materia_id
+                 0, // light_id
+                -1}; // medium_id
     AreaLight light0{0, Vector3f{1.f, 1.f, 1.f}, false};
     AreaLight light1{1, Vector3f{2.f, 2.f, 2.f}, false};
 
@@ -960,8 +935,9 @@ void test_sample_point_on_light(bool use_gpu) {
         &n2c.data[0][0],
         &c2n.data[0][0],
         1e-2f,
-        CameraType::Perspective};
-    Scene scene{camera, {&shape0, &shape1}, {}, {&light0, &light1}, {}, use_gpu, 0, false, false};
+        CameraType::Perspective,
+        -1}; // medium_id
+    Scene scene{camera, {&shape0, &shape1}, {}, {&light0, &light1}, {}, {}, use_gpu, 0, false, false};
     cuda_synchronize();
     // Power of the first light source: 1.5
     // Power of the second light source: 2
@@ -975,15 +951,20 @@ void test_sample_point_on_light(bool use_gpu) {
 
     Buffer<int> active_pixels(use_gpu, samples.size());
     Buffer<SurfacePoint> shading_points(use_gpu, samples.size());
+    Buffer<Intersection> medium_isects(use_gpu, samples.size());
+    Buffer<Vector3> medium_points(use_gpu, samples.size());
     Buffer<Intersection> light_isects(use_gpu, samples.size());
     Buffer<SurfacePoint> light_points(use_gpu, samples.size());
     Buffer<Ray> shadow_rays(use_gpu, samples.size());
     for (int i = 0; i < 3; i++) {
         active_pixels[i] = i;
+        medium_isects[i] = Intersection();
     }
     sample_point_on_light(scene,
                           active_pixels.view(0, active_pixels.size()),
                           shading_points.view(0, samples.size()),
+                          medium_isects.view(0, samples.size()),
+                          medium_points.view(0, samples.size()),
                           samples.view(0, samples.size()),
                           light_isects.view(0, light_isects.size()),
                           light_points.view(0, light_points.size()),

@@ -98,12 +98,12 @@ void PCGSampler::next_light_samples(BufferView<TLightSample<double>> samples) {
         (double*)samples.begin()}, samples.size(), use_gpu);
 }
 
-void PCGSampler::next_bsdf_samples(BufferView<TBSDFSample<float>> samples) {
+void PCGSampler::next_directional_samples(BufferView<TDirectionalSample<float>> samples) {
     parallel_for(pcg_sampler_float<3>{rng_states.begin(),
         (float*)samples.begin()}, samples.size(), use_gpu);
 }
 
-void PCGSampler::next_bsdf_samples(BufferView<TBSDFSample<double>> samples) {
+void PCGSampler::next_directional_samples(BufferView<TDirectionalSample<double>> samples) {
     parallel_for(pcg_sampler_double<3>{rng_states.begin(),
         (double*)samples.begin()}, samples.size(), use_gpu);
 }
@@ -138,16 +138,6 @@ void PCGSampler::next_medium_samples(BufferView<TMediumSample<float>> samples) {
 }
 
 void PCGSampler::next_medium_samples(BufferView<TMediumSample<double>> samples) {
-    parallel_for(pcg_sampler_double<2>{rng_states.begin(),
-        (double*)samples.begin()}, samples.size(), use_gpu);
-}
-
-void PCGSampler::next_phase_samples(BufferView<TPhaseSample<float>> samples) {
-    parallel_for(pcg_sampler_float<2>{rng_states.begin(),
-        (float*)samples.begin()}, samples.size(), use_gpu);
-}
-
-void PCGSampler::next_phase_samples(BufferView<TPhaseSample<double>> samples) {
     parallel_for(pcg_sampler_double<2>{rng_states.begin(),
         (double*)samples.begin()}, samples.size(), use_gpu);
 }

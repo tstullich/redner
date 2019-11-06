@@ -136,7 +136,7 @@ void SobolSampler::next_light_samples(BufferView<TLightSample<double>> samples) 
     current_dimension += 4;
 }
 
-void SobolSampler::next_bsdf_samples(BufferView<TBSDFSample<float>> samples) {
+void SobolSampler::next_directional_samples(BufferView<TDirectionalSample<float>> samples) {
     parallel_for(sobol_sampler<3, float>{
         current_sample_id,
         current_dimension,
@@ -146,7 +146,7 @@ void SobolSampler::next_bsdf_samples(BufferView<TBSDFSample<float>> samples) {
     current_dimension += 3;
 }
 
-void SobolSampler::next_bsdf_samples(BufferView<TBSDFSample<double>> samples) {
+void SobolSampler::next_directional_samples(BufferView<TDirectionalSample<double>> samples) {
     parallel_for(sobol_sampler<3, double>{
         current_sample_id,
         current_dimension,
@@ -211,26 +211,6 @@ void SobolSampler::next_medium_samples(BufferView<TMediumSample<float>> samples)
 }
 
 void SobolSampler::next_medium_samples(BufferView<TMediumSample<double>> samples) {
-    parallel_for(sobol_sampler<2, double>{
-        current_sample_id,
-        current_dimension,
-        sobol_matrices,
-        sobol_scramble.begin(),
-        (double*)samples.begin()}, samples.size(), use_gpu);
-    current_dimension += 2;
-}
-
-void SobolSampler::next_phase_samples(BufferView<TPhaseSample<float>> samples) {
-    parallel_for(sobol_sampler<2, float>{
-        current_sample_id,
-        current_dimension,
-        sobol_matrices,
-        sobol_scramble.begin(),
-        (float*)samples.begin()}, samples.size(), use_gpu);
-    current_dimension += 2;
-}
-
-void SobolSampler::next_phase_samples(BufferView<TPhaseSample<double>> samples) {
     parallel_for(sobol_sampler<2, double>{
         current_sample_id,
         current_dimension,
