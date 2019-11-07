@@ -6,38 +6,39 @@ pyredner.set_use_gpu(False)
 #pyredner.set_use_gpu(torch.cuda.is_available())
 
 mediums = [pyredner.HomogeneousMedium(\
-    sigma_a = torch.tensor([0.01, 0.01, 0.5]),
-    sigma_s = torch.tensor([0.01, 0.01, 0.5]),
+    sigma_a = torch.tensor([0.085867, 0.18314, 0.25262]),
+    sigma_s = torch.tensor([0.011002, 0.010927, 0.011036]),
     g = torch.tensor([0.5]))]
 
-cam = pyredner.Camera(position = torch.tensor([0.0, 0.0, -5.0]),
+cam = pyredner.Camera(position = torch.tensor([0.0, 0.0, 5.0]),
                       look_at = torch.tensor([0.0, 0.0, 0.0]),
                       up = torch.tensor([0.0, 1.0, 0.0]),
-                      fov = torch.tensor([45.0]), # in degree
+                      fov = torch.tensor([60.0]), # in degree
                       clip_near = 1e-2, # needs to > 0
                       resolution = (256, 256),
                       medium_id = 0)
 
-mat_grey = pyredner.Material(\
+mat_red = pyredner.Material(\
     diffuse_reflectance = \
         torch.tensor([1.0, 0.0, 0.0], device = pyredner.get_device()))
 
 # The material list of the scene
-materials = [mat_grey]
+materials = [mat_red]
 
-sphere = pyredner.generate_sphere(16, 16)
+sphere = pyredner.generate_sphere(32, 32)
 shape_sphere = pyredner.Shape(\
     vertices = sphere[0],
     indices = sphere[1],
     uvs = sphere[2],
     normals = sphere[3],
-    material_id = 0)
+    material_id = 0,
+    medium_id = -1)
 
 shape_light = pyredner.Shape(\
-    vertices = torch.tensor([[-1.0, -1.0, -7.0],
-                             [ 1.0, -1.0, -7.0],
-                             [-1.0,  1.0, -7.0],
-                             [ 1.0,  1.0, -7.0]], device = pyredner.get_device()),
+    vertices = torch.tensor([[-3.0,  1.0,  1.0],
+                             [-3.0,  1.0, -1.0],
+                             [-2.0,  3.0,  1.0],
+                             [-2.0,  3.0, -1.0]], device = pyredner.get_device()),
     indices = torch.tensor([[0, 1, 2],[1, 3, 2]],
         dtype = torch.int32, device = pyredner.get_device()),
     uvs = None,
@@ -48,7 +49,7 @@ shape_light = pyredner.Shape(\
 shapes = [shape_sphere, shape_light]
 
 light = pyredner.AreaLight(shape_id = 1,
-                           intensity = torch.tensor([20.0,20.0,20.0]))
+                           intensity = torch.tensor([10.0, 10.0, 10.0]))
 area_lights = [light]
 # Finally we construct our scene using all the variables we setup previously.
 scene = pyredner.Scene(cam,
