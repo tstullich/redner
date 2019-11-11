@@ -12,7 +12,6 @@ else()
 endif()
 
 find_package(CUDA 10)
-set(CUDA_FOUND FALSE)
 if(CUDA_FOUND)
     find_package(OptiX REQUIRED)
 else()
