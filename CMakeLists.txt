@@ -12,6 +12,7 @@ else()
 endif()
 
 find_package(CUDA 10)
+set(CUDA_FOUND FALSE)
 if(CUDA_FOUND)
     find_package(OptiX REQUIRED)
 else()
@@ -67,7 +68,6 @@ set(SRCS aabb.h
          material.h
          matrix.h
          medium.h
-         medium_interface.h
          miniz.h
          parallel.h
          path_contribution.h

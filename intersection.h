@@ -6,15 +6,19 @@
 #include "ray.h"
 
 struct Intersection {
-    Intersection(int shape_id = -1, int tri_id = -1, int medium_id = -1)
-        : shape_id(shape_id), tri_id(tri_id), medium_id(medium_id) {}
+    Intersection(int shape_id = -1, int tri_id = -1, int medium_id = -1,
+                 int prev_medium_id = -1)
+        : shape_id(shape_id), tri_id(tri_id), medium_id(medium_id),
+          prev_medium_id(prev_medium_id) {}
 
     int shape_id = -1;
     int tri_id = -1;
     int medium_id = -1;
+    int prev_medium_id = -1;
 
     DEVICE
     bool valid() const {
+        // TODO Figure out if we need to add prev_medium_id here
         return (shape_id >= 0 && tri_id >= 0) || medium_id >= 0;
     }
 };

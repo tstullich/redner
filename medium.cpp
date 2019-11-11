@@ -21,7 +21,7 @@ Vector3 sample(const Medium &medium,
     if (medium.type == MediumType::homogeneous) {
         auto h = medium.homogeneous;
         // Sample a channel and distance along the ray
-        auto channel = (int)min(int(sample.uv[0] * 3), 2);
+        auto channel = min(int(sample.uv[0] * 3), 2);
         Real dist = -log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel];
         auto inside_medium = dist < ray.tmax;
         auto t = min(dist, ray.tmax);
@@ -39,8 +39,15 @@ Vector3 sample(const Medium &medium,
             // !!!!TODO: This is incorrect when there is a medium inside a medium.
             //           We need a stack to keep track of previous medium when we
             //           exit a medium.
-            assert(surface_isect.valid());
-            *medium_isect = surface_isect;
+            if (medium_isect->prev_medium_id >= 0) {
+                // We previously encountered a medium. Update intersection
+                // data accordingly
+                medium_isect->shape_id = medium_isect->tri_id = -1;
+                medium_isect->medium_id = medium_isect->prev_medium_id;
+            } else {
+                assert(surface_isect.valid());
+                *medium_isect = surface_isect;
+            }
         }
         return inside_medium ? (tr * h.sigma_s / pdf) : (tr / pdf);
     } else {
@@ -117,14 +124,13 @@ Vector3 transmittance(const Medium &medium,
 struct transmittance_sampler {
     DEVICE void operator()(int idx) {
         auto pixel_id = active_pixels[idx];
+        const Ray &ray = rays[pixel_id];
         transmittances[pixel_id] = Vector3{1, 1, 1};
-        if (medium_isects[pixel_id].medium_id >= 0) {
-            const Ray &ray = rays[pixel_id];
-            if (ray.tmax > 0) { // maxt <= 0 means the ray is occluded.
-                const MediumSample &sample = samples[pixel_id];
-                transmittances[pixel_id] = transmittance(
-                    mediums[medium_isects[pixel_id].medium_id], ray, sample);
-            }
+        // tmax <= 0 means the ray is occluded
+        if (medium_isects[pixel_id].medium_id >= 0 && ray.tmax > 0) {
+            const MediumSample &sample = samples[pixel_id];
+            transmittances[pixel_id] = transmittance(
+                mediums[medium_isects[pixel_id].medium_id], ray, sample);
         }
     }
 
@@ -136,12 +142,12 @@ struct transmittance_sampler {
     Vector3 *transmittances;
 };
 
-void evaluate_transmisttance(const Scene &scene,
-                             const BufferView<int> &active_pixels,
-                             const BufferView<Ray> &rays,
-                             const BufferView<Intersection> &medium_isects,
-                             const BufferView<MediumSample> &medium_samples,
-                             BufferView<Vector3> transmittances) {
+void evaluate_transmittance(const Scene &scene,
+                            const BufferView<int> &active_pixels,
+                            const BufferView<Ray> &rays,
+                            const BufferView<Intersection> &medium_isects,
+                            const BufferView<MediumSample> &medium_samples,
+                            BufferView<Vector3> transmittances) {
     // TODO: Currently we assume the first surface/volume we hit has a different
     // index of refraction or is fully opaque. This can be inefficient for some
     // cases, e.g. if we have an object with IOR=1 blocking the light.

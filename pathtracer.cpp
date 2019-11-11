@@ -397,12 +397,12 @@ void render(const Scene &scene,
             occluded(scene, active_pixels, nee_rays, optix_rays, optix_hits);
             if (scene.mediums.size() > 0) {
                 sampler->next_medium_samples(medium_samples);
-                evaluate_transmisttance(scene,
-                                        active_pixels,
-                                        nee_rays,
-                                        medium_isects,
-                                        medium_samples,
-                                        nee_transmittances);
+                evaluate_transmittance(scene,
+                                       active_pixels,
+                                       nee_rays,
+                                       medium_isects,
+                                       medium_samples,
+                                       nee_transmittances);
             } else {
                 // Set transmittance to 1
                 DISPATCH(scene.use_gpu, thrust::fill,

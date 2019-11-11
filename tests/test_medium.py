@@ -7,8 +7,15 @@ pyredner.set_use_gpu(False)
 
 mediums = [pyredner.HomogeneousMedium(\
     sigma_a = torch.tensor([0.085867, 0.18314, 0.25262]),
+    #sigma_a = torch.tensor([0.061, 0.97, 1.45]),
     sigma_s = torch.tensor([0.011002, 0.010927, 0.011036]),
-    g = torch.tensor([0.5]))]
+    #sigma_s = torch.tensor([0.18, 0.07, 0.03]),
+    g = torch.tensor([0.5])),
+    # Second medium
+    pyredner.HomogeneousMedium(\
+    sigma_a = torch.tensor([0.001, 0.001, 0.001]),
+    sigma_s = torch.tensor([0.002, 0.002, 0.002]),
+    g = torch.tensor([-0.7]))]
 
 cam = pyredner.Camera(position = torch.tensor([0.0, 0.0, 5.0]),
                       look_at = torch.tensor([0.0, 0.0, 0.0]),

@@ -117,7 +117,7 @@ public:
     BufferView<T> view(int offset, int size) const {
         return BufferView<T>{data + offset, size};
     }
-    
+
     bool use_gpu;
     T* data;
     size_t count;

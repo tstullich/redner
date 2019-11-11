@@ -69,9 +69,9 @@ void sample_medium(const Scene &scene,
                    BufferView<Vector3> throughputs);
 
 // Evaluate the transmittance between two points.
-void evaluate_transmisttance(const Scene &scene,
-                             const BufferView<int> &active_pixels,
-                             const BufferView<Ray> &rays,
-                             const BufferView<Intersection> &medium_isects,
-                             const BufferView<MediumSample> &medium_samples,
-                             BufferView<Vector3> transmittances);
+void evaluate_transmittance(const Scene &scene,
+                            const BufferView<int> &active_pixels,
+                            const BufferView<Ray> &rays,
+                            const BufferView<Intersection> &medium_isects,
+                            const BufferView<MediumSample> &medium_samples,
+                            BufferView<Vector3> transmittances);

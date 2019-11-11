@@ -473,6 +473,7 @@ __global__ void intersect_shape_kernel(
         out_isects[pixel_id].shape_id = shape_id;
         out_isects[pixel_id].tri_id = tri_id;
         const auto &shape = shapes[shape_id];
+        out_isects[pixel_id].medium_id = shape.medium_id;
         const auto &ray = rays[pixel_id];
         const auto &ray_differential = ray_differentials[pixel_id];
         out_points[pixel_id] =
@@ -482,6 +483,7 @@ __global__ void intersect_shape_kernel(
     } else {
         out_isects[pixel_id].shape_id = -1;
         out_isects[pixel_id].tri_id = -1;
+        out_isects[pixel_id].medium_id = -1;
         new_ray_differentials[pixel_id] = ray_differentials[pixel_id];
     }
 }
@@ -588,9 +590,13 @@ void intersect(const Scene &scene,
                 } else {
                     auto shape_id = (int)rtc_ray_hit.hit.geomID;
                     auto tri_id = (int)rtc_ray_hit.hit.primID;
-                    intersections[pixel_id] =
-                        Intersection{shape_id, tri_id};
                     const auto &shape = scene.shapes[shape_id];
+                    Intersection intersection{shape_id, tri_id, shape.medium_id};
+                    // Set the previous medium ID only if there has been a prior interaction
+                    // with a medium
+                    intersection.prev_medium_id = intersections[pixel_id].medium_id >= 0 ?
+                                                  intersections[pixel_id].medium_id : -1;
+                    intersections[pixel_id] = intersection;
                     const auto &ray_differential = ray_differentials[pixel_id];
                     points[pixel_id] =
                         intersect_shape(shape,
