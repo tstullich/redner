@@ -51,7 +51,7 @@ shape_light = pyredner.Shape(\
 shapes = [shape_triangle, shape_light]
 
 # Setup light source
-light = pyredner.AreaLight(shape_id = 1, 
+light = pyredner.AreaLight(shape_id = 1,
                            intensity = torch.tensor([20.0,20.0,20.0]))
 area_lights = [light]
 

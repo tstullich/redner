@@ -23,16 +23,16 @@ cam = pyredner.Camera(position = torch.tensor([0.0, 0.0, 5.0]),
                       fov = torch.tensor([60.0]), # in degree
                       clip_near = 1e-2, # needs to > 0
                       resolution = (256, 256),
-                      medium_id = 0)
+                      medium_id = 1)
 
 mat_red = pyredner.Material(\
     diffuse_reflectance = \
-        torch.tensor([1.0, 0.0, 0.0], device = pyredner.get_device()))
+        torch.tensor([0.5, 0.5, 0.5], device = pyredner.get_device()))
 
 # The material list of the scene
 materials = [mat_red]
 
-sphere = pyredner.generate_sphere(32, 32)
+sphere = pyredner.generate_sphere(128, 64)
 shape_sphere = pyredner.Shape(\
     vertices = sphere[0],
     indices = sphere[1],
@@ -45,7 +45,8 @@ shape_light = pyredner.Shape(\
     vertices = torch.tensor([[-3.0,  1.0,  1.0],
                              [-3.0,  1.0, -1.0],
                              [-2.0,  3.0,  1.0],
-                             [-2.0,  3.0, -1.0]], device = pyredner.get_device()),
+                             [-2.0,  3.0, -1.0]],
+                             device = pyredner.get_device()),
     indices = torch.tensor([[0, 1, 2],[1, 3, 2]],
         dtype = torch.int32, device = pyredner.get_device()),
     uvs = None,
@@ -56,18 +57,25 @@ shape_light = pyredner.Shape(\
 shapes = [shape_sphere, shape_light]
 
 light = pyredner.AreaLight(shape_id = 1,
-                           intensity = torch.tensor([10.0, 10.0, 10.0]))
+                           intensity = torch.tensor([20.0, 20.0, 20.0]))
 area_lights = [light]
+
+envmap = pyredner.imread('/home/tim/projects/master/redner/tests/sunsky.exr')
+if pyredner.get_use_gpu():
+    envmap = envmap.cuda(device = pyredner.get_device())
+envmap = pyredner.EnvironmentMap(envmap)
+
 # Finally we construct our scene using all the variables we setup previously.
 scene = pyredner.Scene(cam,
                        shapes,
                        materials,
                        area_lights,
+                       envmap = envmap,
                        mediums = mediums)
 scene_args = pyredner.RenderFunction.serialize_scene(\
     scene = scene,
     num_samples = 256,
-    max_bounces = 1,
+    max_bounces = 2,
     sampler_type = redner.SamplerType.sobol)
 
 render = pyredner.RenderFunction.apply

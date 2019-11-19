@@ -44,6 +44,7 @@ Vector3 sample(const Medium &medium,
                 // data accordingly
                 medium_isect->shape_id = medium_isect->tri_id = -1;
                 medium_isect->medium_id = medium_isect->prev_medium_id;
+                medium_isect->prev_medium_id = -1;
             } else {
                 assert(surface_isect.valid());
                 *medium_isect = surface_isect;

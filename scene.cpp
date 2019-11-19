@@ -515,8 +515,9 @@ void intersect(const Scene &scene,
                const BufferView<int> &active_pixels,
                BufferView<Ray> rays,
                const BufferView<RayDifferential> &ray_differentials,
-               BufferView<Intersection> intersections,
+               BufferView<Intersection> surface_intersections,
                BufferView<SurfacePoint> points,
+               BufferView<Intersection> medium_intersections,
                BufferView<RayDifferential> new_ray_differentials,
                BufferView<OptiXRay> optix_rays,
                BufferView<OptiXHit> optix_hits) {
@@ -546,7 +547,7 @@ void intersect(const Scene &scene,
                         optix_hits,
                         rays,
                         ray_differentials,
-                        intersections,
+                        surface_intersections,
                         points,
                         new_ray_differentials);
 #else
@@ -585,18 +586,24 @@ void intersect(const Scene &scene,
                 rtcIntersect1(scene.embree_scene, &rtc_context, &rtc_ray_hit);
                 if (rtc_ray_hit.hit.geomID == RTC_INVALID_GEOMETRY_ID ||
                          length_squared(ray.dir) <= 1e-3f) {
-                    intersections[pixel_id] = Intersection{-1, -1};
+                    surface_intersections[pixel_id] = Intersection{-1, -1, -1, -1};
+                    medium_intersections[pixel_id] = Intersection{-1, -1, -1, -1};
                     new_ray_differentials[pixel_id] = ray_differentials[pixel_id];
                 } else {
                     auto shape_id = (int)rtc_ray_hit.hit.geomID;
                     auto tri_id = (int)rtc_ray_hit.hit.primID;
                     const auto &shape = scene.shapes[shape_id];
                     Intersection intersection{shape_id, tri_id, shape.medium_id};
-                    // Set the previous medium ID only if there has been a prior interaction
-                    // with a medium
-                    intersection.prev_medium_id = intersections[pixel_id].medium_id >= 0 ?
-                                                  intersections[pixel_id].medium_id : -1;
-                    intersections[pixel_id] = intersection;
+                    if (shape.medium_id >= 0) {
+                        // Set the previous medium ID only if there has been a prior interaction
+                        // with a medium
+                        intersection.prev_medium_id = medium_intersections[pixel_id].medium_id >= 0 ?
+                                                      medium_intersections[pixel_id].medium_id : -1;
+                        medium_intersections[pixel_id] = intersection;
+                    } else {
+                        surface_intersections[pixel_id] = intersection;
+                    }
+
                     const auto &ray_differential = ray_differentials[pixel_id];
                     points[pixel_id] =
                         intersect_shape(shape,
@@ -605,6 +612,7 @@ void intersect(const Scene &scene,
                                         ray_differential,
                                         new_ray_differentials[pixel_id]);
                     ray.tmax = rtc_ray_hit.ray.tfar;
+
                 }
             }
         }, num_threads);
@@ -761,7 +769,6 @@ struct light_point_sampler {
 void sample_point_on_light(const Scene &scene,
                            const BufferView<int> &active_pixels,
                            const BufferView<SurfacePoint> &surface_points,
-                           const BufferView<Intersection> &medium_isects,
                            const BufferView<Vector3> &medium_points,
                            const BufferView<LightSample> &samples,
                            BufferView<Intersection> light_isects,
@@ -847,6 +854,7 @@ void test_scene_intersect(bool use_gpu) {
               ray_diffs.view(0, rays.size()),
               isects.view(0, rays.size()),
               surface_points.view(0, rays.size()),
+              isects.view(0, rays.size()),
               ray_diffs.view(0, rays.size()),
               optix_rays.view(0, rays.size()),
               optix_hits.view(0, rays.size()));
@@ -969,7 +977,6 @@ void test_sample_point_on_light(bool use_gpu) {
     sample_point_on_light(scene,
                           active_pixels.view(0, active_pixels.size()),
                           shading_points.view(0, samples.size()),
-                          medium_isects.view(0, samples.size()),
                           medium_points.view(0, samples.size()),
                           samples.view(0, samples.size()),
                           light_isects.view(0, light_isects.size()),
