@@ -298,7 +298,7 @@ void render(const Scene &scene,
                   optix_rays,
                   optix_hits);
         if (scene.mediums.size() > 0) {
-            // Sample a distance if we are inside a participating media.
+            // Sample a distance if we are inside a participating medium.
             // Update intersections as well.
             // Store the transmittance in throughput.
             sampler->next_medium_samples(medium_samples);

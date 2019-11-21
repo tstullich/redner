@@ -34,18 +34,19 @@ Vector3 sample(const Medium &medium,
         // Update intersection data
         *medium_point = ray.org + ray.dir * t;
         if (inside_medium) {
-            medium_isect->shape_id = medium_isect->tri_id = -1;
+            // Set the triangle ID to -1 if we are inside a medium
+            medium_isect->tri_id = -1;
         } else {
-            // !!!!TODO: This is incorrect when there is a medium inside a medium.
-            //           We need a stack to keep track of previous medium when we
-            //           exit a medium.
+            // Left our current medium. Update intersection data accordingly
             if (medium_isect->prev_medium_id >= 0) {
-                // We previously encountered a medium. Update intersection
-                // data accordingly
-                medium_isect->shape_id = medium_isect->tri_id = -1;
+                // We previously encountered a medium
                 medium_isect->medium_id = medium_isect->prev_medium_id;
+                medium_isect->shape_id = medium_isect->prev_shape_id;
                 medium_isect->prev_medium_id = -1;
+                medium_isect->prev_shape_id = -1;
+                medium_isect->tri_id = -1;
             } else {
+                // No prior intersection was made. Take the surface intersection
                 assert(surface_isect.valid());
                 *medium_isect = surface_isect;
             }

@@ -586,21 +586,33 @@ void intersect(const Scene &scene,
                 rtcIntersect1(scene.embree_scene, &rtc_context, &rtc_ray_hit);
                 if (rtc_ray_hit.hit.geomID == RTC_INVALID_GEOMETRY_ID ||
                          length_squared(ray.dir) <= 1e-3f) {
-                    surface_intersections[pixel_id] = Intersection{-1, -1, -1, -1};
-                    medium_intersections[pixel_id] = Intersection{-1, -1, -1, -1};
+                    surface_intersections[pixel_id] = Intersection{-1, -1, -1, -1, -1};
                     new_ray_differentials[pixel_id] = ray_differentials[pixel_id];
                 } else {
                     auto shape_id = (int)rtc_ray_hit.hit.geomID;
                     auto tri_id = (int)rtc_ray_hit.hit.primID;
                     const auto &shape = scene.shapes[shape_id];
-                    Intersection intersection{shape_id, tri_id, shape.medium_id};
-                    if (shape.medium_id >= 0) {
-                        // Set the previous medium ID only if there has been a prior interaction
-                        // with a medium
-                        intersection.prev_medium_id = medium_intersections[pixel_id].medium_id >= 0 ?
-                                                      medium_intersections[pixel_id].medium_id : -1;
+                    Intersection intersection{shape_id, tri_id};
+
+                    // Set the medium information
+                    intersection.medium_id = shape.medium_id >= 0 ? shape.medium_id :
+                        medium_intersections[pixel_id].medium_id;
+
+                    // Set the previous medium ID only if there has been a prior interaction
+                    intersection.prev_medium_id = medium_intersections[pixel_id].medium_id >= 0 ?
+                                                  medium_intersections[pixel_id].medium_id : -1;
+
+                    // Set this only if we have a shape associated with a medium
+                    intersection.prev_shape_id = medium_intersections[pixel_id].shape_id >= 0 ?
+                                                 medium_intersections[pixel_id].shape_id : -1;
+
+                    if (intersection.medium_id >= 0) {
+                        // Intersection with a medium was made
                         medium_intersections[pixel_id] = intersection;
-                    } else {
+                    }
+
+                    if (intersection.shape_id >= 0) {
+                        // Intersection with a regular surface was made
                         surface_intersections[pixel_id] = intersection;
                     }
 

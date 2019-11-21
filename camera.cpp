@@ -58,7 +58,7 @@ void sample_primary_rays(const Camera &camera,
 }
 
 void test_sample_primary_rays(bool use_gpu) {
-    // Let's have a perspective camera with 1x1 pixel, 
+    // Let's have a perspective camera with 1x1 pixel,
     // with identity to world matrix,
     // fov 45 degree
     auto pos = Vector3f{0, 0, 0};
