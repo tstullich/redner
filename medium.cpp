@@ -3,9 +3,6 @@
 #include "scene.h"
 #include "thrust_utils.h"
 
-// !!!!TODO: This is incorrect when there is a medium inside a medium.
-//           We need a stack to keep track of previous medium when we
-//           exit a medium.
 /**
  * Sample the given medium to see if the ray is affected by it. The
  * transmittance is encoded in the returned Vector3.
