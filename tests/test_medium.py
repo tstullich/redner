@@ -21,7 +21,7 @@ cam = pyredner.Camera(position = torch.tensor([0.0, 0.0, 5.0]),
                       fov = torch.tensor([60.0]), # in degree
                       clip_near = 1e-2, # needs to > 0
                       resolution = (256, 256),
-                      medium_id = 1)
+                      medium_id = -1)
 
 mat_red = pyredner.Material(\
     diffuse_reflectance = \
@@ -74,36 +74,36 @@ scene = pyredner.Scene(cam,
 scene_args = pyredner.RenderFunction.serialize_scene(\
     scene = scene,
     num_samples = 256,
-    max_bounces = 2)
+    max_bounces = 1)
 
 render = pyredner.RenderFunction.apply
 img = render(0, *scene_args)
 pyredner.imwrite(img.cpu(), 'results/test_medium/target.exr')
 pyredner.imwrite(img.cpu(), 'results/test_medium/target.png')
-#target = pyredner.imread('results/test_medium/target.exr')
-#if pyredner.get_use_gpu():
-#    target = target.cuda(device = pyredner.get_device())
-#
-## Perturb the medium for the initial guess
-## Here we set the absorption factor to be optimized
-#mediums[0].sigma_a = torch.tensor(\
-#    [1.0, 1.0, 1.0],
-#    device = pyredner.get_device(),
-#    requires_grad = True)
-#
-### Serialize scene arguments
-#scene_args = pyredner.RenderFunction.serialize_scene(\
-#    scene = scene,
-#    num_samples = 256,
-#    max_bounces = 1,
-#    # Disable edge sampling for now
-#    use_primary_edge_sampling = False,
-#    use_secondary_edge_sampling = False)
-#
-### Render initial guess
-#img = render(1, *scene_args)
-### Save image
-#pyredner.imwrite(img.cpu(), 'results/test_medium/init.png')
-### Compute the difference between the target and initial guess
-#diff = torch.abs(target - img)
-#pyredner.imwrite(diff.cpu(), 'results/test_medium/init_diff.png')
+target = pyredner.imread('results/test_medium/target.exr')
+if pyredner.get_use_gpu():
+    target = target.cuda(device = pyredner.get_device())
+
+# Perturb the medium for the initial guess
+# Here we set the absorption factor to be optimized
+mediums[0].sigma_a = torch.tensor(\
+    [1.0, 1.0, 1.0],
+    device = pyredner.get_device(),
+    requires_grad = True)
+
+## Serialize scene arguments
+scene_args = pyredner.RenderFunction.serialize_scene(\
+    scene = scene,
+    num_samples = 256,
+    max_bounces = 1,
+    # Disable edge sampling for now
+    use_primary_edge_sampling = False,
+    use_secondary_edge_sampling = False)
+
+## Render initial guess
+img = render(1, *scene_args)
+## Save image
+pyredner.imwrite(img.cpu(), 'results/test_medium/init.png')
+## Compute the difference between the target and initial guess
+diff = torch.abs(target - img)
+pyredner.imwrite(diff.cpu(), 'results/test_medium/init_diff.png')
