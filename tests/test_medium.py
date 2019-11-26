@@ -11,24 +11,29 @@ mediums = [pyredner.HomogeneousMedium(\
     g = torch.tensor([0.9])),
     # Second medium
     pyredner.HomogeneousMedium(\
-    sigma_a = torch.tensor([0.001, 0.001, 0.001]),
-    sigma_s = torch.tensor([0.002, 0.002, 0.002]),
+    sigma_a = torch.tensor([0.05, 0.05, 0.05]),
+    sigma_s = torch.tensor([0.1, 0.1, 0.1]),
     g = torch.tensor([0.0]))]
 
-cam = pyredner.Camera(position = torch.tensor([0.0, 0.0, 5.0]),
+cam = pyredner.Camera(position = torch.tensor([0.0, 0.5, 5.0]),
                       look_at = torch.tensor([0.0, 0.0, 0.0]),
                       up = torch.tensor([0.0, 1.0, 0.0]),
-                      fov = torch.tensor([60.0]), # in degree
+                      fov = torch.tensor([70]), # in degree
                       clip_near = 1e-2, # needs to > 0
                       resolution = (256, 256),
-                      medium_id = -1)
+                      medium_id = 1)
 
-mat_red = pyredner.Material(\
+# The materials for the scene - one for the sphere and one for the
+# surrounding planes
+mat_sphere = pyredner.Material(\
     diffuse_reflectance = \
-        torch.tensor([1.0, 0.0, 0.0], device = pyredner.get_device()))
+        torch.tensor([0.07, 0.07, 0.07], device = pyredner.get_device()))
 
-# The material list of the scene
-materials = [mat_red]
+mat_planes = pyredner.Material(\
+    diffuse_reflectance = \
+        torch.tensor([0.6, 0.6, 0.9], device = pyredner.get_device()))
+
+materials = [mat_sphere, mat_planes]
 
 sphere = pyredner.generate_sphere(128, 64)
 shape_sphere = pyredner.Shape(\
@@ -37,13 +42,17 @@ shape_sphere = pyredner.Shape(\
     uvs = sphere[2],
     normals = sphere[3],
     material_id = 0,
-    medium_id = 0)
+    medium_id = -1)
+
+# Manually translating sphere since redner does not seem to support
+# geometric transformations
+shape_sphere.vertices = shape_sphere.vertices + torch.tensor([-1.0, 1.0, 0.0])
 
 shape_light = pyredner.Shape(\
-    vertices = torch.tensor([[-3.0,  1.0,  1.0],
-                             [-3.0,  1.0, -1.0],
-                             [-2.0,  3.0,  1.0],
-                             [-2.0,  3.0, -1.0]],
+    vertices = torch.tensor([[-5.0,  3.0,  1.0],
+                             [-5.0,  3.0, -1.0],
+                             [-4.0,  5.0,  1.0],
+                             [-4.0,  5.0, -1.0]],
                              device = pyredner.get_device()),
     indices = torch.tensor([[0, 1, 2],[1, 3, 2]],
         dtype = torch.int32, device = pyredner.get_device()),
@@ -51,8 +60,47 @@ shape_light = pyredner.Shape(\
     normals = None,
     material_id = 0)
 
-# The shape list of our scene contains two shapes:
-shapes = [shape_sphere, shape_light]
+# Shape describing the floor
+shape_floor = pyredner.Shape(\
+    vertices = torch.tensor([[5.0,  -1.5,  5.0],
+                             [5.0,  -1.5, -5.0],
+                             [-5.0, -1.5, -5.0],
+                             [-5.0, -1.5,  5.0]],
+                             device = pyredner.get_device()),
+    indices = torch.tensor([[0, 1, 2],[0, 2, 3]],
+        dtype = torch.int32, device = pyredner.get_device()),
+    uvs = None,
+    normals = None,
+    material_id = 1)
+
+# Shape describing the backplane
+shape_back = pyredner.Shape(\
+    vertices = torch.tensor([[5.0,  -1.5, -5.0],
+                             [5.0,  5.0,  -5.0],
+                             [-5.0, 5.0,  -5.0],
+                             [-5.0, -1.5, -5.0]],
+                             device = pyredner.get_device()),
+    indices = torch.tensor([[0, 1, 2],[0, 2, 3]],
+        dtype = torch.int32, device = pyredner.get_device()),
+    uvs = None,
+    normals = None,
+    material_id = 1)
+
+# Shape describing the right side of the box
+shape_right = pyredner.Shape(\
+    vertices = torch.tensor([[5.0,  -1.5,  5.0],
+                             [5.0,   5.0,  5.0],
+                             [5.0,   5.0, -5.0],
+                             [5.0, -1.5, -5.0]],
+                             device = pyredner.get_device()),
+    indices = torch.tensor([[0, 1, 2],[0, 2, 3]],
+        dtype = torch.int32, device = pyredner.get_device()),
+    uvs = None,
+    normals = None,
+    material_id = 1)
+
+# The shape list of our scene containing multiple shapes:
+shapes = [shape_sphere, shape_light, shape_floor, shape_back, shape_right]
 
 light = pyredner.AreaLight(shape_id = 1,
                            intensity = torch.tensor([20.0, 20.0, 20.0]))
@@ -74,7 +122,8 @@ scene = pyredner.Scene(cam,
 scene_args = pyredner.RenderFunction.serialize_scene(\
     scene = scene,
     num_samples = 256,
-    max_bounces = 1)
+    max_bounces = 5,
+    sampler_type = redner.SamplerType.sobol)
 
 render = pyredner.RenderFunction.apply
 img = render(0, *scene_args)
