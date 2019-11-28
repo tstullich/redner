@@ -106,18 +106,11 @@ light = pyredner.AreaLight(shape_id = 1,
                            intensity = torch.tensor([10.0, 10.0, 10.0]))
 area_lights = [light]
 
-# TODO Remove this absolute path here
-envmap = pyredner.imread('/home/tim/projects/master/redner/tests/sunsky.exr')
-if pyredner.get_use_gpu():
-    envmap = envmap.cuda(device = pyredner.get_device())
-envmap = pyredner.EnvironmentMap(envmap)
-
 # Finally we construct our scene using all the variables we setup previously.
 scene = pyredner.Scene(cam,
                        shapes,
                        materials,
                        area_lights,
-                       envmap = envmap,
                        mediums = mediums)
 scene_args = pyredner.RenderFunction.serialize_scene(\
     scene = scene,
