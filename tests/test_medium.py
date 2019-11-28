@@ -18,7 +18,7 @@ mediums = [pyredner.HomogeneousMedium(\
 cam = pyredner.Camera(position = torch.tensor([0.0, 0.5, 5.0]),
                       look_at = torch.tensor([0.0, 0.0, 0.0]),
                       up = torch.tensor([0.0, 1.0, 0.0]),
-                      fov = torch.tensor([70]), # in degree
+                      fov = torch.tensor([70.0]), # in degree
                       clip_near = 1e-2, # needs to > 0
                       resolution = (256, 256),
                       medium_id = 1)
@@ -62,10 +62,10 @@ shape_light = pyredner.Shape(\
 
 # Shape describing the floor
 shape_floor = pyredner.Shape(\
-    vertices = torch.tensor([[5.0,  -1.5,  5.0],
-                             [5.0,  -1.5, -5.0],
-                             [-5.0, -1.5, -5.0],
-                             [-5.0, -1.5,  5.0]],
+    vertices = torch.tensor([[7.0,  -1.5,  5.0],
+                             [7.0,  -1.5, -5.0],
+                             [-7.0, -1.5, -5.0],
+                             [-7.0, -1.5,  5.0]],
                              device = pyredner.get_device()),
     indices = torch.tensor([[0, 1, 2],[0, 2, 3]],
         dtype = torch.int32, device = pyredner.get_device()),
@@ -76,9 +76,9 @@ shape_floor = pyredner.Shape(\
 # Shape describing the backplane
 shape_back = pyredner.Shape(\
     vertices = torch.tensor([[5.0,  -1.5, -5.0],
-                             [5.0,  5.0,  -5.0],
-                             [-5.0, 5.0,  -5.0],
-                             [-5.0, -1.5, -5.0]],
+                             [5.0,   6.0, -5.0],
+                             [-6.0,  6.0, -5.0],
+                             [-6.0, -1.5, -5.0]],
                              device = pyredner.get_device()),
     indices = torch.tensor([[0, 1, 2],[0, 2, 3]],
         dtype = torch.int32, device = pyredner.get_device()),
@@ -89,9 +89,9 @@ shape_back = pyredner.Shape(\
 # Shape describing the right side of the box
 shape_right = pyredner.Shape(\
     vertices = torch.tensor([[5.0,  -1.5,  5.0],
-                             [5.0,   5.0,  5.0],
-                             [5.0,   5.0, -5.0],
-                             [5.0, -1.5, -5.0]],
+                             [5.0,   6.0,  5.0],
+                             [5.0,   6.0, -7.0],
+                             [5.0,  -1.5, -7.0]],
                              device = pyredner.get_device()),
     indices = torch.tensor([[0, 1, 2],[0, 2, 3]],
         dtype = torch.int32, device = pyredner.get_device()),
@@ -103,7 +103,7 @@ shape_right = pyredner.Shape(\
 shapes = [shape_sphere, shape_light, shape_floor, shape_back, shape_right]
 
 light = pyredner.AreaLight(shape_id = 1,
-                           intensity = torch.tensor([20.0, 20.0, 20.0]))
+                           intensity = torch.tensor([10.0, 10.0, 10.0]))
 area_lights = [light]
 
 # TODO Remove this absolute path here
