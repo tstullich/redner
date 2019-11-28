@@ -45,6 +45,42 @@ struct Medium {
     union {
         HomogeneousMedium homogeneous;
     };
+
+    DEVICE
+    inline
+    Vector3f get_sigma_a() const {
+        return homogeneous.sigma_a;
+    }
+
+    DEVICE
+    inline
+    void set_sigma_a(const Vector3f &sigma_a) {
+        homogeneous.sigma_a = sigma_a;
+    }
+
+    DEVICE
+    inline
+    Vector3f get_sigma_s() const {
+        return homogeneous.sigma_s;
+    }
+
+    DEVICE
+    inline
+    void set_sigma_s(const Vector3f &sigma_s) {
+        homogeneous.sigma_s = sigma_s;
+    }
+
+    DEVICE
+    inline
+    float get_g() const {
+        return homogeneous.g;
+    }
+
+    DEVICE
+    inline
+    void set_g(const float g) {
+        homogeneous.g = g;
+    }
 };
 
 DEVICE

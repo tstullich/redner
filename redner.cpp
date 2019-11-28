@@ -109,7 +109,13 @@ PYBIND11_MODULE(redner, m) {
 
     py::class_<Medium>(m, "Medium")
         .def(py::init<HomogeneousMedium>())
-        .def_readonly("type", &Medium::type);
+        .def_readonly("type", &Medium::type)
+        .def("get_sigma_a", &Medium::get_sigma_a)
+        .def("set_sigma_a", &Medium::set_sigma_a)
+        .def("get_sigma_s", &Medium::get_sigma_s)
+        .def("set_sigma_s", &Medium::set_sigma_s)
+        .def("get_g", &Medium::get_g)
+        .def("set_g", &Medium::set_g);
 
     py::enum_<MediumType>(m, "medium_type")
         .value("homogeneous", MediumType::homogeneous);

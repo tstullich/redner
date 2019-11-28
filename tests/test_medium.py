@@ -5,23 +5,20 @@ import redner
 pyredner.set_use_gpu(False)
 #pyredner.set_use_gpu(torch.cuda.is_available())
 
-mediums = [pyredner.HomogeneousMedium(\
-    sigma_a = torch.tensor([0.085867, 0.18314, 0.25262]),
-    sigma_s = torch.tensor([0.011002, 0.010927, 0.011036]),
-    g = torch.tensor([0.9])),
-    # Second medium
-    pyredner.HomogeneousMedium(\
+mediums = [ pyredner.HomogeneousMedium(\
     sigma_a = torch.tensor([0.05, 0.05, 0.05]),
     sigma_s = torch.tensor([0.1, 0.1, 0.1]),
-    g = torch.tensor([0.0]))]
+    g = torch.tensor([0.5]))]
 
+# Attach a medium to the camera to get a fog effect throughout
+# the whole scene
 cam = pyredner.Camera(position = torch.tensor([0.0, 0.5, 5.0]),
                       look_at = torch.tensor([0.0, 0.0, 0.0]),
                       up = torch.tensor([0.0, 1.0, 0.0]),
                       fov = torch.tensor([70.0]), # in degree
                       clip_near = 1e-2, # needs to > 0
                       resolution = (256, 256),
-                      medium_id = 1)
+                      medium_id = 0)
 
 # The materials for the scene - one for the sphere and one for the
 # surrounding planes
@@ -99,7 +96,7 @@ shape_right = pyredner.Shape(\
     normals = None,
     material_id = 1)
 
-# The shape list of our scene containing multiple shapes:
+# The shape list of our scene containing multiple shapes
 shapes = [shape_sphere, shape_light, shape_floor, shape_back, shape_right]
 
 light = pyredner.AreaLight(shape_id = 1,
@@ -115,8 +112,7 @@ scene = pyredner.Scene(cam,
 scene_args = pyredner.RenderFunction.serialize_scene(\
     scene = scene,
     num_samples = 256,
-    max_bounces = 5,
-    sampler_type = redner.SamplerType.sobol)
+    max_bounces = 5)
 
 render = pyredner.RenderFunction.apply
 img = render(0, *scene_args)
@@ -129,7 +125,7 @@ if pyredner.get_use_gpu():
 # Perturb the medium for the initial guess
 # Here we set the absorption factor to be optimized
 mediums[0].sigma_a = torch.tensor(\
-    [1.0, 1.0, 1.0],
+    [0.5, 0.5, 0.5],
     device = pyredner.get_device(),
     requires_grad = True)
 
@@ -137,7 +133,7 @@ mediums[0].sigma_a = torch.tensor(\
 scene_args = pyredner.RenderFunction.serialize_scene(\
     scene = scene,
     num_samples = 256,
-    max_bounces = 1,
+    max_bounces = 5,
     # Disable edge sampling for now
     use_primary_edge_sampling = False,
     use_secondary_edge_sampling = False)
@@ -149,3 +145,49 @@ pyredner.imwrite(img.cpu(), 'results/test_medium/init.png')
 ## Compute the difference between the target and initial guess
 diff = torch.abs(target - img)
 pyredner.imwrite(diff.cpu(), 'results/test_medium/init_diff.png')
+
+# Optimize absorption factor of medium inside the sphere
+optimizer = torch.optim.Adam([mediums[0].sigma_a], lr=5e-2)
+# Run Adam for 200 iterations
+for t in range(200):
+    print('iteration:', t)
+    optimizer.zero_grad()
+    # Forward pass to render the image
+    scene_args = pyredner.RenderFunction.serialize_scene(\
+        scene = scene,
+        num_samples = 256,
+        max_bounces = 5,
+        use_primary_edge_sampling = False,
+        use_secondary_edge_sampling = False)
+
+    # Use a different seed per iteration
+    img = render(t + 1, *scene_args)
+    pyredner.imwrite(img.cpu(), 'results/test_medium/iter_{}.png'.format(t))
+
+    # Compute the loss function
+    loss = (img - target).pow(2).sum()
+    print('loss:', loss.item())
+
+    # Backpropagate the gradients
+    loss.backward()
+    # Print the gradients of the absorption factor
+    print('sigma_a:', mediums[0].sigma_a.grad)
+
+    # Take a gradient descent step
+    optimizer.step()
+    # Print the current absorption factor values
+    print('vertices', mediums[0].sigma_a.grad)
+
+# Render final result
+scene_args = pyredner.RenderFunction.serialize_scene(\
+    scene = scene,
+    num_samples = 256,
+    max_bounces = 5,
+    use_primary_edge_sampling = False,
+    use_secondary_edge_sampling = False)
+img = render(202, *scene_args)
+
+# Save the images and diffs
+pyredner.imwrite(img.cpu(), 'results/test_medium/final.exr')
+pyredner.imwrite(img.cpu(), 'results/test_medium/final.png')
+pyredner.imwrite(torch.abs(target - img), 'results/test_medium/final_diff.png')
