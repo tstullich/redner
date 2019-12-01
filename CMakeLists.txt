@@ -11,18 +11,11 @@ else()
     find_package(Python 3.6 COMPONENTS Development REQUIRED)
 endif()
 
-<<<<<<< Updated upstream
 option(REDNER_CUDA "Build redner with GPU code path?" OFF)
 
 if(REDNER_CUDA)
     message(STATUS "Build with CUDA support")
     find_package(CUDA 10 REQUIRED)
-=======
-find_package(CUDA 10)
-set(CUDA_FOUND FALSE)
-if(CUDA_FOUND)
-    find_package(OptiX REQUIRED)
->>>>>>> Stashed changes
 else()
     message(STATUS "Build without CUDA support")
     find_package(Thrust REQUIRED)
@@ -164,37 +157,18 @@ if(REDNER_CUDA)
         ${CMAKE_SOURCE_DIR}/redner-dependencies/optix/lib64/liboptix_prime.so.6.5.0
         ${DYNAMIC_LOOKUP})
 else()
-<<<<<<< HEAD
-if (NOT WIN32)
-    add_library(redner MODULE ${SRCS})
-
-    # The "-undefined dynamic_lookup" is a hack for systems with
-    # multiple Python installed. If we link a particular Python version
-    # here, and we import it with a different Python version later.
-    # likely a segmentation fault.
-    # The solution for Linux/Mac OS machines, as mentioned in
-    # https://github.com/pybind/pybind11/blob/master/tools/pybind11Tools.cmake
-    # is to not link against Python library at all and resolve the symbols
-    # at compile time.
-    if(NOT EMBREE_FOUND)
-        target_link_libraries(redner
-            embree
-            ${DYNAMIC_LOOKUP})
-    else()
-=======
     # No CUDA
     if (NOT WIN32)
         add_library(redner MODULE ${SRCS})
-    
+
         # The "-undefined dynamic_lookup" is a hack for systems with
         # multiple Python installed. If we link a particular Python version
         # here, and we import it with a different Python version later.
         # likely a segmentation fault.
-        # The solution for Linux/Mac OS machines, as mentioned in 
+        # The solution for Linux/Mac OS machines, as mentioned in
         # https://github.com/pybind/pybind11/blob/master/tools/pybind11Tools.cmake
         # is to not link against Python library at all and resolve the symbols
         # at compile time.
->>>>>>> 1f0704316055cda7a3ec4db0ca0b3d51e138ab48
         target_link_libraries(redner
             ${EMBREE_LIBRARY}
             ${DYNAMIC_LOOKUP})
