@@ -11,11 +11,18 @@ else()
     find_package(Python 3.6 COMPONENTS Development REQUIRED)
 endif()
 
+<<<<<<< Updated upstream
 option(REDNER_CUDA "Build redner with GPU code path?" OFF)
 
 if(REDNER_CUDA)
     message(STATUS "Build with CUDA support")
     find_package(CUDA 10 REQUIRED)
+=======
+find_package(CUDA 10)
+set(CUDA_FOUND FALSE)
+if(CUDA_FOUND)
+    find_package(OptiX REQUIRED)
+>>>>>>> Stashed changes
 else()
     message(STATUS "Build without CUDA support")
     find_package(Thrust REQUIRED)
