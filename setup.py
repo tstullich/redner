@@ -128,13 +128,24 @@ if sys.platform == 'darwin':
     openexr_lib_dir = 'redner-dependencies/openexr/lib-macos'
 elif sys.platform == 'linux':
     openexr_lib_dir = 'redner-dependencies/openexr/lib-linux'
-openexr_link_args = [os.path.join(openexr_lib_dir, 'libIex-2_3_s.a'),
-                     os.path.join(openexr_lib_dir, 'libIexMath-2_3_s.a'),
-                     os.path.join(openexr_lib_dir, 'libHalf-2_3_s.a'),
-                     os.path.join(openexr_lib_dir, 'libImath-2_3_s.a'),
-                     os.path.join(openexr_lib_dir, 'libIlmImf-2_3_s.a'),
-                     os.path.join(openexr_lib_dir, 'libIlmImfUtil-2_3_s.a'),
-                     os.path.join(openexr_lib_dir, 'libIlmThread-2_3_s.a')]
+openexr_link_args = []
+if sys.platform == 'darwin':
+    openexr_link_args += ['-Wl,-all_load']
+elif sys.platform == 'linux':
+    openexr_link_args += ['-Wl,--whole-archive']
+openexr_link_args += [os.path.join(openexr_lib_dir, 'libHalf-2_3_s.a'),
+                      os.path.join(openexr_lib_dir, 'libIex-2_3_s.a'),
+                      os.path.join(openexr_lib_dir, 'libIexMath-2_3_s.a'),
+                      os.path.join(openexr_lib_dir, 'libImath-2_3_s.a'),
+                      os.path.join(openexr_lib_dir, 'libIlmImf-2_3_s.a'),
+                      os.path.join(openexr_lib_dir, 'libIlmImfUtil-2_3_s.a'),
+                      os.path.join(openexr_lib_dir, 'libIlmThread-2_3_s.a')]
+if sys.platform == 'darwin':
+    openexr_link_args += ['-Wl,-noall_load']
+elif sys.platform == 'linux':
+    openexr_link_args += [os.path.join(openexr_lib_dir, 'libz.a')]
+    openexr_link_args += ['-Wl,--no-whole-archive']
+
 openexr_libraries = []
 if sys.platform == 'darwin':
     # OS X has zlib by default, link to it.
@@ -156,13 +167,13 @@ elif sys.platform == 'linux':
     dynamic_libraries.append('redner-dependencies/embree/lib-linux/libtbb.so.2')
     dynamic_libraries.append('redner-dependencies/embree/lib-linux/libtbbmalloc.so.2')
     if build_with_cuda:
-        dynamic_libraries.append('redner-dependencies/optix/lib64/liboptix_prime.so.6.5.0')
+        dynamic_libraries.append('redner-dependencies/optix/lib64/liboptix_prime.so.1')
 
 project_name = 'redner'
 if 'PROJECT_NAME' in os.environ:
     project_name = os.environ['PROJECT_NAME']
 setup(name = project_name,
-      version = '0.0.3',
+      version = '0.0.5',
       description = 'A differentiable Monte Carlo ray tracer.',
       author = 'Tzu-Mao Li',
       license = 'MIT',
@@ -180,4 +191,3 @@ setup(name = project_name,
       cmdclass = dict(build_ext=Build, install=RemoveOldRednerBeforeInstall),
       install_requires = ['scikit-image'],
       zip_safe = False)
-
