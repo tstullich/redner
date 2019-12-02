@@ -135,7 +135,7 @@ class RenderFunction(torch.autograd.Function):
             args.append(material.specular_reflectance.uv_scale)
             args.append(material.roughness.mipmap)
             args.append(material.roughness.uv_scale)
-            if material.generic_texture is not None:            
+            if material.generic_texture is not None:
                 assert(torch.isfinite(material.generic_texture.mipmap).all())
                 assert(torch.isfinite(material.generic_texture.uv_scale).all())
                 args.append(material.generic_texture.mipmap)
@@ -893,14 +893,17 @@ class RenderFunction(torch.autograd.Function):
         for d_m in d_mediums:
             ret_list.append(None) # type
             if d_m.type == redner.medium_type.homogeneous:
-                sigma_a = torch.tensor((d_m.sigma_a.x, d_m.sigma_a.y, d_m.sigma_a.z),
+                d_sigma_a = d_m.get_sigma_a()
+                d_sigma_s = d_m.get_sigma_s()
+                d_g = d_m.get_g()
+                sigma_a = torch.tensor((d_sigma_a.x, d_sigma_a.y, d_sigma_a.z),
                                        dtype = torch.float32, device = pyredner.get_device())
-                sigma_s = torch.tensor((d_m.sigma_s.x, d_m.sigma_s.y, d_m.sigma_s.z),
+                sigma_s = torch.tensor((d_sigma_s.x, d_sigma_s.y, d_sigma_s.z),
                                        dtype = torch.float32, device = pyredner.get_device())
-                g = torch.tensor(d_m.g, dtype = torch.float32, device = pyredner.get_device())
-                ret_list.append(sigma_a)
-                ret_list.append(sigma_s)
-                ret_list.append(g)
+                g = torch.tensor(d_g, dtype = torch.float32, device = pyredner.get_device())
+                ret_list.append(sigma_a) # sigma_a
+                ret_list.append(sigma_s) # sigma_s
+                ret_list.append(g) # g - phase function scattering
             else:
                 assert(False)
 
