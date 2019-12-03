@@ -236,6 +236,7 @@ struct d_path_contribs_accumulator {
         const auto &light_isect = light_isects[pixel_id];
         const auto &light_ray = light_rays[pixel_id];
         const auto &min_rough = min_roughness[pixel_id];
+        const auto &medium_isect = medium_isects[pixel_id];
 
         auto &d_throughput = d_throughputs[pixel_id];
         auto &d_incoming_ray = d_incoming_rays[pixel_id];
@@ -280,7 +281,7 @@ struct d_path_contribs_accumulator {
                 auto wo = dir / sqrt(dist_sq);
                 if (light_shape.light_id >= 0) {
                     const auto &light = scene.area_lights[light_shape.light_id];
-                    if (light.two_sided || dot(-wo, light_point.shading_frame.n) > 0) {
+                    if (medium_isect.medium_id < 0 && (light.two_sided || dot(-wo, light_point.shading_frame.n) > 0)) { // TODO Remove medium_isect
                         Vector3 d_light_vertices[3] = {
                             Vector3{0, 0, 0}, Vector3{0, 0, 0}, Vector3{0, 0, 0}};
 
@@ -377,39 +378,50 @@ struct d_path_contribs_accumulator {
                         Vector3{0, 0, 0}, Vector3{0, 0, 0},
                         Vector3{0, 0, 0}, Vector3{0, 0, 0}};
                     auto light_contrib = envmap_eval(*scene.envmap, wo, ray_diff);
-                    auto pdf_bsdf = bsdf_pdf(material, shading_point, wi, wo, min_rough);
-                    auto mis_weight = Real(1 / (1 + square((double)pdf_bsdf / (double)pdf_nee)));
-                    auto nee_contrib = (mis_weight / pdf_nee) * bsdf_val * light_contrib;
+                    //if (false && medium_isect.medium_id >= 0) {
+                    //    // Compute the phase function PDF instead of the BSDF
+                    //    // if we are inside of a medium.
+                    //    auto pdf_phase = phase_function(
+                    //        get_phase_function(scene.mediums[medium_isect.medium_id]),
+                    //        wo, wi);
+                    //    auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
+                    //    nee_contrib = (mis_weight / pdf_nee) * light_contrib * nee_transmittances[pixel_id];
+                    //} else {
+                        auto pdf_bsdf = bsdf_pdf(material, shading_point, wi, wo, min_rough);
+                        auto mis_weight = Real(1 / (1 + square((double)pdf_bsdf / (double)pdf_nee)));
+                        auto nee_contrib = (mis_weight / pdf_nee) * bsdf_val * light_contrib;
 
-                    // path_contrib = throughput * (nee_contrib + scatter_contrib)
-                    auto d_nee_contrib = d_path_contrib * throughput;
-                    d_throughput += d_path_contrib * nee_contrib;
+                        // path_contrib = throughput * (nee_contrib + scatter_contrib)
+                        auto d_nee_contrib = d_path_contrib * throughput;
+                        d_throughput += d_path_contrib * nee_contrib;
 
-                    auto weight = mis_weight / pdf_nee;
-                    // nee_contrib = weight * bsdf_val * light_contrib
-                    // Ignore derivatives of MIS weight & pdf
-                    auto d_bsdf_val = weight * d_nee_contrib * light_contrib;
-                    auto d_light_contrib = weight * d_nee_contrib * bsdf_val;
-                    auto d_wo = Vector3{0, 0, 0};
-                    auto d_ray_diff = RayDifferential{
-                        Vector3{0, 0, 0}, Vector3{0, 0, 0},
-                        Vector3{0, 0, 0}, Vector3{0, 0, 0}};
-                    // light_contrib = eval_envmap(*scene.envmap, wo, ray_diff)
-                    d_envmap_eval(*scene.envmap, wo, ray_diff, d_light_contrib,
-                        *d_envmap, d_wo, d_ray_diff);
-                    // bsdf_val = bsdf(material, shading_point, wi, wo, min_rough)
-                    auto d_wi = Vector3{0, 0, 0};
-                    d_bsdf(material, shading_point, wi, wo, min_rough, d_bsdf_val,
-                        d_material, d_shading_point, d_wi, d_wo);
-                    // wi = -incoming_ray.dir
-                    d_incoming_ray.dir -= d_wi;
+                        auto weight = mis_weight / pdf_nee;
+                        // nee_contrib = weight * bsdf_val * light_contrib
+                        // Ignore derivatives of MIS weight & pdf
+                        auto d_bsdf_val = weight * d_nee_contrib * light_contrib;
+                        auto d_light_contrib = weight * d_nee_contrib * bsdf_val;
+                        auto d_wo = Vector3{0, 0, 0};
+                        auto d_ray_diff = RayDifferential{
+                            Vector3{0, 0, 0}, Vector3{0, 0, 0},
+                            Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+                        // light_contrib = eval_envmap(*scene.envmap, wo, ray_diff)
+                        d_envmap_eval(*scene.envmap, wo, ray_diff, d_light_contrib,
+                            *d_envmap, d_wo, d_ray_diff);
+                        // bsdf_val = bsdf(material, shading_point, wi, wo, min_rough)
+                        auto d_wi = Vector3{0, 0, 0};
+                        d_bsdf(material, shading_point, wi, wo, min_rough, d_bsdf_val,
+                            d_material, d_shading_point, d_wi, d_wo);
+                        // wi = -incoming_ray.dir
+                        d_incoming_ray.dir -= d_wi;
+                    //}
                 }
             }
         }
 
-        // BSDF importance sampling
+        // BSDF or phase importance sampling
         const auto &bsdf_isect = bsdf_isects[pixel_id];
-        if (bsdf_isect.valid()) {
+        if (bsdf_isect.valid() && medium_isect.medium_id < 0) { // TODO Fix this. Only there to not cause segfaults
+            // We hit a surface
             const auto &bsdf_shape = scene.shapes[bsdf_isect.shape_id];
             // const auto &bsdf_sample = bsdf_samples[pixel_id];
             const auto &bsdf_point = bsdf_points[pixel_id];
