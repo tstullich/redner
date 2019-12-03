@@ -20,7 +20,7 @@ RUN conda install -y \
         python=3.7 \
         pytorch \
         pybind11 \
-        tensorflow-gpu=1.14.0 \
+        tensorflow-gpu \
         scikit-image \
     && conda clean -ya
 
@@ -34,7 +34,7 @@ RUN chmod -R a+w /app
 # Build wheels and install
 WORKDIR /app
 RUN if [ -d "build" ]; then rm -rf build; fi \
-    && PROJECT_NAME=redner-gpu python -m pip wheel -w /dist --verbose . \
+    && REDNER_CUDA=1 PROJECT_NAME=redner-gpu python -m pip wheel -w /dist --verbose . \
     && conda run python -m pip install /dist/redner*.whl
 
 #-----------------------------------------------------
@@ -43,22 +43,17 @@ RUN conda create -n py36 python=3.6 \
     && conda run -n py36 conda install -y \
         pytorch \
         pybind11 \
-        tensorflow-gpu=1.14.0 \
+        tensorflow-gpu \
         scikit-image \
     && conda clean -ya
 
 #-----------------------------------------------------
-# Build wheels
+# Build wheels and convert
 WORKDIR /app
 RUN if [ -d "build" ]; then rm -rf build; fi \
-    && PROJECT_NAME=redner-gpu conda run -n py36 python -m pip wheel -w /dist --verbose .
-
-#-----------------------------------------------------
-# Convert the wheels to manylinux formats
-RUN for f in /dist/redner*-linux_*.whl; \
+    && REDNER_CUDA=1 PROJECT_NAME=redner-gpu conda run -n py36 python -m pip wheel -w /dist --verbose . \
+    && for f in /dist/redner*-linux_*.whl; \
     do \
       auditwheel repair "$f" -w /dist; \
     done
-
-RUN conda run python -m pip install twine
 
