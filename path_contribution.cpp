@@ -231,8 +231,8 @@ struct d_path_contribs_accumulator {
         const auto &incoming_ray = incoming_rays[pixel_id];
         // const auto &incoming_ray_differential = incoming_ray_differentials[pixel_id];
         const auto &bsdf_ray_differential = bsdf_ray_differentials[pixel_id];
-        const auto &shading_isect = surface_isects[pixel_id];
-        const auto &shading_point = surface_points[pixel_id];
+        const auto &surface_isect = surface_isects[pixel_id];
+        const auto &surface_point = surface_points[pixel_id];
         const auto &light_isect = light_isects[pixel_id];
         const auto &light_ray = light_rays[pixel_id];
         const auto &min_rough = min_roughness[pixel_id];
@@ -244,12 +244,12 @@ struct d_path_contribs_accumulator {
         auto &d_shading_point = d_shading_points[pixel_id];
 
         auto wi = -incoming_ray.dir;
-        auto p = shading_point.position;
+        auto p = surface_point.position;
         if (medium_isect.medium_id >= 0) {
             p = medium_points[pixel_id];
         }
 
-        const auto &shading_shape = scene.shapes[shading_isect.shape_id];
+        const auto &shading_shape = scene.shapes[surface_isect.shape_id];
         const auto &material = scene.materials[shading_shape.material_id];
 
         auto &d_material = d_materials[shading_shape.material_id];
@@ -308,9 +308,9 @@ struct d_path_contribs_accumulator {
                                 (mis_weight * geometry_term / pdf_nee) * light_contrib * nee_transmittances[pixel_id];
                         } else {
                             // Compute the BSDF pdf and everything associated with it
-                            auto bsdf_val = bsdf(material, shading_point, wi, wo, min_rough);
+                            auto bsdf_val = bsdf(material, surface_point, wi, wo, min_rough);
                             auto pdf_bsdf =
-                                bsdf_pdf(material, shading_point, wi, wo, min_rough) * geometry_term;
+                                bsdf_pdf(material, surface_point, wi, wo, min_rough) * geometry_term;
                             auto mis_weight = Real(1 / (1 + square((double)pdf_bsdf / (double)pdf_nee)));
 
                             nee_contrib = (mis_weight * geometry_term / pdf_nee) *
@@ -350,7 +350,7 @@ struct d_path_contribs_accumulator {
                             d_light_point.geom_normal = d_cos_light * wo;
                             // bsdf_val = bsdf(material, shading_point, wi, wo)
                             auto d_wi = Vector3{0, 0, 0};
-                            d_bsdf(material, shading_point, wi, wo, min_rough, d_bsdf_val,
+                            d_bsdf(material, surface_point, wi, wo, min_rough, d_bsdf_val,
                                 d_material, d_shading_point, d_wi, d_wo);
                             // wo = dir / sqrt(dist_sq)
                             auto d_dir = d_wo / sqrt(dist_sq);
@@ -402,8 +402,8 @@ struct d_path_contribs_accumulator {
                         auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
                         nee_contrib = (mis_weight / pdf_nee) * light_contrib * nee_transmittances[pixel_id];
                     } else {
-                        auto bsdf_val = bsdf(material, shading_point, wi, wo, min_rough);
-                        auto pdf_bsdf = bsdf_pdf(material, shading_point, wi, wo, min_rough);
+                        auto bsdf_val = bsdf(material, surface_point, wi, wo, min_rough);
+                        auto pdf_bsdf = bsdf_pdf(material, surface_point, wi, wo, min_rough);
                         auto mis_weight = Real(1 / (1 + square((double)pdf_bsdf / (double)pdf_nee)));
                         auto nee_contrib = (mis_weight / pdf_nee) * bsdf_val * light_contrib;
 
@@ -425,7 +425,7 @@ struct d_path_contribs_accumulator {
                             *d_envmap, d_wo, d_ray_diff);
                         // bsdf_val = bsdf(material, shading_point, wi, wo, min_rough)
                         auto d_wi = Vector3{0, 0, 0};
-                        d_bsdf(material, shading_point, wi, wo, min_rough, d_bsdf_val,
+                        d_bsdf(material, surface_point, wi, wo, min_rough, d_bsdf_val,
                             d_material, d_shading_point, d_wi, d_wo);
                         // wi = -incoming_ray.dir
                         d_incoming_ray.dir -= d_wi;
@@ -436,7 +436,8 @@ struct d_path_contribs_accumulator {
 
         // BSDF or phase importance sampling
         const auto &bsdf_isect = bsdf_isects[pixel_id];
-        if (bsdf_isect.valid() && medium_isect.medium_id < 0) { // TODO Fix this. Only there to not cause segfaults
+        auto scatter_contrib = Vector3{0, 0, 0};
+        if (bsdf_isect.valid()) {
             // We hit a surface
             const auto &bsdf_shape = scene.shapes[bsdf_isect.shape_id];
             // const auto &bsdf_sample = bsdf_samples[pixel_id];
@@ -450,14 +451,48 @@ struct d_path_contribs_accumulator {
             auto dir = bsdf_point.position - p;
             auto dist_sq = length_squared(dir);
             auto wo = dir / sqrt(dist_sq);
-            auto pdf_bsdf = bsdf_pdf(material, shading_point, wi, wo, min_rough);
+            auto directional_val = Vector3{1, 1, 1};
+            auto directional_pdf = Real(1);
+            if (medium_isect.medium_id >= 0) {
+                // Inside a medium
+                directional_pdf = phase_function_pdf(
+                    get_phase_function(scene.mediums[medium_isect.medium_id]),
+                    wo, wi);
+                // Perfect importance sampling
+                directional_val = Vector3{directional_pdf, directional_pdf, directional_pdf};
+            } else {
+                // On a surface
+                const auto &surface_shape = scene.shapes[surface_isect.shape_id];
+                const auto &material = scene.materials[surface_shape.material_id];
+                directional_pdf = bsdf_pdf(material, surface_point, wi, wo, min_rough);
+                if (directional_pdf > 1e-20f) {
+                    directional_val = bsdf(material, surface_point, wi, wo, min_rough);
+                }
+            }
+            if (directional_pdf > 1e-20f) {
+                if (bsdf_shape.light_id >= 0) {
+                    const auto &light = scene.area_lights[bsdf_shape.light_id];
+                    if (light.two_sided || dot(-wo, bsdf_point.shading_frame.n) > 0) {
+                        auto light_contrib = light.intensity;
+                        auto light_pmf = scene.light_pmf[bsdf_shape.light_id];
+                        auto light_area = scene.light_areas[bsdf_shape.light_id];
+                        auto inv_area = 1 / light_area;
+                        auto geometry_term = fabs(dot(wo, bsdf_point.geom_normal)) / dist_sq;
+                        auto pdf_nee = (light_pmf * inv_area) / geometry_term;
+                        auto mis_weight = Real(1 / (1 + square((double)pdf_nee / (double)directional_pdf)));
+                        scatter_contrib = (mis_weight / directional_pdf) * directional_val * light_contrib;
+                    }
+                }
+            }
+
+            auto pdf_bsdf = bsdf_pdf(material, surface_point, wi, wo, min_rough);
             if (pdf_bsdf > 0) {
                 Vector3 d_bsdf_v_p[3] = {Vector3{0, 0, 0}, Vector3{0, 0, 0}, Vector3{0, 0, 0}};
                 Vector3 d_bsdf_v_n[3] = {Vector3{0, 0, 0}, Vector3{0, 0, 0}, Vector3{0, 0, 0}};
                 Vector2 d_bsdf_v_uv[3] = {Vector2{0, 0}, Vector2{0, 0}};
                 Vector3 d_bsdf_v_c[3] = {Vector3{0, 0, 0}, Vector3{0, 0, 0}, Vector3{0, 0, 0}};
 
-                auto bsdf_val = bsdf(material, shading_point, wi, wo, min_rough);
+                auto bsdf_val = bsdf(material, surface_point, wi, wo, min_rough);
                 auto scatter_bsdf = bsdf_val / pdf_bsdf;
 
                 // next_throughput = throughput * scatter_bsdf
@@ -510,7 +545,7 @@ struct d_path_contribs_accumulator {
                 // d_bsdf_pdf(material, shading_point, wi, wo, min_rough, d_pdf_bsdf,
                 //            d_roughness_tex, d_shading_point, d_wi, d_wo);
                 // bsdf_val = bsdf(material, shading_point, wi, wo)
-                d_bsdf(material, shading_point, wi, wo, min_rough, d_bsdf_val,
+                d_bsdf(material, surface_point, wi, wo, min_rough, d_bsdf_val,
                        d_material, d_shading_point, d_wi, d_wo);
 
                 // wo = dir / sqrt(dist_sq)
@@ -532,7 +567,7 @@ struct d_path_contribs_accumulator {
                     Vector3{0, 0, 0}, Vector3{0, 0, 0}};
                 d_intersect_shape(bsdf_shape,
                                   bsdf_isect.tri_id,
-                                  Ray{shading_point.position, wo},
+                                  Ray{surface_point.position, wo},
                                   bsdf_ray_differential,
                                   d_bsdf_point,
                                   d_next_ray_differential,
@@ -617,10 +652,10 @@ struct d_path_contribs_accumulator {
             const auto &bsdf_ray = bsdf_rays[pixel_id];
 
             auto wo = bsdf_ray.dir;
-            auto pdf_bsdf = bsdf_pdf(material, shading_point, wi, wo, min_rough);
+            auto pdf_bsdf = bsdf_pdf(material, surface_point, wi, wo, min_rough);
             // wo can be zero if bsdf_sample fails
             if (length_squared(wo) > 0 && pdf_bsdf > 0) {
-                auto bsdf_val = bsdf(material, shading_point, wi, wo, min_rough);
+                auto bsdf_val = bsdf(material, surface_point, wi, wo, min_rough);
                 auto ray_diff = RayDifferential{
                     Vector3{0, 0, 0}, Vector3{0, 0, 0},
                     Vector3{0, 0, 0}, Vector3{0, 0, 0}};
@@ -656,7 +691,7 @@ struct d_path_contribs_accumulator {
                               *d_envmap, d_wo, d_ray_diff);
                 auto d_wi = Vector3{0, 0, 0};
                 // bsdf_val = bsdf(material, shading_point, wi, wo)
-                d_bsdf(material, shading_point, wi, wo, min_rough, d_bsdf_val,
+                d_bsdf(material, surface_point, wi, wo, min_rough, d_bsdf_val,
                        d_material, d_shading_point, d_wi, d_wo);
 
                 // pdf_bsdf = bsdf_pdf(material, shading_point, wi, wo, min_rough)
