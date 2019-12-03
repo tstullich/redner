@@ -20,7 +20,7 @@ RUN conda install -y \
         python=3.7 \
         pytorch-cpu \
         pybind11 \
-        tensorflow=1.14.0 \
+        tensorflow \
         scikit-image \
     && conda clean -ya
 
@@ -43,24 +43,17 @@ RUN conda create -n py36 python=3.6 \
     && conda run -n py36 conda install -y \
         pytorch-cpu \
         pybind11 \
-        tensorflow=1.14.0 \
+        tensorflow \
         scikit-image \
     && conda clean -ya
 
 #-----------------------------------------------------
-# Build wheels
+# Build wheels and convert
 WORKDIR /app
 RUN if [ -d "build" ]; then rm -rf build; fi \
-    && conda run -n py36 python -m pip wheel -w /dist --verbose .
-
-#-----------------------------------------------------
-# Convert the wheels to manylinux formats
-RUN for f in /dist/redner*-linux_*.whl; \
+    && conda run -n py36 python -m pip wheel -w /dist --verbose . \
+    && for f in /dist/redner*-linux_*.whl; \
     do \
       auditwheel repair "$f" -w /dist; \
     done
-
-#-----------------------------------------------------
-# Install twine for uploading the wheel
-RUN python -m pip install twine
 
