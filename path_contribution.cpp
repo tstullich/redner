@@ -245,6 +245,10 @@ struct d_path_contribs_accumulator {
 
         auto wi = -incoming_ray.dir;
         auto p = shading_point.position;
+        if (medium_isect.medium_id >= 0) {
+            p = medium_points[pixel_id];
+        }
+
         const auto &shading_shape = scene.shapes[shading_isect.shape_id];
         const auto &material = scene.materials[shading_shape.material_id];
 
@@ -269,6 +273,7 @@ struct d_path_contribs_accumulator {
         d_shading_point = SurfacePoint::zero();
 
         // Next event estimation
+        auto nee_contrib = Vector3{0, 0, 0};
         if (light_ray.tmax >= 0) { // tmax < 0 means the ray is blocked
             if (light_isect.valid()) {
                 // Area light
@@ -281,11 +286,9 @@ struct d_path_contribs_accumulator {
                 auto wo = dir / sqrt(dist_sq);
                 if (light_shape.light_id >= 0) {
                     const auto &light = scene.area_lights[light_shape.light_id];
-                    if (medium_isect.medium_id < 0 && (light.two_sided || dot(-wo, light_point.shading_frame.n) > 0)) { // TODO Remove medium_isect
+                    if (light.two_sided || dot(-wo, light_point.shading_frame.n) > 0) {
                         Vector3 d_light_vertices[3] = {
                             Vector3{0, 0, 0}, Vector3{0, 0, 0}, Vector3{0, 0, 0}};
-
-                        auto bsdf_val = bsdf(material, shading_point, wi, wo, min_rough);
                         auto cos_light = dot(wo, light_point.geom_normal);
                         auto geometry_term = fabs(cos_light) / dist_sq;
                         const auto &light = scene.area_lights[light_shape.light_id];
@@ -294,74 +297,87 @@ struct d_path_contribs_accumulator {
                         auto light_area = scene.light_areas[light_shape.light_id];
                         auto inv_area = 1 / light_area;
                         auto pdf_nee = light_pmf * inv_area;
-                        auto pdf_bsdf =
-                            bsdf_pdf(material, shading_point, wi, wo, min_rough) * geometry_term;
-                        auto mis_weight = Real(1 / (1 + square((double)pdf_bsdf / (double)pdf_nee)));
 
-                        auto nee_contrib = (mis_weight * geometry_term / pdf_nee) *
+                        if (medium_isect.medium_id >= 0) {
+                            // Compute the phase function pdf
+                            auto pdf_phase = phase_function_pdf(
+                                get_phase_function(scene.mediums[medium_isect.medium_id]),
+                                wo, wi);
+                            auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
+                            nee_contrib =
+                                (mis_weight * geometry_term / pdf_nee) * light_contrib * nee_transmittances[pixel_id];
+                        } else {
+                            // Compute the BSDF pdf and everything associated with it
+                            auto bsdf_val = bsdf(material, shading_point, wi, wo, min_rough);
+                            auto pdf_bsdf =
+                                bsdf_pdf(material, shading_point, wi, wo, min_rough) * geometry_term;
+                            auto mis_weight = Real(1 / (1 + square((double)pdf_bsdf / (double)pdf_nee)));
+
+                            nee_contrib = (mis_weight * geometry_term / pdf_nee) *
                                             bsdf_val * light_contrib;
 
-                        // path_contrib = throughput * (nee_contrib + scatter_contrib)
-                        auto d_nee_contrib = d_path_contrib * throughput;
-                        d_throughput += d_path_contrib * nee_contrib;
+                            // path_contrib = throughput * (nee_contrib + scatter_contrib)
+                            auto d_nee_contrib = d_path_contrib * throughput;
+                            d_throughput += d_path_contrib * nee_contrib;
 
-                        auto weight = mis_weight / pdf_nee;
-                        // nee_contrib = (weight * geometry_term) *
-                        //                bsdf_val * light_contrib
-                        // Ignore derivatives of MIS weight & PMF
-                        auto d_weight = geometry_term *
-                            sum(d_nee_contrib * bsdf_val * light_contrib);
-                        // weight = mis_weight / pdf_nee
-                        auto d_pdf_nee = -d_weight * weight / pdf_nee;
-                        // nee_contrib = (weight * geometry_term) *
-                        //                bsdf_val * light_contrib
-                        auto d_geometry_term = weight * sum(d_nee_contrib * bsdf_val * light_contrib);
-                        auto d_bsdf_val = weight * d_nee_contrib * geometry_term * light_contrib;
-                        auto d_light_contrib = weight * d_nee_contrib * geometry_term * bsdf_val;
-                        // pdf_nee = light_pmf / light_area
-                        //         = light_pmf * tri_pmf / tri_area
-                        auto d_area =
-                            -d_pdf_nee * pdf_nee / get_area(light_shape, light_isect.tri_id);
-                        d_get_area(light_shape, light_isect.tri_id, d_area, d_light_vertices);
-                        // light_contrib = light.intensity
-                        atomic_add(d_area_lights[light_shape.light_id].intensity, d_light_contrib);
-                        // geometry_term = fabs(cos_light) / dist_sq
-                        auto d_cos_light = cos_light > 0 ?
-                            d_geometry_term / dist_sq : -d_geometry_term / dist_sq;
-                        auto d_dist_sq = -d_geometry_term * geometry_term / dist_sq;
-                        // cos_light = dot(wo, light_point.geom_normal)
-                        auto d_wo = d_cos_light * light_point.geom_normal;
-                        auto d_light_point = SurfacePoint::zero();
-                        d_light_point.geom_normal = d_cos_light * wo;
-                        // bsdf_val = bsdf(material, shading_point, wi, wo)
-                        auto d_wi = Vector3{0, 0, 0};
-                        d_bsdf(material, shading_point, wi, wo, min_rough, d_bsdf_val,
-                               d_material, d_shading_point, d_wi, d_wo);
-                        // wo = dir / sqrt(dist_sq)
-                        auto d_dir = d_wo / sqrt(dist_sq);
-                        // sqrt(dist_sq)
-                        auto d_sqrt_dist_sq = -sum(d_wo * dir) / dist_sq;
-                        d_dist_sq += (0.5f * d_sqrt_dist_sq / sqrt(dist_sq));
-                        // dist_sq = length_squared(dir)
-                        d_dir += d_length_squared(dir, d_dist_sq);
-                        // dir = light_point.position - p
-                        d_light_point.position += d_dir;
-                        d_shading_point.position -= d_dir;
-                        // wi = -incoming_ray.dir
-                        d_incoming_ray.dir -= d_wi;
+                            auto weight = mis_weight / pdf_nee;
+                            // nee_contrib = (weight * geometry_term) *
+                            //                bsdf_val * light_contrib
+                            // Ignore derivatives of MIS weight & PMF
+                            auto d_weight = geometry_term *
+                                sum(d_nee_contrib * bsdf_val * light_contrib);
+                            // weight = mis_weight / pdf_nee
+                            auto d_pdf_nee = -d_weight * weight / pdf_nee;
+                            // nee_contrib = (weight * geometry_term) *
+                            //                bsdf_val * light_contrib
+                            auto d_geometry_term = weight * sum(d_nee_contrib * bsdf_val * light_contrib);
+                            auto d_bsdf_val = weight * d_nee_contrib * geometry_term * light_contrib;
+                            auto d_light_contrib = weight * d_nee_contrib * geometry_term * bsdf_val;
+                            // pdf_nee = light_pmf / light_area
+                            //         = light_pmf * tri_pmf / tri_area
+                            auto d_area =
+                                -d_pdf_nee * pdf_nee / get_area(light_shape, light_isect.tri_id);
+                            d_get_area(light_shape, light_isect.tri_id, d_area, d_light_vertices);
+                            // light_contrib = light.intensity
+                            atomic_add(d_area_lights[light_shape.light_id].intensity, d_light_contrib);
+                            // geometry_term = fabs(cos_light) / dist_sq
+                            auto d_cos_light = cos_light > 0 ?
+                                d_geometry_term / dist_sq : -d_geometry_term / dist_sq;
+                            auto d_dist_sq = -d_geometry_term * geometry_term / dist_sq;
+                            // cos_light = dot(wo, light_point.geom_normal)
+                            auto d_wo = d_cos_light * light_point.geom_normal;
+                            auto d_light_point = SurfacePoint::zero();
+                            d_light_point.geom_normal = d_cos_light * wo;
+                            // bsdf_val = bsdf(material, shading_point, wi, wo)
+                            auto d_wi = Vector3{0, 0, 0};
+                            d_bsdf(material, shading_point, wi, wo, min_rough, d_bsdf_val,
+                                d_material, d_shading_point, d_wi, d_wo);
+                            // wo = dir / sqrt(dist_sq)
+                            auto d_dir = d_wo / sqrt(dist_sq);
+                            // sqrt(dist_sq)
+                            auto d_sqrt_dist_sq = -sum(d_wo * dir) / dist_sq;
+                            d_dist_sq += (0.5f * d_sqrt_dist_sq / sqrt(dist_sq));
+                            // dist_sq = length_squared(dir)
+                            d_dir += d_length_squared(dir, d_dist_sq);
+                            // dir = light_point.position - p
+                            d_light_point.position += d_dir;
+                            d_shading_point.position -= d_dir;
+                            // wi = -incoming_ray.dir
+                            d_incoming_ray.dir -= d_wi;
 
-                        // sample point on light
-                        d_sample_shape(light_shape, light_isect.tri_id,
-                            light_sample.uv, d_light_point, d_light_vertices);
+                            // sample point on light
+                            d_sample_shape(light_shape, light_isect.tri_id,
+                                light_sample.uv, d_light_point, d_light_vertices);
 
-                        // Accumulate derivatives
-                        auto light_tri_index = get_indices(light_shape, light_isect.tri_id);
-                        atomic_add(&d_shapes[light_isect.shape_id].vertices[3 * light_tri_index[0]],
-                            d_light_vertices[0]);
-                        atomic_add(&d_shapes[light_isect.shape_id].vertices[3 * light_tri_index[1]],
-                            d_light_vertices[1]);
-                        atomic_add(&d_shapes[light_isect.shape_id].vertices[3 * light_tri_index[2]],
-                            d_light_vertices[2]);
+                            // Accumulate derivatives
+                            auto light_tri_index = get_indices(light_shape, light_isect.tri_id);
+                            atomic_add(&d_shapes[light_isect.shape_id].vertices[3 * light_tri_index[0]],
+                                d_light_vertices[0]);
+                            atomic_add(&d_shapes[light_isect.shape_id].vertices[3 * light_tri_index[1]],
+                                d_light_vertices[1]);
+                            atomic_add(&d_shapes[light_isect.shape_id].vertices[3 * light_tri_index[2]],
+                                d_light_vertices[2]);
+                        }
                     }
                 }
             } else if (scene.envmap != nullptr) {
@@ -371,22 +387,22 @@ struct d_path_contribs_accumulator {
                 auto light_pmf = scene.light_pmf[envmap_id];
                 auto pdf_nee = envmap_pdf(*scene.envmap, wo) * light_pmf;
                 if (pdf_nee > 0) {
-                    auto bsdf_val = bsdf(material, shading_point, wi, wo, min_rough);
                     // XXX: For now we don't use ray differentials for next event estimation.
                     //      A proper approach might be to use a filter radius based on sampling density?
                     auto ray_diff = RayDifferential{
                         Vector3{0, 0, 0}, Vector3{0, 0, 0},
                         Vector3{0, 0, 0}, Vector3{0, 0, 0}};
                     auto light_contrib = envmap_eval(*scene.envmap, wo, ray_diff);
-                    //if (false && medium_isect.medium_id >= 0) {
-                    //    // Compute the phase function PDF instead of the BSDF
-                    //    // if we are inside of a medium.
-                    //    auto pdf_phase = phase_function(
-                    //        get_phase_function(scene.mediums[medium_isect.medium_id]),
-                    //        wo, wi);
-                    //    auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
-                    //    nee_contrib = (mis_weight / pdf_nee) * light_contrib * nee_transmittances[pixel_id];
-                    //} else {
+                    if (medium_isect.medium_id >= 0) {
+                        // Compute the phase function PDF instead of the BSDF
+                        // if we are inside of a medium.
+                        auto pdf_phase = phase_function(
+                            get_phase_function(scene.mediums[medium_isect.medium_id]),
+                            wo, wi);
+                        auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
+                        nee_contrib = (mis_weight / pdf_nee) * light_contrib * nee_transmittances[pixel_id];
+                    } else {
+                        auto bsdf_val = bsdf(material, shading_point, wi, wo, min_rough);
                         auto pdf_bsdf = bsdf_pdf(material, shading_point, wi, wo, min_rough);
                         auto mis_weight = Real(1 / (1 + square((double)pdf_bsdf / (double)pdf_nee)));
                         auto nee_contrib = (mis_weight / pdf_nee) * bsdf_val * light_contrib;
@@ -413,7 +429,7 @@ struct d_path_contribs_accumulator {
                             d_material, d_shading_point, d_wi, d_wo);
                         // wi = -incoming_ray.dir
                         d_incoming_ray.dir -= d_wi;
-                    //}
+                    }
                 }
             }
         }
