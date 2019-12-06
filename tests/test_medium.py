@@ -5,7 +5,7 @@ import redner
 pyredner.set_use_gpu(False)
 #pyredner.set_use_gpu(torch.cuda.is_available())
 
-mediums = [ pyredner.HomogeneousMedium(\
+mediums = [pyredner.HomogeneousMedium(\
     sigma_a = torch.tensor([0.05, 0.05, 0.05]),
     sigma_s = torch.tensor([0.1, 0.1, 0.1]),
     g = torch.tensor([0.5]))]
@@ -176,7 +176,7 @@ for t in range(200):
     # Take a gradient descent step
     optimizer.step()
     # Print the current absorption factor values
-    print('vertices', mediums[0].sigma_a.grad)
+    print('sigma_a', mediums[0].sigma_a.grad)
 
 # Render final result
 scene_args = pyredner.RenderFunction.serialize_scene(\
