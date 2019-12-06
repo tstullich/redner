@@ -195,9 +195,6 @@ class RenderFunction(torch.autograd.Function):
         args.append(use_primary_edge_sampling)
         args.append(use_secondary_edge_sampling)
 
-        # TODO Remove after debugging
-        print("Serialized Args Len:", len(args))
-
         return args
 
     @staticmethod
@@ -544,9 +541,6 @@ class RenderFunction(torch.autograd.Function):
         # pyredner.imwrite(debug_img, 'debug.exr')
         # exit()
 
-        # TODO Remove after debugging
-        print("Forward Args Len:", len(args))
-
         ctx.camera = camera
         ctx.shapes = shapes
         ctx.materials = materials
@@ -826,6 +820,7 @@ class RenderFunction(torch.autograd.Function):
         ret_list.append(None) # num_shapes
         ret_list.append(None) # num_materials
         ret_list.append(None) # num_lights
+        ret_list.append(None) # num_mediums
         if camera.use_look_at:
             ret_list.append(d_cam_position.cpu())
             ret_list.append(d_cam_look.cpu())
@@ -919,8 +914,5 @@ class RenderFunction(torch.autograd.Function):
         ret_list.append(None) # sampler type
         ret_list.append(None) # use_primary_edge_sampling
         ret_list.append(None) # use_secondary_edge_sampling
-
-        # TODO Remove after debugging
-        print("Backward Args Len:", len(ret_list))
 
         return tuple(ret_list)
