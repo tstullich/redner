@@ -14,7 +14,7 @@ class Scene:
                  area_lights = [],
                  objects = None,
                  envmap = None,
-                 mediums = None):
+                 mediums = []):
         self.camera = camera
         self.envmap = envmap
         self.mediums = mediums
