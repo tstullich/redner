@@ -4,19 +4,23 @@ import pyredner
 import torch
 import enum
 import math
+from typing import Optional
 
 class Texture:
     def __init__(self,
-                 texels,
-                 uv_scale = None):
+                 texels: torch.Tensor,
+                 uv_scale: Optional[torch.Tensor] = None):
         if uv_scale is None:
             uv_scale = torch.tensor([1.0, 1.0], device = pyredner.get_device())
-        assert(texels.device.type == pyredner.get_device().type)
         assert(texels.dtype == torch.float32)
-        assert(uv_scale.device.type == pyredner.get_device().type)
         assert(uv_scale.dtype == torch.float32)
         assert(uv_scale.is_contiguous())
-        self.texels = texels
+        self._texels = texels
+        self.uv_scale = uv_scale
+        self.generate_mipmap()
+
+    def generate_mipmap(self):
+        texels = self._texels
         if len(texels.shape) >= 2:
             # Build a mipmap for texels
             width = max(texels.shape[0], texels.shape[1])
@@ -54,9 +58,16 @@ class Texture:
             # Convert from NCHW to NHWC
             mipmap = mipmap.permute(0, 2, 3, 1)
             texels = mipmap.contiguous()
-
         self.mipmap = texels
-        self.uv_scale = uv_scale
+
+    @property
+    def texels(self):
+        return self._texels
+
+    @texels.setter
+    def texels(self, value):
+        self._texels = value
+        self.generate_mipmap()
 
     def state_dict(self):
         return {
@@ -64,6 +75,7 @@ class Texture:
             'mipmap': self.mipmap,
             'uv_scale': self.uv_scale
         }
+
     @classmethod
     def load_state_dict(cls, state_dict):
         out = cls.__new__(Texture)

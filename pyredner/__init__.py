@@ -1,8 +1,8 @@
 from .device import *
 from .camera import *
 from .shape import *
-from .material import *
 from .texture import *
+from .material import *
 from .area_light import *
 from .object import *
 from .envmap import *
@@ -15,4 +15,6 @@ from .load_mitsuba import load_mitsuba
 from .transform import gen_rotate_matrix
 from .utils import *
 from .medium import *
+from .channels import channels
+from .sampler_type import sampler_type
 from .render_utils import *

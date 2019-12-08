@@ -7,10 +7,11 @@ class Texture:
                  texels,
                  uv_scale = tf.constant([1.0, 1.0])):
         assert(tf.executing_eagerly())
-        with tf.device(pyredner.get_device_name()):
-            texels = tf.identity(texels)
-            uv_scale = tf.identity(uv_scale)
         self.texels = texels
+        self.uv_scale = uv_scale
+
+    def generate_mipmap(self):
+        texels = self._texels
         if len(texels.shape) >= 2:
             with tf.device(pyredner.get_device_name()):
                 # Build a mipmap for texels
@@ -69,10 +70,16 @@ class Texture:
                 # Convert from NCHW to NHWC
                 mipmap = tf.transpose(mipmap, perm=[0, 2, 3, 1]) 
                 texels = mipmap
-
         self.mipmap = texels
-        self.uv_scale = uv_scale
 
+    @property
+    def texels(self):
+        return self._texels
+
+    @texels.setter
+    def texels(self, value):
+        self._texels = value
+        self.generate_mipmap()
 
     def state_dict(self):
         return {
@@ -80,6 +87,7 @@ class Texture:
             'mipmap': self.mipmap,
             'uv_scale': self.uv_scale
         }
+
     @classmethod
     def load_state_dict(cls, state_dict):
         out = cls.__new__(Texture)

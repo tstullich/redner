@@ -2,6 +2,7 @@ import torch
 import pyredner.transform as transform
 import redner
 import math
+from typing import Tuple, Optional
 
 class Camera:
     """
@@ -19,7 +20,7 @@ class Camera:
             position (length 3 float tensor): the origin of the camera
             look_at (length 3 float tensor): the point camera is looking at
             up (length 3 float tensor): the up vector of the camera
-            fov (length 1 float tensor): the field of view of the camera in angle, 
+            fov (length 1 float tensor): the field of view of the camera in angle,
                                          no effect if the camera is a fisheye or panorama camera.
             clip_near (float): the near clipping plane of the camera, need to > 0
             resolution (length 2 tuple): the size of the output image in (height, width)
@@ -38,36 +39,32 @@ class Camera:
             fisheye (bool): whether the camera is a fisheye camera (legacy parameter just to ensure compatibility).
     """
     def __init__(self,
-                 position = None,
-                 look_at = None,
-                 up = None,
-                 fov = None,
-                 clip_near = 1e-4,
-                 resolution = (256, 256),
-                 cam_to_world = None,
-                 intrinsic_mat = None,
+                 position: Optional[torch.Tensor] = None,
+                 look_at: Optional[torch.Tensor] = None,
+                 up: Optional[torch.Tensor] = None,
+                 fov: Optional[torch.Tensor] = None,
+                 clip_near: float = 1e-4,
+                 resolution: Tuple[int, int] = (256, 256),
+                 cam_to_world: Optional[torch.Tensor] = None,
+                 intrinsic_mat: Optional[torch.Tensor] = None,
                  camera_type = redner.CameraType.perspective,
                  fisheye = False,
                  medium_id = -1):
         if position is not None:
             assert(position.dtype == torch.float32)
             assert(len(position.shape) == 1 and position.shape[0] == 3)
-            assert(position.device.type == 'cpu')
         if look_at is not None:
             assert(look_at.dtype == torch.float32)
             assert(len(look_at.shape) == 1 and look_at.shape[0] == 3)
-            assert(look_at.device.type == 'cpu')
         if up is not None:
             assert(up.dtype == torch.float32)
             assert(len(up.shape) == 1 and up.shape[0] == 3)
-            assert(up.device.type == 'cpu')
         if fov is not None:
             assert(fov.dtype == torch.float32)
             assert(len(fov.shape) == 1 and fov.shape[0] == 1)
-            assert(fov.device.type == 'cpu')
         assert(isinstance(clip_near, float))
         if position is None and look_at is None and up is None:
-            assert(cam_to_world is  not None)
+            assert(cam_to_world is not None)
 
         self.position = position
         self.look_at = look_at
@@ -162,6 +159,10 @@ def automatic_camera_placement(shapes, resolution):
         using the bounding boxes of the shapes. Place the camera at
         some distances from the shapes, so that it can see all of them.
         Inspired by https://github.com/mitsuba-renderer/mitsuba/blob/master/src/librender/scene.cpp#L286
+
+        Args:
+            shapes: a list of redner Shape or Object
+            resolution: the size of the output image in (height, width)
     """
     aabb_min = torch.tensor((float('inf'), float('inf'), float('inf')))
     aabb_max = -torch.tensor((float('inf'), float('inf'), float('inf')))
@@ -176,7 +177,7 @@ def automatic_camera_placement(shapes, resolution):
     extents = aabb_max - aabb_min
     max_extents_xy = torch.max(extents[0], extents[1])
     distance = max_extents_xy / (2 * math.tan(45 * 0.5 * math.pi / 180.0))
-    max_extents_xyz = torch.max(extents[2], max_extents_xy)    
+    max_extents_xyz = torch.max(extents[2], max_extents_xy)
     return Camera(position = torch.tensor((center[0], center[1], aabb_min[2] - distance)),
                   look_at = center,
                   up = torch.tensor((0.0, 1.0, 0.0)),
