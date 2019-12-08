@@ -1,6 +1,25 @@
 import redner
 import tensorflow as tf
 
+class Channel:
+    def __init__(self):
+        self.radiance = redner.channels.radiance
+        self.alpha = redner.channels.alpha
+        self.depth = redner.channels.depth
+        self.position = redner.channels.position
+        self.geometry_normal = redner.channels.geometry_normal
+        self.shading_normal = redner.channels.shading_normal
+        self.uv = redner.channels.uv
+        self.diffuse_reflectance = redner.channels.diffuse_reflectance
+        self.specular_reflectance = redner.channels.specular_reflectance
+        self.roughness = redner.channels.roughness
+        self.generic_texture = redner.channels.generic_texture
+        self.vertex_color = redner.channels.vertex_color
+        self.shape_id = redner.channels.shape_id
+        self.material_id = redner.channels.material_id
+
+channels = Channel()
+
 class RednerChannels:
     __channels = [
         redner.channels.radiance,
@@ -37,32 +56,6 @@ class RednerChannels:
             sys.exit()
         else:
             return channel
-
-class RednerSamplerType:
-    __samplertypes = [
-        redner.SamplerType.independent,
-        redner.SamplerType.sobol
-    ]
-
-    @staticmethod
-    def asTensor(samplertype: redner.SamplerType) -> tf.Tensor:
-        assert isinstance(samplertype, redner.SamplerType)
-
-        for i in range(len(RednerSamplerType.__samplertypes)):
-            if RednerSamplerType.__samplertypes[i] == samplertype:
-                return tf.constant(i)
-
-
-    @staticmethod
-    def asSamplerType(index: tf.Tensor) -> redner.SamplerType:
-        try:
-            samplertype = RednerSamplerType.__samplertypes[index]
-        except IndexError:
-            print(f'{index} is out of range: [0, {len(RednerSamplerType.__samplertypes)})')
-            import sys
-            sys.exit()
-        else:
-            return samplertype
 
 class RednerCameraType:
     __cameratypes = [
