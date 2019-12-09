@@ -87,6 +87,9 @@ PhaseFunction get_phase_function(const Medium &medium) {
     }
 }
 
+// Function to sample a distance within a medium
+Real sample_distance(const Medium &medium, const MediumSample &sample);
+
 // Sample a distance inside the medium and compute the transmittance.
 // Update intersection data as well.
 void sample_medium(const Scene &scene,
@@ -105,3 +108,17 @@ void evaluate_transmittance(const Scene &scene,
                             const BufferView<Intersection> &medium_isects,
                             const BufferView<MediumSample> &medium_samples,
                             BufferView<Vector3> transmittances);
+
+
+struct DMedium {
+    // TODO Fill in with needed fields
+};
+
+void d_sample_medium(const Scene &scene,
+                     const BufferView<int> &active_pixels,
+                     const BufferView<Intersection> &surface_isects,
+                     const BufferView<Ray> &incoming_rays,
+                     const BufferView<MediumSample> &medium_samples,
+                     BufferView<Intersection> medium_isects,
+                     BufferView<Vector3> medium_points,
+                     BufferView<Vector3> throughputs);

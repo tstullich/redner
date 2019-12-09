@@ -17,9 +17,7 @@ Vector3 sample(const Medium &medium,
                Vector3 *medium_point) {
     if (medium.type == MediumType::homogeneous) {
         auto h = medium.homogeneous;
-        // Sample a channel and distance along the ray
-        auto channel = min(int(sample.uv[0] * 3), 2);
-        Real dist = -log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel];
+        Real dist = sample_distance(medium, sample);
         auto inside_medium = dist < ray.tmax;
         auto t = min(dist, ray.tmax);
         // Compute the transmittance and sampling density
@@ -51,6 +49,19 @@ Vector3 sample(const Medium &medium,
         return inside_medium ? (tr * h.sigma_s / pdf) : (tr / pdf);
     } else {
         return Vector3{0, 0, 0};
+    }
+}
+
+DEVICE
+inline
+Real sample_distance(const Medium &medium, const MediumSample &sample) {
+    if (medium.type == MediumType::homogeneous) {
+        // Sample a channel and distance along the ray
+        auto h = medium.homogeneous;
+        auto channel = min(int(sample.uv[0] * 3), 2);
+        return Real(-log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel]);
+    } else {
+        return Real(0);
     }
 }
 
@@ -159,5 +170,41 @@ void evaluate_transmittance(const Scene &scene,
         medium_isects.begin(),
         medium_samples.begin(),
         transmittances.begin()},
+        active_pixels.size(), scene.use_gpu);
+}
+
+struct d_medium_sampler {
+    DEVICE void operator()(int idx) {
+        auto pixel_id = active_pixels[idx];
+        // TODO Fill in the rest
+    }
+
+    const FlattenScene scene;
+    const int *active_pixels;
+    const Intersection *surface_isects;
+    const Ray *incoming_rays;
+    const MediumSample *medium_samples;
+    Intersection *medium_isects;
+    Vector3 *medium_points;
+    Vector3 *throughputs;
+};
+
+void d_sample_medium(const Scene &scene,
+                     const BufferView<int> &active_pixels,
+                     const BufferView<Intersection> &surface_isects,
+                     const BufferView<Ray> &incoming_rays,
+                     const BufferView<MediumSample> &medium_samples,
+                     BufferView<Intersection> medium_isects,
+                     BufferView<Vector3> medium_points,
+                     BufferView<Vector3> throughputs) {
+    parallel_for(d_medium_sampler {
+        get_flatten_scene(scene),
+        active_pixels.begin(),
+        surface_isects.begin(),
+        incoming_rays.begin(),
+        medium_samples.begin(),
+        medium_isects.begin(),
+        medium_points.begin(),
+        throughputs.begin()},
         active_pixels.size(), scene.use_gpu);
 }
