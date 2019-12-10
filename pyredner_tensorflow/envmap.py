@@ -5,6 +5,17 @@ import math
 import pdb
 
 class EnvironmentMap:
+    """
+        A class representing light sources infinitely far away using an image.
+
+        Args
+        ----------
+        values: Union[tf.Tensor, pyredner.Texture]
+            a float32 tensor with size 3 or [height, width, 3] or a Texture
+        env_to_world: tf.Tensor
+            a float32 4x4 matrix that transforms the environment map
+    """
+
     def __init__(self,
                  values: tf.Tensor,
                  env_to_world: tf.Tensor = tf.eye(4, 4)):
@@ -17,7 +28,7 @@ class EnvironmentMap:
         self.values = values
         self.env_to_world = env_to_world
 
-    def generate_envmap_pdf():
+    def generate_envmap_pdf(self):
         assert(tf.executing_eagerly())
         values = self.values
         with tf.device(pyredner.get_device_name()):
