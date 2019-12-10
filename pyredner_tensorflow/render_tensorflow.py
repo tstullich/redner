@@ -1,4 +1,3 @@
-from typing import List
 import tensorflow as tf
 import numpy as np
 import redner
@@ -6,21 +5,28 @@ import pyredner_tensorflow as pyredner
 import time
 import weakref
 import os
+from typing import List, Union, Tuple
+from .redner_enum_wrapper import RednerCameraType, RednerSamplerType, RednerChannels
 
 __EMPTY_TENSOR = tf.constant([])
-# There is a bias-variance trade off in the backward pass.
-# If the forward pass and the backward pass are correlated
-# the gradients are biased for L2 loss.
-# (E[d/dx(f(x) - y)^2] = E[(f(x) - y) d/dx f(x)])
-#                      = E[f(x) - y] E[d/dx f(x)]
-# The last equation only holds when f(x) and d/dx f(x) are independent.
-# It is usually better to use the unbiased one, but we left it as an option here
 use_correlated_random_number = False
-def set_use_correlated_random_number(v):
+def set_use_correlated_random_number(v: bool):
+    """
+        | There is a bias-variance trade off in the backward pass.
+        | If the forward pass and the backward pass are correlated
+        | the gradients are biased for L2 loss.
+        | (E[d/dx(f(x) - y)^2] = E[(f(x) - y) d/dx f(x)])
+        |                      = E[f(x) - y] E[d/dx f(x)]
+        | The last equation only holds when f(x) and d/dx f(x) are independent.
+        | It is usually better to use the unbiased one, but we left it as an option here
+    """
     global use_correlated_random_number
     use_correlated_random_number = v
 
 def get_use_correlated_random_number():
+    """
+        See set_use_correlated_random_number
+    """
     global use_correlated_random_number
     return use_correlated_random_number
 
@@ -38,59 +44,60 @@ def is_empty_tensor(tensor):
 
 class Context: pass
 
-__ctx = Context()
 print_timing = True
 
 def serialize_scene(scene: pyredner.Scene,
-                    num_samples,
+                    num_samples: Union[int, Tuple[int, int]],
                     max_bounces: int,
                     channels = [redner.channels.radiance],
                     sampler_type = redner.SamplerType.independent,
                     use_primary_edge_sampling = True,
                     use_secondary_edge_sampling = True) -> List:
     """
-        Given a PyRedner scene & rendering options, convert them to a linear list of argument,
-        so that we can use it in TensorFlow.
+        Given a pyredner scene & rendering options, convert them to a linear list of argument,
+        so that we can use it in PyTorch.
 
-        Keyword arguments:
-        scene -- A pyredner.Scene
-        num_samples -- Number of samples per pixel for forward and backward passes,
-                        can be an integer or a tuple of 2 integers.
-        max_bounces -- Number of bounces for global illumination, 1 means direct lighting only.
-        channels -- A list of channels that should present in the output image.
-                    Following channels are supported:
-                        redner.channels.radiance,
-                        redner.channels.alpha,
-                        redner.channels.depth,
-                        redner.channels.position,
-                        redner.channels.geometry_normal,
-                        redner.channels.shading_normal,
-                        redner.channels.uv,
-                        redner.channels.diffuse_reflectance,
-                        redner.channels.specular_reflectance,
-                        redner.channels.roughness,
-                        redner.channels.generic_texture,
-                        redner.channels.shape_id,
-                        redner.channels.material_id
-                    All channels, except for shape id and material id, are differentiable.
-        sampler_type -- Which sampling pattern to use.
-                        See Chapter 7 of the PBRT book for an explanation of the difference between
-                        different samplers.
-                        http://www.pbr-book.org/3ed-2018/Sampling_and_Reconstruction.html
-                        Following samplers are supported:
-                            redner.SamplerType.independent
-                            redner.SamplerType.sobol
-        use_primary_edge_sampling -- A boolean
-        use_secondary_edge_sampling -- A boolean
+        Args
+        ====
+        scene: pyredner.Scene
+        num_samples: int
+            number of samples per pixel for forward and backward passes
+            can be an integer or a tuple of 2 integers
+            if a single integer is provided, use the same number of samples
+            for both
+        max_bounces: int
+            number of bounces for global illumination
+            1 means direct lighting only
+        channels: List[redner.channels]
+            | A list of channels that should present in the output image
+            | following channels are supported\:
+            | redner.channels.radiance,
+            | redner.channels.alpha,
+            | redner.channels.depth,
+            | redner.channels.position,
+            | redner.channels.geometry_normal,
+            | redner.channels.shading_normal,
+            | redner.channels.uv,
+            | redner.channels.diffuse_reflectance,
+            | redner.channels.specular_reflectance,
+            | redner.channels.vertex_color,
+            | redner.channels.roughness,
+            | redner.channels.generic_texture,
+            | redner.channels.shape_id,
+            | redner.channels.material_id
+            | all channels, except for shape id and material id, are differentiable
+        sampler_type: redner.SamplerType
+            | Which sampling pattern to use?
+            | see `Chapter 7 of the PBRT book <http://www.pbr-book.org/3ed-2018/Sampling_and_Reconstruction.html>`
+              for an explanation of the difference between different samplers.
+            | Following samplers are supported:
+            | redner.SamplerType.independent
+            | redner.SamplerType.sobol
+        use_primary_edge_sampling: bool
 
-        tf.custom_gradient in Tensorflow can take only tf.Tensor objects as arguments.
-        Hense, map `None` to False boolean tensors
+        use_secondary_edge_sampling: bool
+
     """
-    global __ctx
-    ctx = __ctx
-
-    ctx.pyredner_scene = scene
-
     cam = scene.camera
     num_shapes = len(scene.shapes)
     num_materials = len(scene.materials)
@@ -123,7 +130,7 @@ def serialize_scene(scene: pyredner.Scene,
         args.append(tf.identity(cam.intrinsic_mat))
     args.append(tf.constant(cam.clip_near))
     args.append(tf.constant(cam.resolution))
-    args.append(pyredner.RednerCameraType.asTensor(cam.camera_type))
+    args.append(RednerCameraType.asTensor(cam.camera_type))
     for shape in scene.shapes:
         with tf.device(pyredner.get_device_name()):
             args.append(tf.identity(shape.vertices))
@@ -170,6 +177,7 @@ def serialize_scene(scene: pyredner.Scene,
             else:
                 args.append(__EMPTY_TENSOR)
                 args.append(__EMPTY_TENSOR)
+        args.append(tf.constant(material.compute_specular_lighting))
         args.append(tf.constant(material.two_sided))
         args.append(tf.constant(material.use_vertex_color))
     with tf.device('/device:cpu:' + str(pyredner.get_cpu_device_id())):
@@ -201,19 +209,18 @@ def serialize_scene(scene: pyredner.Scene,
     args.append(tf.constant(max_bounces))
     args.append(tf.constant(num_channels))
     for ch in channels:
-        args.append(pyredner.RednerChannels.asTensor(ch))
+        args.append(RednerChannels.asTensor(ch))
 
-    args.append(pyredner.RednerSamplerType.asTensor(sampler_type))
+    args.append(RednerSamplerType.asTensor(sampler_type))
     args.append(tf.constant(use_primary_edge_sampling))
     args.append(tf.constant(use_secondary_edge_sampling))
     return args
 
 def forward(seed:int, *args):
     """
-        Forward rendering pass: given a scene and output an image.
+        Forward rendering pass: given a serialized scene and output an image.
     """
-    global __ctx
-    ctx = __ctx
+    ctx = Context()
 
     # Unpack arguments
     current_index = 0
@@ -243,7 +250,7 @@ def forward(seed:int, *args):
     current_index += 1
     resolution = args[current_index].numpy() # Tuple[int, int]
     current_index += 1
-    camera_type = pyredner.RednerCameraType.asCameraType(args[current_index]) # FIXME: Map to custom type
+    camera_type = RednerCameraType.asCameraType(args[current_index]) # FIXME: Map to custom type
     current_index += 1
 
     with tf.device('/device:cpu:' + str(pyredner.get_cpu_device_id())):
@@ -296,14 +303,14 @@ def forward(seed:int, *args):
             shapes.append(redner.Shape(\
                 redner.float_ptr(pyredner.data_ptr(vertices)),
                 redner.int_ptr(pyredner.data_ptr(indices)),
-                redner.float_ptr(pyredner.data_ptr(uvs) if uvs is not None else 0),
-                redner.float_ptr(pyredner.data_ptr(normals) if normals is not None else 0),
-                redner.int_ptr(pyredner.data_ptr(uv_indices) if uv_indices is not None else 0),
-                redner.int_ptr(pyredner.data_ptr(normal_indices) if normal_indices is not None else 0),
-                redner.float_ptr(pyredner.data_ptr(colors) if colors is not None else 0),
+                redner.float_ptr(pyredner.data_ptr(uvs) if not is_empty_tensor(uvs) else 0),
+                redner.float_ptr(pyredner.data_ptr(normals) if not is_empty_tensor(normals) else 0),
+                redner.int_ptr(pyredner.data_ptr(uv_indices) if not is_empty_tensor(uv_indices) else 0),
+                redner.int_ptr(pyredner.data_ptr(normal_indices) if not is_empty_tensor(normal_indices) else 0),
+                redner.float_ptr(pyredner.data_ptr(colors) if not is_empty_tensor(colors) else 0),
                 int(vertices.shape[0]),
-                int(uvs.shape[0]) if uvs is not None else 0,
-                int(normals.shape[0]) if normals is not None else 0,
+                int(uvs.shape[0]) if not is_empty_tensor(uvs) else 0,
+                int(normals.shape[0]) if not is_empty_tensor(normals) else 0,
                 int(indices.shape[0]),
                 material_id,
                 light_id))
@@ -331,9 +338,11 @@ def forward(seed:int, *args):
             current_index += 1
             normal_map_uv_scale = args[current_index]
             current_index += 1
+            compute_specular_lighting = bool(args[current_index])
+            current_index += 1
             two_sided = bool(args[current_index])
             current_index += 1
-            use_vertex_color = args[current_index]
+            use_vertex_color = bool(args[current_index])
             current_index += 1
 
             diffuse_reflectance_ptr = redner.float_ptr(pyredner.data_ptr(diffuse_reflectance))
@@ -409,6 +418,7 @@ def forward(seed:int, *args):
                 roughness,
                 generic_texture,
                 normal_map,
+                compute_specular_lighting,
                 two_sided,
                 use_vertex_color))
 
@@ -487,12 +497,12 @@ def forward(seed:int, *args):
     channels = []
     for _ in range(__num_channels):
         ch = args[current_index]
-        ch = pyredner.RednerChannels.asChannel(ch)
+        ch = RednerChannels.asChannel(ch)
         channels.append(ch)
         current_index += 1
 
     sampler_type = args[current_index]
-    sampler_type = pyredner.RednerSamplerType.asSamplerType(sampler_type)
+    sampler_type = RednerSamplerType.asSamplerType(sampler_type)
     current_index += 1
 
     use_primary_edge_sampling = args[current_index]
@@ -551,10 +561,14 @@ def forward(seed:int, *args):
     ctx.options = options
     ctx.num_samples = num_samples
     ctx.num_channels = __num_channels
-    return rendered_image
+    ctx.args = args # important to avoid GC on tf tensors
+    return rendered_image, ctx
 
 @tf.custom_gradient
 def render(*x):
+    """
+        The main TensorFlow interface of C++ redner.
+    """
     assert(tf.executing_eagerly())
     if pyredner.get_use_gpu() and os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] != 'true':
         print('******************** WARNING ********************')
@@ -565,11 +579,9 @@ def render(*x):
         print('*************************************************')
 
     seed, args = int(x[0]), x[1:]
-    img = forward(seed, *args)
+    img, ctx = forward(seed, *args)
 
     def backward(grad_img):
-        global __ctx
-        ctx = __ctx
         camera = ctx.camera
         scene = ctx.scene
         options = ctx.options
@@ -861,6 +873,7 @@ def render(*x):
             ret_list.append(d_generic_uv_scale_list[i])
             ret_list.append(d_normal_map_list[i])
             ret_list.append(d_normal_map_uv_scale_list[i])
+            ret_list.append(None) # compute_specular_lighting
             ret_list.append(None) # two sided
             ret_list.append(None) # use_vertex_color
 

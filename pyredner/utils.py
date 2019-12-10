@@ -60,7 +60,30 @@ def SH_reconstruct(coeffs, res):
     return result
 #######################################################################################
 
-def generate_sphere(theta_steps, phi_steps):
+def generate_sphere(theta_steps: int,
+                    phi_steps: int):
+    """
+        Generate a triangle mesh representing a sphere, center at (0, 0, 0) with radius 1.
+
+        Args
+        ====
+        theta_steps: int
+            azimuth subdivision
+        phi_steps: int
+            zenith subdivision
+
+        Returns
+        =======
+        torch.Tensor
+            vertices
+        torch.Tensor
+            indices
+        torch.Tensor
+            uvs
+        torch.Tensor
+            normals
+    """
+
     d_theta = math.pi / (theta_steps - 1)
     d_phi = (2 * math.pi) / (phi_steps - 1)
 
@@ -100,3 +123,51 @@ def generate_sphere(theta_steps, phi_steps):
 
     normals = vertices.clone()
     return (vertices, indices, uvs, normals)
+
+def generate_quad_light(position: torch.Tensor,
+                        look_at: torch.Tensor,
+                        size: torch.Tensor,
+                        intensity: torch.Tensor):
+    """
+        Generate a pyredner.Object that is a quad light source.
+
+        Args
+        ====
+        position: torch.Tensor
+            1-d tensor of size 3
+        look_at: torch.Tensor
+            1-d tensor of size 3
+        size: torch.Tensor
+            1-d tensor of size 2
+        intensity: torch.Tensor
+            1-d tensor of size 3
+
+        Returns
+        =======
+        pyredner.Object
+            quad light source
+    """
+    d = look_at - position
+    d = d / torch.norm(d)
+    # ONB -- generate two axes that are orthogonal to d
+    a = 1 / (1 + d[2])
+    b = -d[0] * d[1] * a
+    x = torch.where(d[2] < (-1 + 1e-6),
+                    torch.tensor([0.0, -1.0, 0.0]),
+                    torch.stack([1 - d[0] * d[0] * a, b, -d[0]]))
+    y = torch.where(d[2] < (-1 + 1e-6),
+                    torch.tensor([-1.0, 0.0, 0.0]),
+                    torch.stack([b, 1 - d[1] * d[1] * a, -d[1]]))
+    v0 = position - x * size[0] * 0.5 - y * size[1] * 0.5
+    v1 = position + x * size[0] * 0.5 - y * size[1] * 0.5
+    v2 = position - x * size[0] * 0.5 + y * size[1] * 0.5
+    v3 = position + x * size[0] * 0.5 + y * size[1] * 0.5
+
+    vertices = torch.stack((v0, v1, v2, v3), dim = 0).to(pyredner.get_device())
+    indices = torch.tensor([[0, 1, 2],[1, 3, 2]],
+        dtype = torch.int32, device = pyredner.get_device())
+    m = pyredner.Material(diffuse_reflectance = torch.tensor([0.0, 0.0, 0.0], device = pyredner.get_device()))
+    return pyredner.Object(vertices = vertices,
+                           indices = indices,
+                           material = m,
+                           light_intensity = intensity)

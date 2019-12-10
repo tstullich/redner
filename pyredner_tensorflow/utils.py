@@ -59,9 +59,28 @@ def SH_reconstruct(coeffs, res):
     return result
 #######################################################################################
 
-def generate_sphere(theta_steps, phi_steps):
+def generate_sphere(theta_steps: int,
+                    phi_steps: int):
     """
-    Use Numpy array for loop assignment as Tensorflow Tensors are not able to do that.
+        Generate a triangle mesh representing a sphere, center at (0, 0, 0) with radius 1.
+
+        Args
+        ====
+        theta_steps: int
+            azimuth subdivision
+        phi_steps: int
+            zenith subdivision
+
+        Returns
+        =======
+        tf.Tensor
+            vertices
+        tf.Tensor
+            indices
+        tf.Tensor
+            uvs
+        tf.Tensor
+            normals
     """
     d_theta = math.pi / (theta_steps - 1)
     d_phi = (2 * math.pi) / (phi_steps - 1)
@@ -102,6 +121,55 @@ def generate_sphere(theta_steps, phi_steps):
 
     normals = tf.identity(vertices)
     return (vertices, indices, uvs, normals)
+
+
+def generate_quad_light(position: tf.Tensor,
+                        look_at: tf.Tensor,
+                        size: tf.Tensor,
+                        intensity: tf.Tensor):
+    """
+        Generate a pyredner.Object that is a quad light source.
+
+        Args
+        ====
+        position: tf.Tensor
+            1-d tensor of size 3
+        look_at: tf.Tensor
+            1-d tensor of size 3
+        size: tf.Tensor
+            1-d tensor of size 2
+        intensity: tf.Tensor
+            1-d tensor of size 3
+
+        Returns
+        =======
+        pyredner.Object
+            quad light source
+    """
+    d = look_at - position
+    d = d / tf.norm(d)
+    # ONB -- generate two axes that are orthogonal to d
+    a = 1 / (1 + d[2])
+    b = -d[0] * d[1] * a
+    x = tf.where(d[2] < (-1 + 1e-6),
+                 tf.constant([0.0, -1.0, 0.0]),
+                 tf.stack([1 - d[0] * d[0] * a, b, -d[0]]))
+    y = tf.where(d[2] < (-1 + 1e-6),
+                 tf.constant([-1.0, 0.0, 0.0]),
+                 tf.stack([b, 1 - d[1] * d[1] * a, -d[1]]))
+    v0 = position - x * size[0] * 0.5 - y * size[1] * 0.5
+    v1 = position + x * size[0] * 0.5 - y * size[1] * 0.5
+    v2 = position - x * size[0] * 0.5 + y * size[1] * 0.5
+    v3 = position + x * size[0] * 0.5 + y * size[1] * 0.5
+
+    with tf.device(pyredner.get_device_name()):
+        vertices = tf.stack((v0, v1, v2, v3), axis = 0)
+        indices = tf.constant([[0, 1, 2],[1, 3, 2]], dtype = tf.int32)
+        m = pyredner.Material(diffuse_reflectance = tf.constant([0.0, 0.0, 0.0]))
+    return pyredner.Object(vertices = vertices,
+                           indices = indices,
+                           material = m,
+                           light_intensity = intensity)
 
 ############################################3
 def read_tensor(filename, shape):

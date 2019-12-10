@@ -4,20 +4,26 @@ import redner
 import pyredner
 import time
 import skimage.io
+from typing import List, Union, Tuple
 
-# There is a bias-variance trade off in the backward pass.
-# If the forward pass and the backward pass are correlated
-# the gradients are biased for L2 loss.
-# (E[d/dx(f(x) - y)^2] = E[(f(x) - y) d/dx f(x)])
-#                      = E[f(x) - y] E[d/dx f(x)]
-# The last equation only holds when f(x) and d/dx f(x) are independent.
-# It is usually better to use the unbiased one, but we left it as an option here
 use_correlated_random_number = False
-def set_use_correlated_random_number(v):
+def set_use_correlated_random_number(v: bool):
+    """
+        | There is a bias-variance trade off in the backward pass.
+        | If the forward pass and the backward pass are correlated
+        | the gradients are biased for L2 loss.
+        | E[d/dx(f(x) - y)^2] = E[(f(x) - y) d/dx f(x)]
+        |                     = E[f(x) - y] E[d/dx f(x)]
+        | The last equation only holds when f(x) and d/dx f(x) are independent.
+        | It is usually better to use the unbiased one, but we left it as an option here
+    """
     global use_correlated_random_number
     use_correlated_random_number = v
 
 def get_use_correlated_random_number():
+    """
+        See set_use_correlated_random_number
+    """
     global use_correlated_random_number
     return use_correlated_random_number
 
@@ -25,52 +31,61 @@ print_timing = True
 
 class RenderFunction(torch.autograd.Function):
     """
-        The PyTorch interface of Redner.
+        The PyTorch interface of C++ redner.
     """
 
     @staticmethod
-    def serialize_scene(scene,
-                        num_samples,
-                        max_bounces,
-                        channels = [redner.channels.radiance],
+    def serialize_scene(scene: pyredner.Scene,
+                        num_samples: Union[int, Tuple[int, int]],
+                        max_bounces: int,
+                        channels: List = [redner.channels.radiance],
                         sampler_type = redner.SamplerType.independent,
-                        use_primary_edge_sampling = True,
-                        use_secondary_edge_sampling = True):
+                        use_primary_edge_sampling: bool = True,
+                        use_secondary_edge_sampling: bool = True):
         """
-            Given a PyRedner scene & rendering options, convert them to a linear list of argument,
+            Given a pyredner scene & rendering options, convert them to a linear list of argument,
             so that we can use it in PyTorch.
 
-            Keyword arguments:
-            scene -- A pyredner.Scene
-            num_samples -- Number of samples per pixel for forward and backward passes,
-                           can be an integer or a tuple of 2 integers.
-            max_bounces -- Number of bounces for global illumination, 1 means direct lighting only.
-            channels -- A list of channels that should present in the output image.
-                        Following channels are supported:
-                            redner.channels.radiance,
-                            redner.channels.alpha,
-                            redner.channels.depth,
-                            redner.channels.position,
-                            redner.channels.geometry_normal,
-                            redner.channels.shading_normal,
-                            redner.channels.uv,
-                            redner.channels.diffuse_reflectance,
-                            redner.channels.specular_reflectance,
-                            redner.channels.vertex_color,
-                            redner.channels.roughness,
-                            redner.channels.generic_texture,
-                            redner.channels.shape_id,
-                            redner.channels.material_id
-                        All channels, except for shape id and material id, are differentiable.
-            sampler_type -- Which sampling pattern to use.
-                            See Chapter 7 of the PBRT book for an explanation of the difference between
-                            different samplers.
-                            http://www.pbr-book.org/3ed-2018/Sampling_and_Reconstruction.html
-                            Following samplers are supported:
-                                redner.SamplerType.independent
-                                redner.SamplerType.sobol
-            use_primary_edge_sampling -- A boolean
-            use_secondary_edge_sampling -- A boolean
+            Args
+            ====
+            scene: pyredner.Scene
+            num_samples: int
+                Number of samples per pixel for forward and backward passes.
+                Can be an integer or a tuple of 2 integers.
+                If a single integer is provided, use the same number of samples
+                for both.
+            max_bounces: int
+                Number of bounces for global illumination,
+                1 means direct lighting only.
+            channels: List[redner.channels]
+                | A list of channels that should present in the output image
+                | following channels are supported\:
+                | redner.channels.radiance,
+                | redner.channels.alpha,
+                | redner.channels.depth,
+                | redner.channels.position,
+                | redner.channels.geometry_normal,
+                | redner.channels.shading_normal,
+                | redner.channels.uv,
+                | redner.channels.diffuse_reflectance,
+                | redner.channels.specular_reflectance,
+                | redner.channels.vertex_color,
+                | redner.channels.roughness,
+                | redner.channels.generic_texture,
+                | redner.channels.shape_id,
+                | redner.channels.material_id
+                | all channels, except for shape id and material id, are differentiable
+            sampler_type: redner.SamplerType
+                | Which sampling pattern to use?
+                | see `Chapter 7 of the PBRT book <http://www.pbr-book.org/3ed-2018/Sampling_and_Reconstruction.html>`
+                  for an explanation of the difference between different samplers.
+                | Following samplers are supported:
+                | redner.SamplerType.independent
+                | redner.SamplerType.sobol
+            use_primary_edge_sampling: bool
+
+            use_secondary_edge_sampling: bool
+
         """
         cam = scene.camera
         num_shapes = len(scene.shapes)
@@ -147,6 +162,7 @@ class RenderFunction(torch.autograd.Function):
             else:
                 args.append(None)
                 args.append(None)
+            args.append(material.compute_specular_lighting)
             args.append(material.two_sided)
             args.append(material.use_vertex_color)
         for light in scene.area_lights:
@@ -189,7 +205,7 @@ class RenderFunction(torch.autograd.Function):
                 seed,
                 *args):
         """
-            Forward rendering pass: given a scene and output an image.
+            Forward rendering pass: given a serialized scene and output an image.
         """
         # Unpack arguments
         current_index = 0
@@ -310,6 +326,8 @@ class RenderFunction(torch.autograd.Function):
             current_index += 1
             normal_map_uv_scale = args[current_index]
             current_index += 1
+            compute_specular_lighting = args[current_index]
+            current_index += 1
             two_sided = args[current_index]
             current_index += 1
             use_vertex_color = args[current_index]
@@ -387,6 +405,7 @@ class RenderFunction(torch.autograd.Function):
                 roughness,
                 generic_texture,
                 normal_map,
+                compute_specular_lighting,
                 two_sided,
                 use_vertex_color))
 
@@ -805,6 +824,7 @@ class RenderFunction(torch.autograd.Function):
             ret_list.append(d_generic_uv_scale_list[i])
             ret_list.append(d_normal_map_list[i])
             ret_list.append(d_normal_map_uv_scale_list[i])
+            ret_list.append(None) # compute_specular_lighting
             ret_list.append(None) # two sided
             ret_list.append(None) # use_vertex_color
 

@@ -13,6 +13,11 @@ tutorials/mori_knob
 tutorials/mori_knob.zip
 tutorials/.ipynb_checkpoints
 tutorials/None0000000.png
+tutorials/brick_normal.png
+tutorials/default.png
+tutorials/grace-new.exr
+tutorials/conference
+tutorials/conference.zip
 examples/results
 debug.exr
 fit_ltc/fitLTC
@@ -23,3 +28,4 @@ dockerfiles/dependencies/
 redner.egg-info
 dist
 log.txt
+docs/build
