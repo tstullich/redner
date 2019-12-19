@@ -1,9 +1,9 @@
-# redner
+# redner: Differentiable rendering without approximation
 
 ![](https://people.csail.mit.edu/tzumao/diffrt/teaser.jpg)
 
-redner is a differentiable renderer that can take the derivatives of rendering output with respect to arbitrary 
-scene parameters, that is, you can backpropagate from the image to your 3D scene. One of the major usages of redner is inverse rendering (hence the name redner) through gradient descent. What sets redner apart are: 1) it computes correct rendering gradients stochastically without any approximation and 2) it has a physically-based mode -- which means it can simulate photons and produce realistic lighting phenomena, such as shadow and global illumination, and it handles the derivatives of these features correctly. You can also use redner in a [fast deferred rendering mode](https://github.com/BachiLi/redner/wiki/Tutorial-4%3A-fast-deferred-rendering) for local shading: in this mode it still has correct gradient estimation and more elaborate material models compared to most differentiable renderers out there.
+redner is a differentiable renderer that can take the derivatives of rendering outputs with respect to arbitrary 
+scene parameters, that is, you can backpropagate from the image to your 3D scene. One of the major usages of redner is inverse rendering (hence the name redner) through gradient descent. What sets redner apart are: 1) it computes correct rendering gradients stochastically without any approximation by properly considering the discontinuities, and 2) it has a physically-based mode -- which means it can simulate photons and produce realistic lighting phenomena, such as shadow and global illumination, and it handles the derivatives of these features correctly. You can also use redner in a [fast deferred rendering mode](https://colab.research.google.com/github/BachiLi/redner/blob/master/tutorials/fast_local_shading.ipynb) for local shading: in this mode it still has correct gradient estimation and more elaborate material models compared to most differentiable renderers out there.
 
 For more details on the renderer, what it can do, and the techniques it use for computing the derivatives, please
 take a look at the paper:
@@ -21,8 +21,8 @@ otherwise (Linux and OS X):
 ```
 pip install redner
 ```
-No Windows support yet. Contributions are welcome.  
 You can also build from source. See the [wiki](https://github.com/BachiLi/redner/wiki/Installation) for building instructions.
+Preliminary windows support (CPU-only) made by [Markus Worchel](https://github.com/mworchel) can be accessed through building from source.
 
 ## Documentation
 
@@ -31,6 +31,8 @@ You can also take a look at the tests directories ([PyTorch](tests) and [TensorF
 
 ## News
 
+12/15/2019 - Fixed a GC-related bug on the PyTorch rendering code in 0.1.30. Please update.  
+12/12/2019 - Preliminary Windows support (CPU-only) is available thanks to the contribution of [Markus Worchel](https://github.com/mworchel).  
 12/09/2019 - Added many tutorials in wiki using Google colab. Added a sphinx-generated documentation.  
 12/09/2019 - Fixed a bug in the Wavefront obj loader. Thanks Dejan Azinović for reporting!  
 12/01/2019 - Redo the build systems and setup Python wheel installation. Redner is now on PyPI ([https://pypi.org/project/redner-gpu/](https://pypi.org/project/redner-gpu/) and [https://pypi.org/project/redner/](https://pypi.org/project/redner/)).  
@@ -58,8 +60,8 @@ You can also take a look at the tests directories ([PyTorch](tests) and [TensorF
 redner depends on a few libraries/systems, which are all included in the repository:
 - [Python 3.6 or above](https://www.python.org)
 - [pybind11](https://github.com/pybind/pybind11)
-- [PyTorch 1.0 or above](https://pytorch.org)
-- [Tensorflow 1.14](https://www.tensorflow.org/) (optional, required if PyTorch is not installed)
+- [PyTorch 1.0 or above](https://pytorch.org) (optional, required if TensorFlow is not installed)
+- [Tensorflow 2.0](https://www.tensorflow.org/) (optional, required if PyTorch is not installed)
 - [OpenEXR](https://github.com/openexr/openexr)
 - [Embree](https://embree.github.io)
 - [CUDA 10](https://developer.nvidia.com/cuda-downloads) (optional, need GPU at Kepler class or newer)
@@ -83,10 +85,8 @@ The current development plan is to enhance the renderer. Following features will
 - Russian roulette
 - Distribution effects: depth of field/motion blur
 - Proper pixel filter (currently only support 1x1 box filter)
-- Mini-batching
 - Volumetric path tracing (e.g. [http://www.cs.cornell.edu/projects/translucency/#acquisition-sa13](http://www.cs.cornell.edu/projects/translucency/#acquisition-sa13))
 - Spectral rendering
-- Backface culling
 - Gradient visualization
 - Spherical light sources
 

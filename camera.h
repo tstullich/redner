@@ -77,6 +77,8 @@ struct DCamera {
         : position(position.get()),
           look(look.get()),
           up(up.get()),
+          cam_to_world(cam_to_world.get()),
+          world_to_cam(world_to_cam.get()),
           intrinsic_mat_inv(intrinsic_mat_inv.get()),
           intrinsic_mat(intrinsic_mat.get()) {}
 

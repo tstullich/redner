@@ -87,6 +87,9 @@ class RenderFunction(torch.autograd.Function):
             use_secondary_edge_sampling: bool
 
         """
+        # Record if there is any parameter that requires gradient need discontinuity sampling.
+        # For skipping edge sampling when it is not necessary.
+        requires_visibility_grad = False
         cam = scene.camera
         num_shapes = len(scene.shapes)
         num_materials = len(scene.materials)
@@ -94,6 +97,7 @@ class RenderFunction(torch.autograd.Function):
         num_mediums = len(scene.mediums)
         for light_id, light in enumerate(scene.area_lights):
             scene.shapes[light.shape_id].light_id = light_id
+
         args = []
         args.append(num_shapes)
         args.append(num_materials)
@@ -104,17 +108,29 @@ class RenderFunction(torch.autograd.Function):
         assert(cam.up is None or torch.isfinite(cam.up).all())
         assert(torch.isfinite(cam.intrinsic_mat_inv).all())
         assert(torch.isfinite(cam.intrinsic_mat).all())
+        if cam.position is not None and cam.position.requires_grad:
+            requires_visibility_grad = True
+        if cam.look_at is not None and cam.look_at.requires_grad:
+            requires_visibility_grad = True
+        if cam.up is not None and cam.up.requires_grad:
+            requires_visibility_grad = True
         args.append(cam.position.cpu() if cam.position is not None else None)
         args.append(cam.look_at.cpu() if cam.look_at is not None else None)
         args.append(cam.up.cpu() if cam.up is not None else None)
         if cam.cam_to_world is not None:
+            if cam.cam_to_world.requires_grad:
+                requires_visibility_grad = True
             args.append(cam.cam_to_world.cpu().contiguous())
         else:
             args.append(None)
         if cam.world_to_cam is not None:
+            if cam.world_to_cam.requires_grad:
+                requires_visibility_grad = True
             args.append(cam.world_to_cam.cpu().contiguous())
         else:
             args.append(None)
+        if cam.intrinsic_mat.requires_grad or cam.intrinsic_mat_inv.requires_grad:
+            requires_visibility_grad = True
         args.append(cam.intrinsic_mat_inv.cpu().contiguous())
         args.append(cam.intrinsic_mat.cpu().contiguous())
         args.append(cam.clip_near)
@@ -127,6 +143,8 @@ class RenderFunction(torch.autograd.Function):
                 assert(torch.isfinite(shape.uvs).all())
             if (shape.normals is not None):
                 assert(torch.isfinite(shape.normals).all())
+            if (shape.vertices.requires_grad):
+                requires_visibility_grad = True
             args.append(shape.vertices.to(pyredner.get_device()))
             args.append(shape.indices.to(pyredner.get_device()))
             args.append(shape.uvs.to(pyredner.get_device()) if shape.uvs is not None else None)
@@ -208,8 +226,13 @@ class RenderFunction(torch.autograd.Function):
         args.append(max_bounces)
         args.append(channels)
         args.append(sampler_type)
-        args.append(use_primary_edge_sampling)
-        args.append(use_secondary_edge_sampling)
+        if requires_visibility_grad:
+            args.append(use_primary_edge_sampling)
+            args.append(use_secondary_edge_sampling)
+        else:
+            # Don't need to do edge sampling if we don't require spatial derivatives
+            args.append(False)
+            args.append(False)
 
         return args
 
@@ -569,6 +592,7 @@ class RenderFunction(torch.autograd.Function):
         ctx.scene = scene
         ctx.options = options
         ctx.num_samples = num_samples
+        ctx.args = args # Important to prevent GC from deallocating the tensors
         return rendered_image
 
     @staticmethod
@@ -585,13 +609,13 @@ class RenderFunction(torch.autograd.Function):
             d_cam_look = torch.zeros(3, device = pyredner.get_device())
             d_cam_up = torch.zeros(3, device = pyredner.get_device())
             d_cam_to_world = None
-            d_wolrd_to_cam = None
+            d_world_to_cam = None
         else:
             d_cam_position = None
             d_cam_look = None
             d_cam_up = None
             d_cam_to_world = torch.zeros(4, 4, device = pyredner.get_device())
-            d_wolrd_to_cam = torch.zeros(4, 4, device = pyredner.get_device())
+            d_world_to_cam = torch.zeros(4, 4, device = pyredner.get_device())
         d_intrinsic_mat_inv = torch.zeros(3, 3, device = pyredner.get_device())
         d_intrinsic_mat = torch.zeros(3, 3, device = pyredner.get_device())
         if camera.use_look_at:
@@ -607,7 +631,7 @@ class RenderFunction(torch.autograd.Function):
                                       redner.float_ptr(0), # look
                                       redner.float_ptr(0), # up
                                       redner.float_ptr(d_cam_to_world.data_ptr()),
-                                      redner.float_ptr(d_wolrd_to_cam.data_ptr()),
+                                      redner.float_ptr(d_world_to_cam.data_ptr()),
                                       redner.float_ptr(d_intrinsic_mat_inv.data_ptr()),
                                       redner.float_ptr(d_intrinsic_mat.data_ptr()))
         d_vertices_list = []

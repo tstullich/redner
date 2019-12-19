@@ -453,13 +453,21 @@ inline TVector2<T> normalize(const TVector2<T> &v0) {
 template <typename T>
 DEVICE
 inline TVector3<T> normalize(const TVector3<T> &v0) {
-    return v0 / length(v0);
+    auto l = length(v0);
+    if (l <= 0) {
+        return TVector3<T>{0, 0, 0};
+    } else {
+        return v0 / l;
+    }
 }
 
 template <typename T>
 DEVICE
 inline TVector3<T> d_normalize(const TVector3<T> &v0, const TVector3<T> &d_n) {
     auto l = length(v0);
+    if (l <= 0) {
+        return TVector3<T>{0, 0, 0};
+    }
     auto n = v0 / l;
     auto d_v0 = d_n / l;
     auto d_l = -dot(d_n, n) / l;
