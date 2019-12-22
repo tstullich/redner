@@ -14,7 +14,7 @@ struct bsdf_or_phase_sampler {
             // Sample phase function for new direction
             next_rays[pixel_id] = Ray{
                 medium_points[pixel_id],
-                phase_function_sample(
+                sample_phase_function(
                     get_phase_function(scene.mediums[medium_isect.medium_id]),
                     -incoming_ray.dir,
                     directional_samples[pixel_id])};

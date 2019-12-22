@@ -8,12 +8,13 @@
 #include "texture.h"
 #include "area_light.h"
 #include "material.h"
+#include "medium.h"
 
 struct Scene;
 struct ChannelInfo;
 struct DScene;
 
-/// Compute the contribution at a path vertex, by combining next event estimation & BSDF sampling. 
+/// Compute the contribution at a path vertex, by combining next event estimation & BSDF sampling.
 void accumulate_path_contribs(const Scene &scene,
                               const BufferView<int> &active_pixels,
                               const BufferView<Vector3> &throughputs,
@@ -68,4 +69,5 @@ void d_accumulate_path_contribs(const Scene &scene,
                                 BufferView<Vector3> d_throughputs,
                                 BufferView<DRay> d_incoming_rays,
                                 BufferView<RayDifferential> d_incoming_ray_differentials,
-                                BufferView<SurfacePoint> d_shading_points);
+                                BufferView<SurfacePoint> d_shading_points,
+                                BufferView<DMedium> d_mediums);

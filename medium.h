@@ -4,8 +4,6 @@
 #include "intersection.h"
 #include "buffer.h"
 #include "phase_function.h"
-#include "ptr.h"
-#include "py_utils.h"
 #include "ray.h"
 #include "vector.h"
 
@@ -22,9 +20,13 @@ struct TMediumSample {
 using MediumSample = TMediumSample<Real>;
 
 enum class MediumType {
-    homogeneous
+    homogeneous,
+    heterogeneous,
 };
 
+/**
+ * Class to hold information about a homogeneous medium.
+ */
 struct HomogeneousMedium {
     HomogeneousMedium(const Vector3f &sigma_a,
                       const Vector3f &sigma_s,
@@ -35,25 +37,40 @@ struct HomogeneousMedium {
     float g;
 };
 
+/**
+ * Class to hold information about a heterogeneous medium.
+ */
+struct HeterogeneousMedium {
+    HeterogeneousMedium(const Vector3f &sigma_a,
+                        const Vector3f &sigma_s,
+                        float g)
+        : sigma_a(sigma_a), sigma_s(sigma_s), sigma_t(sigma_a + sigma_s), g(g) {}
+
+    Vector3f sigma_a, sigma_s, sigma_t;
+    float g;
+};
+
 struct Medium {
-    Medium(const HomogeneousMedium &homogeneous) {
+    Medium(const HomogeneousMedium &medium) {
         type = MediumType::homogeneous;
-        this->homogeneous = homogeneous;
+        homogeneous = medium;
+    }
+
+    Medium(const HeterogeneousMedium &medium) {
+        type = MediumType::heterogeneous;
+        heterogeneous = medium;
     }
 
     MediumType type;
     union {
         HomogeneousMedium homogeneous;
+        HeterogeneousMedium heterogeneous;
     };
 
+    // TODO Rewrite to access proper fields
     DEVICE
     inline Vector3f get_sigma_a() const {
         return homogeneous.sigma_a;
-    }
-
-    DEVICE
-    inline void set_sigma_a(const Vector3f &sigma_a) {
-        homogeneous.sigma_a = sigma_a;
     }
 
     DEVICE
@@ -62,18 +79,8 @@ struct Medium {
     }
 
     DEVICE
-    inline void set_sigma_s(const Vector3f &sigma_s) {
-        homogeneous.sigma_s = sigma_s;
-    }
-
-    DEVICE
     inline float get_g() const {
         return homogeneous.g;
-    }
-
-    DEVICE
-    inline void set_g(const float g) {
-        homogeneous.g = g;
     }
 };
 
@@ -82,6 +89,8 @@ inline
 PhaseFunction get_phase_function(const Medium &medium) {
     if (medium.type == MediumType::homogeneous) {
         return PhaseFunction(HenyeyGreenstein{medium.homogeneous.g});
+    } else if (medium.type == MediumType::heterogeneous) {
+        return PhaseFunction(HenyeyGreenstein{medium.heterogeneous.g});
     } else {
         return PhaseFunction();
     }
@@ -112,6 +121,7 @@ void evaluate_transmittance(const Scene &scene,
 
 struct DMedium {
     // TODO Fill in with needed fields
+    DMedium() {};
 };
 
 void d_sample_medium(const Scene &scene,

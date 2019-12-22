@@ -57,7 +57,7 @@ Real phase_function(const PhaseFunction &phase_function,
 // The directions are assumed to be pointed outwards.
 DEVICE
 inline
-Vector3 phase_function_sample(const PhaseFunction &phase_function,
+Vector3 sample_phase_function(const PhaseFunction &phase_function,
                               const Vector3 &wi,
                               const DirectionalSample &sample) {
     if (phase_function.type == PhaseFunctionType::HenyeyGreenstein) {

@@ -98,6 +98,7 @@ struct PathBuffer {
         d_rays = Buffer<DRay>(use_gpu, num_pixels);
         d_ray_differentials = Buffer<RayDifferential>(use_gpu, num_pixels);
         d_points = Buffer<SurfacePoint>(use_gpu, num_pixels);
+        d_mediums = Buffer<DMedium>(use_gpu, num_pixels);
 
         primary_edge_samples = Buffer<PrimaryEdgeSample>(use_gpu, num_pixels);
         secondary_edge_samples = Buffer<SecondaryEdgeSample>(use_gpu, num_pixels);
@@ -149,6 +150,7 @@ struct PathBuffer {
     Buffer<DRay> d_rays;
     Buffer<RayDifferential> d_ray_differentials;
     Buffer<SurfacePoint> d_points;
+    Buffer<DMedium> d_mediums;
 
     // Edge sampling related
     Buffer<PrimaryEdgeSample> primary_edge_samples;
@@ -544,6 +546,7 @@ void render(const Scene &scene,
                 auto d_rays = path_buffer.d_rays.view(0, num_pixels);
                 auto d_ray_differentials = path_buffer.d_ray_differentials.view(0, num_pixels);
                 auto d_points = path_buffer.d_points.view(0, num_pixels);
+                auto d_mediums = path_buffer.d_mediums.view(0, num_pixels);
 
                 if (first) {
                     first = false;
@@ -587,7 +590,8 @@ void render(const Scene &scene,
                     d_throughputs,
                     d_rays,
                     d_ray_differentials,
-                    d_points);
+                    d_points,
+                    d_mediums);
 
                 if (scene.use_secondary_edge_sampling) {
                     ////////////////////////////////////////////////////////////////////////////////
