@@ -83,6 +83,7 @@ struct PathBuffer {
             edge_medium_isects = Buffer<Intersection>(use_gpu, 4 * num_pixels);
             medium_points = Buffer<Vector3>(use_gpu, (max_bounces + 1) * num_pixels);
             edge_medium_points = Buffer<Vector3>(use_gpu, 4 * num_pixels);
+            medium_distances = Buffer<Real>(use_gpu, max_bounces * num_pixels); // TODO Check if this is correct
         }
 
         // OptiX buffers
@@ -131,11 +132,13 @@ struct PathBuffer {
     Buffer<Vector3> throughputs, edge_throughputs;
     Buffer<Real> channel_multipliers;
     Buffer<Real> min_roughness, edge_min_roughness;
+
     // Participating media
     Buffer<MediumSample> medium_samples;
     Buffer<Intersection> medium_isects, edge_medium_isects;
     Buffer<Vector3> medium_points, edge_medium_points;
     Buffer<Vector3> transmittances;
+    Buffer<Real> medium_distances;
 
     // OptiX related
     Buffer<OptiXRay> optix_rays;

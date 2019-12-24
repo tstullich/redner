@@ -16,17 +16,6 @@ Real sample_distance(const Medium &medium, const MediumSample &sample) {
     }
 }
 
-DEVICE
-inline
-Real d_sample_distance(const Medium &medium, const MediumSample &sample) {
-    if (medium.type == MediumType::homogeneous) {
-        // TODO Implement
-        return Real(0);
-    } else {
-        return Real(0);
-    }
-}
-
 /**
  * Sample the given medium to see if the ray is affected by it. The
  * transmittance is encoded in the returned Vector3.
@@ -45,7 +34,7 @@ Vector3 sample(const Medium &medium,
         auto inside_medium = dist < ray.tmax;
         auto t = min(dist, ray.tmax);
         // Compute the transmittance and sampling density
-        auto tr = exp(-h.sigma_t * min(t, MaxFloat));
+        auto tr = exp(-h.sigma_t * min(t, MaxFloat) * len(ray.dir));
 
         // Return the weighting factor for scattering inside of a homogeneous medium
         auto density = inside_medium ? (h.sigma_t * tr) : tr;
@@ -71,6 +60,8 @@ Vector3 sample(const Medium &medium,
             }
         }
         return inside_medium ? (tr * h.sigma_s / pdf) : (tr / pdf);
+    } else if (medium.type == MediumType::heterogeneous) {
+        return Vector3{0, 0, 0};
     } else {
         return Vector3{0, 0, 0};
     }
@@ -141,41 +132,6 @@ Vector3 transmittance(const Medium &medium,
     }
 }
 
-/**
- * Find the derivative of the transmittance. This requires
- * us to have the previously computed transmittances
- */
-DEVICE
-inline
-Vector3 d_transmittance(const Medium &medium,
-                        const Ray &ray,
-                        const Vector3 &medium_isect,
-                        const Real &t) {
-    if (medium.type == MediumType::homogeneous) {
-        auto h = medium.homogeneous;
-        auto tr = transmittance(medium, ray);
-
-        // Calculate change rate of sigma_t using the material derivative for sigma_t
-        auto d_sig_t = h.sigma_t * medium_isect + h.sigma_t * t * -ray.dir;
-        auto d_x = ray.org - (t * ray.dir);
-        auto grad_sig_t = Vector3{1, 1, 1}; // TODO For testing only. Need to add more logic here
-        d_sig_t += dot(d_x, grad_sig_t);
-
-        // Calculate the attenuation along the ray accounting for the
-        // rate of change with regards to t
-        auto d_t = Real(0); // TODO Need to find change rate for t
-        auto attenutation = d_t * (h.sigma_t * (medium_isect - t * ray.org));
-
-        // Put together all of the components for the derivative of the transmittance
-        // TODO Check if we need the minus sign for the first transmittance term
-        auto d_tr = -tr * (exp(-d_sig_t * min(ray.tmax, MaxFloat)) + attenutation);
-        return d_tr;
-    } else {
-        return Vector3{0, 0, 0};
-    }
-
-}
-
 struct transmittance_sampler {
     DEVICE void operator()(int idx) {
         auto pixel_id = active_pixels[idx];
@@ -217,6 +173,44 @@ void evaluate_transmittance(const Scene &scene,
         active_pixels.size(), scene.use_gpu);
 }
 
+/**
+ * Find the derivative of the transmittance. This requires
+ * us to have the previously computed transmittances
+ */
+DEVICE
+inline
+Vector3 d_transmittance(const Medium &medium,
+                        const Ray &ray,
+                        const Vector3 &medium_isect,
+                        const Real &t) {
+    if (medium.type == MediumType::homogeneous) {
+        auto h = medium.homogeneous;
+        auto tr = transmittance(medium, ray);
+
+        // Calculate change rate of sigma_t using the material derivative for sigma_t
+        auto d_sig_t = (h.sigma_t * medium_isect) + (h.sigma_t * t * -ray.dir);
+        auto d_x = ray.org - (t * ray.dir);
+        auto grad_sig_t = Vector3{1, 1, 1}; // TODO For testing only. Need to add more logic here
+        d_sig_t += dot(d_x, grad_sig_t);
+
+        // Calculate the attenuation along the ray accounting for the
+        // rate of change with regards to t
+        auto d_t = Real(0); // TODO Need to find change rate for t
+        auto attenutation = d_t * (h.sigma_t * (medium_isect - t * ray.org));
+
+        // Calculate the transmittance again taking into account the partial derivative
+        // of sigma_t
+        auto tr_sig_t = exp(-d_sig_t * min(ray.tmax, MaxFloat));
+
+        // Put together all of the components for the derivative of the transmittance
+        // TODO Check if we need the minus sign for the first transmittance term
+        auto d_tr = -tr * (tr_sig_t + attenutation);
+        return d_tr;
+    } else {
+        return Vector3{0, 0, 0};
+    }
+}
+
 struct d_medium_sampler {
     DEVICE void operator()(int idx) {
         auto pixel_id = active_pixels[idx];
@@ -235,7 +229,7 @@ struct d_medium_sampler {
             auto t = min(dist, incoming_ray.tmax);
 
             // Compute the derivative of the transmittance term
-            Vector3 d_tr = d_transmittance(medium, incoming_ray, medium_point, t);
+            auto d_tr = d_transmittance(medium, incoming_ray, medium_point, t);
 
         } else {
             // TODO Implement calculating the "interfacial" term

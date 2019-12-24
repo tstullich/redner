@@ -33,9 +33,25 @@ struct PhaseFunction {
 
 // Calculate the phase function based on the angle between wo and wi
 // and a scattering factor g
-DEVICE inline Real phase_HG(Real cos_theta, float g) {
+DEVICE
+inline
+Real phase_HG(Real cos_theta, float g) {
     auto denom = 1 + g * g + 2 * g * cos_theta;
     return Real(INV_4PI) * (1 - g * g) / (denom * sqrt(denom));
+}
+
+/**
+ * Calculate the derivative of the HG phase function. The analytical
+ * form of the phase function is used in order to find the derivative.
+ * It is taken from a paper found at the following link:
+ * https://www.astro.umd.edu/~jph/HG_note.pdf
+ */
+DEVICE
+inline
+Real d_phase_HG(Real cos_theta, float g) {
+    auto numer = (g * g + 3.0) * cos_theta + g * (g * g - 5.0);
+    auto denom = 2.0 * pow((g * g - 2.0 * g * cos_theta + 1.0), 2.5);
+    return numer / denom;
 }
 
 // Evaluate the phase function at a point given incoming and outgoing direction.
