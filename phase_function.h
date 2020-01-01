@@ -69,6 +69,21 @@ Real phase_function(const PhaseFunction &phase_function,
     }
 }
 
+// Evaluate the derivative of the phase function. It works much like
+// d_pdf_phase() so perhaps we can refactor that a bit.
+DEVICE
+inline
+Real d_phase_function(const PhaseFunction &phase_function,
+                      const Vector3 &wo,
+                      const Vector3 &wi) {
+    if (phase_function.type == PhaseFunctionType::HenyeyGreenstein) {
+        auto hg = phase_function.hg;
+        return d_phase_HG(dot(wo, wi), hg.g);
+    } else {
+        return 0;
+    }
+}
+
 // Given an incoming direction, sample an outgoing direction for a phase function.
 // The directions are assumed to be pointed outwards.
 DEVICE
@@ -111,6 +126,20 @@ Real phase_function_pdf(const PhaseFunction &phase_function,
         auto hg = phase_function.hg;
         return phase_HG(dot(wo, wi), hg.g);
     }  else {
+        return 0;
+    }
+}
+
+// Derivative of the PDF evaluation
+DEVICE
+inline
+Real d_phase_function_pdf(const PhaseFunction &phase_function,
+                          const Vector3 &wo,
+                          const Vector3 &wi) {
+    if (phase_function.type == PhaseFunctionType::HenyeyGreenstein) {
+        auto hg = phase_function.hg;
+        return d_phase_HG(dot(wo, wi), hg.g);
+    } else {
         return 0;
     }
 }

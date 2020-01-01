@@ -466,6 +466,8 @@ void render(const Scene &scene,
                 rendered_image.get(),
                 BufferView<Real>());
 
+            // TODO Check if this exta medium sampling is really needed.
+            // Without it the variance of the final output is much lower
             if (scene.mediums.size() > 0 && depth != max_bounces - 1) {
                 // Sample a distance if we are inside a participating media.
                 // Update intersections as well.

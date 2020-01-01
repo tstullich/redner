@@ -308,6 +308,24 @@ struct d_path_contribs_accumulator {
                             auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
                             nee_contrib =
                                 (mis_weight * geometry_term / pdf_nee) * light_contrib * nee_transmittances[pixel_id];
+
+                            // Compute the derivative of the phase function pdf and
+                            // find the necessary components for it
+                            auto d_nee_contrib = d_path_contrib * throughput;
+                            auto d_geometry_term = weight * sum(d_nee_contrib * light_contrib);
+
+                            auto d_cos_light = cos_light > 0 ?
+                                d_geometry_term / dist_sq : -d_geometry_term / dist_sq;
+
+                            auto d_wo = d_cos_light * light_point.geom_normal;
+                            // TODO Figure out how to get d_wi here
+                            auto d_wi = Vector3{0, 0, 0};
+                            auto d_pdf_phase = d_phase_function_pdf(
+                                get_phase_function(scene.mediums[medium_isect.medium_id]),
+                                d_wo, d_wi);
+
+                            // Need to backpropagate to shape
+                            //d_sample_shape();
                         } else {
                             // Compute the BSDF pdf and everything associated with it
                             auto bsdf_val = bsdf(material, surface_point, wi, wo, min_rough);
@@ -403,6 +421,14 @@ struct d_path_contribs_accumulator {
                             wo, wi);
                         auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
                         nee_contrib = (mis_weight / pdf_nee) * light_contrib * nee_transmittances[pixel_id];
+
+                        // Compute the derivative of the phase function
+                        // TODO Figure out how to find derivatives
+                        auto d_wi = Vector3{0, 0, 0};
+                        auto d_wo = Vector3{0, 0, 0};
+                        auto d_pdf_phase = d_phase_function(
+                            get_phase_function(scene.mediums[medium_isect.medium_id]),
+                            d_wo, d_wi);
                     } else {
                         auto bsdf_val = bsdf(material, surface_point, wi, wo, min_rough);
                         auto pdf_bsdf = bsdf_pdf(material, surface_point, wi, wo, min_rough);
@@ -541,13 +567,16 @@ struct d_path_contribs_accumulator {
 
                 auto d_wi = Vector3{0, 0, 0};
                 auto d_wo = d_next_ray.dir;
+                auto d_pdf_phase = Real(0);
                 // pdf_bsdf = bsdf_pdf(material, shading_point, wi, wo, min_rough)
                 // d_bsdf_pdf(material, shading_point, wi, wo, min_rough, d_pdf_bsdf,
                 //            d_roughness_tex, d_shading_point, d_wi, d_wo);
                 // bsdf_val = bsdf(material, shading_point, wi, wo)
-                if (medium_isect.medium_id < 0) {
-                    // Workaround until we have an equivalent for d_phase
-                    // Otherwise we get segfaults if an intersection inside of a medium was made
+                if (medium_isect.medium_id > 0) {
+                    // TODO Find out how this contributes
+                    d_pdf_phase = d_phase_function(get_phase_function(scene.mediums[medium_isect.medium_id]),
+                                                   d_wo, d_wi);
+                } else {
                     d_bsdf(material, surface_point, wi, wo, min_rough, d_bsdf_val,
                         d_material, d_shading_point, d_wi, d_wo);
                 }

@@ -34,7 +34,7 @@ Vector3 sample(const Medium &medium,
         auto inside_medium = dist < ray.tmax;
         auto t = min(dist, ray.tmax);
         // Compute the transmittance and sampling density
-        auto tr = exp(-h.sigma_t * min(t, MaxFloat) * len(ray.dir));
+        auto tr = exp(-h.sigma_t * min(t, MaxFloat) * length(ray.dir));
 
         // Return the weighting factor for scattering inside of a homogeneous medium
         auto density = inside_medium ? (h.sigma_t * tr) : tr;
@@ -218,13 +218,11 @@ struct d_medium_sampler {
         const auto &medium_isect = medium_isects[pixel_id];
         const auto &medium = scene.mediums[medium_isect.medium_id];
         const auto &medium_sample = medium_samples[pixel_id];
+        const auto &medium_point = medium_points[pixel_id];
 
         auto dist = sample_distance(medium, medium_sample);
         if (dist < incoming_ray.tmax) {
             // Inside medium. Calculate volumetric derivatives
-            const auto &directional_sample = directional_samples[pixel_id];
-            const auto &medium_point = medium_points[pixel_id];
-
             // !!!! This introduces a discontinuity when finding the gradient !!!!
             auto t = min(dist, incoming_ray.tmax);
 
@@ -233,6 +231,14 @@ struct d_medium_sampler {
 
         } else {
             // TODO Implement calculating the "interfacial" term
+            auto tr = transmittance(medium, incoming_ray);
+
+            // Find the partial derivative of the transmittance
+            // !!!! This introduces a discontinuity when finding the gradient !!!!
+            auto t = min(dist, incoming_ray.tmax);
+            auto d_tr = d_transmittance(medium, incoming_ray, medium_point, t);
+
+            // Find the partial derivative of the surface reflectance
         }
     }
 
