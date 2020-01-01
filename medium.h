@@ -51,6 +51,8 @@ struct HeterogeneousMedium {
 };
 
 struct Medium {
+    Medium() {} // TODO Remove once done. Dummy constructor. Only keep for testing
+
     Medium(const HomogeneousMedium &medium) {
         type = MediumType::homogeneous;
         homogeneous = medium;
@@ -67,20 +69,19 @@ struct Medium {
         HeterogeneousMedium heterogeneous;
     };
 
-    // TODO Rewrite to access proper fields
-    DEVICE
-    inline Vector3f get_sigma_a() const {
-        return homogeneous.sigma_a;
+    DEVICE inline Vector3f get_sigma_a() const {
+        return type == MediumType::homogeneous ? homogeneous.sigma_a :
+                                                 heterogeneous.sigma_a;
     }
 
-    DEVICE
-    inline Vector3f get_sigma_s() const {
-        return homogeneous.sigma_s;
+    DEVICE inline Vector3f get_sigma_s() const {
+        return type == MediumType::homogeneous ? homogeneous.sigma_s :
+                                                 heterogeneous.sigma_s;
     }
 
-    DEVICE
-    inline float get_g() const {
-        return homogeneous.g;
+    DEVICE inline float get_g() const {
+        return type == MediumType::homogeneous ? homogeneous.g :
+                                                 heterogeneous.g;
     }
 };
 
@@ -117,12 +118,6 @@ void evaluate_transmittance(const Scene &scene,
                             const BufferView<Intersection> &medium_isects,
                             const BufferView<MediumSample> &medium_samples,
                             BufferView<Vector3> transmittances);
-
-
-struct DMedium {
-    // TODO Fill in with needed fields
-    DMedium() {};
-};
 
 void d_sample_medium(const Scene &scene,
                      const BufferView<int> &active_pixels,
