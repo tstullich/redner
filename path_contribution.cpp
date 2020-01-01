@@ -272,7 +272,7 @@ struct d_path_contribs_accumulator {
             Vector3{0, 0, 0}, Vector3{0, 0, 0},
             Vector3{0, 0, 0}, Vector3{0, 0, 0}};
         d_shading_point = SurfacePoint::zero();
-        d_medium = DMedium{}; // TODO Check proper initialization
+        d_medium = Medium{}; // TODO Check proper initialization
 
         // Next event estimation
         auto nee_contrib = Vector3{0, 0, 0};
@@ -806,7 +806,7 @@ struct d_path_contribs_accumulator {
     DRay *d_incoming_rays;
     RayDifferential *d_incoming_ray_differentials;
     SurfacePoint *d_shading_points;
-    DMedium *d_mediums;
+    Medium *d_mediums;
 };
 
 void accumulate_path_contribs(const Scene &scene,
@@ -886,7 +886,7 @@ void d_accumulate_path_contribs(const Scene &scene,
                                 BufferView<DRay> d_incoming_rays,
                                 BufferView<RayDifferential> d_incoming_ray_differentials,
                                 BufferView<SurfacePoint> d_shading_points,
-                                BufferView<DMedium> d_mediums) {
+                                BufferView<Medium> d_mediums) {
     parallel_for(d_path_contribs_accumulator{
         get_flatten_scene(scene),
         active_pixels.begin(),
