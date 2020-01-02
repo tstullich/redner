@@ -69,6 +69,10 @@ struct Medium {
         HeterogeneousMedium heterogeneous;
     };
 
+    DEVICE inline MediumType get_type() const {
+        return type;
+    }
+
     DEVICE inline Vector3f get_sigma_a() const {
         return type == MediumType::homogeneous ? homogeneous.sigma_a :
                                                  heterogeneous.sigma_a;
@@ -82,6 +86,34 @@ struct Medium {
     DEVICE inline float get_g() const {
         return type == MediumType::homogeneous ? homogeneous.g :
                                                  heterogeneous.g;
+    }
+
+    DEVICE inline void set_sigma_a(const Vector3 &sigma_a) {
+        if (type == MediumType::homogeneous) {
+            homogeneous.sigma_a = sigma_a;
+        } else {
+            heterogeneous.sigma_a = sigma_a;
+        }
+    }
+
+    DEVICE inline void set_sigma_s(const Vector3 &sigma_s) {
+        if (type == MediumType::homogeneous) {
+            homogeneous.sigma_s = sigma_s;
+        } else {
+            heterogeneous.sigma_s = sigma_s;
+        }
+    }
+
+    DEVICE inline void set_g(const float &g) {
+        if (type == MediumType::homogeneous) {
+            homogeneous.g = g;
+        } else {
+            heterogeneous.g = g;
+        }
+    }
+
+    DEVICE inline void set_type(const MediumType &medium_type) {
+        type = medium_type;
     }
 };
 

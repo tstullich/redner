@@ -272,7 +272,15 @@ struct d_path_contribs_accumulator {
             Vector3{0, 0, 0}, Vector3{0, 0, 0},
             Vector3{0, 0, 0}, Vector3{0, 0, 0}};
         d_shading_point = SurfacePoint::zero();
-        d_medium = Medium{}; // TODO Check proper initialization
+
+        if (medium_isect.medium_id > 0) {
+            // Initializing this way since a Medium can have two different
+            // types and accessing member fields would be too cumbersome
+            d_medium.set_type(scene.mediums[medium_isect.medium_id].get_type());
+            d_medium.set_sigma_a(Vector3{0, 0, 0});
+            d_medium.set_sigma_s(Vector3{0, 0, 0});
+            d_medium.set_g(Real(0));
+        }
 
         // Next event estimation
         auto nee_contrib = Vector3{0, 0, 0};
