@@ -268,9 +268,11 @@ void render(const Scene &scene,
         auto surface_points = path_buffer.surface_points.view(0, num_pixels);
         auto medium_isects = surface_isects;
         auto medium_points = BufferView<Vector3>();
+        auto medium_distances = BufferView<Real>();
         if (scene.mediums.size() > 0) {
             medium_isects = path_buffer.medium_isects.view(0, num_pixels);
             medium_points = path_buffer.medium_points.view(0, num_pixels);
+            medium_distances = path_buffer.medium_distances.view(0, num_pixels);
         }
         auto primary_active_pixels = path_buffer.primary_active_pixels.view(0, num_pixels);
         auto active_pixels = path_buffer.active_pixels.view(0, num_pixels);
@@ -350,9 +352,11 @@ void render(const Scene &scene,
                 depth * num_pixels, num_pixels);
             auto medium_isects = surface_isects;
             auto medium_points = BufferView<Vector3>();
+            auto medium_distances = BufferView<Real>();
             if (scene.mediums.size() > 0) {
                 medium_isects = path_buffer.medium_isects.view(depth * num_pixels, num_pixels);
                 medium_points = path_buffer.medium_points.view(depth * num_pixels, num_pixels);
+                medium_distances = path_buffer.medium_distances.view(depth * num_pixels, num_pixels);
             }
             auto light_isects = path_buffer.light_isects.view(depth * num_pixels, num_pixels);
             auto light_points = path_buffer.light_points.view(depth * num_pixels, num_pixels);
@@ -401,12 +405,10 @@ void render(const Scene &scene,
             // Transmittance is set to zero if occluded.
             occluded(scene, active_pixels, nee_rays, optix_rays, optix_hits);
             if (scene.mediums.size() > 0) {
-                sampler->next_medium_samples(medium_samples);
                 evaluate_transmittance(scene,
                                        active_pixels,
                                        nee_rays,
                                        medium_isects,
-                                       medium_samples,
                                        nee_transmittances);
             } else {
                 // Set transmittance to 1
@@ -530,6 +532,7 @@ void render(const Scene &scene,
                     depth * num_pixels, num_pixels);
                 auto medium_isects = surface_isects;
                 auto medium_points = BufferView<Vector3>();
+                auto medium_samples = path_buffer.medium_samples.view(depth * num_pixels, num_pixels);
                 if (scene.mediums.size() > 0) {
                     medium_isects = path_buffer.medium_isects.view(depth * num_pixels, num_pixels);
                     medium_points = path_buffer.medium_points.view(depth * num_pixels, num_pixels);
@@ -568,6 +571,19 @@ void render(const Scene &scene,
                     DISPATCH(scene.use_gpu, thrust::fill,
                         d_next_points.begin(), d_next_points.end(),
                         SurfacePoint::zero());
+                }
+
+                // Backpropagate the sampling of the medium
+                if (scene.mediums.size() > 0) {
+                    sampler->next_medium_samples(medium_samples);
+                    d_sample_medium(scene,
+                                    active_pixels,
+                                    surface_isects,
+                                    incoming_rays,
+                                    medium_samples,
+                                    medium_isects,
+                                    medium_points,
+                                    throughputs);
                 }
 
                 // Backpropagate path contribution
@@ -750,6 +766,16 @@ void render(const Scene &scene,
                                               light_points,
                                               nee_rays);
                         occluded(scene, active_pixels, nee_rays, optix_rays, optix_hits);
+
+                        if (scene.mediums.size() > 0) {
+                            // Backpropagate the transmittance
+                            d_evaluate_transmittance(scene,
+                                                     active_pixels,
+                                                     incoming_rays,
+                                                     medium_isects,
+                                                     medium_points,
+                                                     nee_transmittances);
+                        }
 
                         // Sample directions based on BRDF
                         edge_sampler->next_directional_samples(tmp_directional_samples);

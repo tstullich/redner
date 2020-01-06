@@ -84,7 +84,8 @@ struct medium_sampler {
                 surface_isect,
                 medium_sample,
                 &medium_isect,
-                &medium_point);
+                &medium_point,
+                new Real(0));
             throughputs[pixel_id] *= transmittance;
         }
     }
@@ -135,7 +136,7 @@ Vector3 transmittance(const Medium &medium,
 struct transmittance_sampler {
     DEVICE void operator()(int idx) {
         auto pixel_id = active_pixels[idx];
-        const Ray &ray = rays[pixel_id];
+        const auto &ray = rays[pixel_id];
         transmittances[pixel_id] = Vector3{1, 1, 1};
         // tmax <= 0 means the ray is occluded
         if (medium_isects[pixel_id].medium_id >= 0 && ray.tmax > 0) {
@@ -148,7 +149,6 @@ struct transmittance_sampler {
     const int *active_pixels;
     const Ray *rays;
     const Intersection *medium_isects;
-    const MediumSample *samples;
     Vector3 *transmittances;
 };
 
@@ -156,7 +156,6 @@ void evaluate_transmittance(const Scene &scene,
                             const BufferView<int> &active_pixels,
                             const BufferView<Ray> &rays,
                             const BufferView<Intersection> &medium_isects,
-                            const BufferView<MediumSample> &medium_samples,
                             BufferView<Vector3> transmittances) {
     // TODO: Currently we assume the first surface/volume we hit has a different
     // index of refraction or is fully opaque. This can be inefficient for some
@@ -168,7 +167,6 @@ void evaluate_transmittance(const Scene &scene,
         active_pixels.begin(),
         rays.begin(),
         medium_isects.begin(),
-        medium_samples.begin(),
         transmittances.begin()},
         active_pixels.size(), scene.use_gpu);
 }
@@ -209,6 +207,44 @@ Vector3 d_transmittance(const Medium &medium,
     } else {
         return Vector3{0, 0, 0};
     }
+}
+
+struct d_transmittance_sampler {
+    DEVICE void operator()(int idx) {
+        auto pixel_id = active_pixels[idx];
+        const auto &ray = rays[pixel_id];
+        const auto &medium_point = medium_points[pixel_id];
+        transmittances[pixel_id] = Vector3{1, 1, 1};
+        // tmax <= 0 means the ray is occluded
+        if (medium_isects[pixel_id].medium_id >= 0 && ray.tmax > 0) {
+            auto t = ray.tmax; // TODO Figure out where the correct t comes from
+            transmittances[pixel_id] = d_transmittance(
+                mediums[medium_isects[pixel_id].medium_id], ray, medium_point, t);
+        }
+    }
+
+    const Medium *mediums;
+    const int *active_pixels;
+    const Ray *rays;
+    const Intersection *medium_isects;
+    const Vector3 *medium_points;
+    Vector3 *transmittances;
+};
+
+void d_evaluate_transmittance(const Scene &scene,
+                              const BufferView<int> &active_pixels,
+                              const BufferView<Ray> &rays,
+                              const BufferView<Intersection> &medium_isects,
+                              const BufferView<Vector3> &medium_points,
+                              BufferView<Vector3> transmittances) {
+    parallel_for(d_transmittance_sampler{
+        scene.mediums.data,
+        active_pixels.begin(),
+        rays.begin(),
+        medium_isects.begin(),
+        medium_points.begin(),
+        transmittances.begin()},
+        active_pixels.size(), scene.use_gpu);
 }
 
 struct d_medium_sampler {
