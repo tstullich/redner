@@ -51,8 +51,6 @@ struct HeterogeneousMedium {
 };
 
 struct Medium {
-    Medium() {} // TODO Remove once done. Dummy constructor. Only keep for testing
-
     Medium(const HomogeneousMedium &medium) {
         type = MediumType::homogeneous;
         homogeneous = medium;
@@ -141,11 +139,11 @@ void sample_medium(const Scene &scene,
                    const BufferView<MediumSample> &medium_samples,
                    BufferView<Intersection> medium_isects,
                    BufferView<Vector3> medium_points,
-                   BufferView<Vector3> throughputs);
+                   BufferView<Vector3> throughputs,
+                   BufferView<Real> medium_distances);
 
 void d_sample_medium(const Scene &scene,
                      const BufferView<int> &active_pixels,
-                     const BufferView<Intersection> &surface_isects,
                      const BufferView<Ray> &incoming_rays,
                      const BufferView<MediumSample> &medium_samples,
                      BufferView<Intersection> medium_isects,

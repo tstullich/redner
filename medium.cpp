@@ -27,14 +27,21 @@ Vector3 sample(const Medium &medium,
                const Intersection &surface_isect,
                const MediumSample &sample,
                Intersection *medium_isect,
-               Vector3 *medium_point) {
+               Vector3 *medium_point,
+               Real *sampled_distance) {
     if (medium.type == MediumType::homogeneous) {
         auto h = medium.homogeneous;
         Real dist = sample_distance(medium, sample);
-        auto inside_medium = dist < ray.tmax;
-        auto t = min(dist, ray.tmax);
+        auto t = min(dist * length(ray.dir), ray.tmax);
+        auto inside_medium = t < ray.tmax;
+
+        // Continuously add t at every step to our total of measured distances.
+        // This value is needed for differentiating the medium in the
+        // backward pass
+        *sampled_distance += t;
+
         // Compute the transmittance and sampling density
-        auto tr = exp(-h.sigma_t * min(t, MaxFloat) * length(ray.dir));
+        auto tr = exp(-h.sigma_t * min(t, MaxFloat));
 
         // Return the weighting factor for scattering inside of a homogeneous medium
         auto density = inside_medium ? (h.sigma_t * tr) : tr;
@@ -75,6 +82,7 @@ struct medium_sampler {
         const auto &incoming_ray = incoming_rays[pixel_id];
         auto &medium_isect = medium_isects[pixel_id];
         auto &medium_point = medium_points[pixel_id];
+        auto &medium_distance = medium_distances[pixel_id];
         if (medium_isect.medium_id >= 0) {
             // We are inside a medium. Sample a distance and compute transmittance.
             // Also update the intersection point.
@@ -85,7 +93,7 @@ struct medium_sampler {
                 medium_sample,
                 &medium_isect,
                 &medium_point,
-                new Real(0));
+                &medium_distance);
             throughputs[pixel_id] *= transmittance;
         }
     }
@@ -98,6 +106,7 @@ struct medium_sampler {
     Intersection *medium_isects;
     Vector3 *medium_points;
     Vector3 *throughputs;
+    Real *medium_distances;
 };
 
 void sample_medium(const Scene &scene,
@@ -107,7 +116,8 @@ void sample_medium(const Scene &scene,
                    const BufferView<MediumSample> &medium_samples,
                    BufferView<Intersection> medium_isects,
                    BufferView<Vector3> medium_points,
-                   BufferView<Vector3> throughputs) {
+                   BufferView<Vector3> throughputs,
+                   BufferView<Real> medium_distances) {
     parallel_for(medium_sampler{
         get_flatten_scene(scene),
         active_pixels.begin(),
@@ -116,7 +126,8 @@ void sample_medium(const Scene &scene,
         medium_samples.begin(),
         medium_isects.begin(),
         medium_points.begin(),
-        throughputs.begin()},
+        throughputs.begin(),
+        medium_distances.begin()},
         active_pixels.size(), scene.use_gpu);
 }
 
@@ -283,7 +294,6 @@ struct d_medium_sampler {
     const Ray *incoming_rays;
     const MediumSample *medium_samples;
     const Intersection *medium_isects;
-    const DirectionalSample *directional_samples;
     Vector3 *medium_points;
     Vector3 *throughputs;
 };
@@ -292,8 +302,7 @@ void d_sample_medium(const Scene &scene,
                      const BufferView<int> &active_pixels,
                      const BufferView<Ray> &incoming_rays,
                      const BufferView<MediumSample> &medium_samples,
-                     const BufferView<Intersection> medium_isects,
-                     const BufferView<DirectionalSample> &directional_samples,
+                     BufferView<Intersection> medium_isects,
                      BufferView<Vector3> medium_points,
                      BufferView<Vector3> throughputs) {
     parallel_for(d_medium_sampler {
@@ -302,7 +311,6 @@ void d_sample_medium(const Scene &scene,
         incoming_rays.begin(),
         medium_samples.begin(),
         medium_isects.begin(),
-        directional_samples.begin(),
         medium_points.begin(),
         throughputs.begin()},
         active_pixels.size(), scene.use_gpu);

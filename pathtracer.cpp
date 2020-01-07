@@ -316,7 +316,8 @@ void render(const Scene &scene,
                           medium_samples,
                           medium_isects,
                           medium_points,
-                          throughputs);
+                          throughputs,
+                          medium_distances);
         }
 
         accumulate_primary_contribs(scene,
@@ -377,6 +378,7 @@ void render(const Scene &scene,
             auto next_medium_isects = bsdf_isects;
             auto next_medium_points = BufferView<Vector3>();
             if (scene.mediums.size() > 0) {
+                // TODO Check if we aren't doing unnecessary work (Variables already initialized above)
                 next_medium_isects = path_buffer.medium_isects.view((depth + 1) * num_pixels, num_pixels);
                 next_medium_points = path_buffer.medium_points.view((depth + 1) * num_pixels, num_pixels);
             }
@@ -482,7 +484,8 @@ void render(const Scene &scene,
                               medium_samples,
                               medium_isects,
                               medium_points,
-                              next_throughputs);
+                              next_throughputs,
+                              medium_distances);
             }
 
             // Stream compaction: remove invalid bsdf intersections
@@ -578,7 +581,6 @@ void render(const Scene &scene,
                     sampler->next_medium_samples(medium_samples);
                     d_sample_medium(scene,
                                     active_pixels,
-                                    surface_isects,
                                     incoming_rays,
                                     medium_samples,
                                     medium_isects,
