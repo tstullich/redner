@@ -305,7 +305,7 @@ Vector3 d_transmittance(const Medium &medium,
         // We assume that tmax will always be less than or equal to MaxFloat
         // so that the derivative will not be discontinuous if tmax > MaxFloat
         auto t = min(ray.tmax, MaxFloat);
-        auto d_tr_t = h.sigma_t * (-exp(-t * h.sigma_t));
+        auto d_tr_t = h.sigma_t * (-exp(-h.sigma_t * t));
 
         // Backpropagate the derivative of the transmittance with respect to t
         // to the intersection function.
@@ -315,7 +315,7 @@ Vector3 d_transmittance(const Medium &medium,
         //            Vector3{0, 0, 0},
         //            ray,
         //            nullptr,
-        //            d_transmittance,
+        //            d_tr_t,
         //            Vector2{0, 0},
         //            Vector2{0, 0},
         //            Vector2{0, 0},
