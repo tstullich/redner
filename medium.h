@@ -139,11 +139,11 @@ void sample_medium(const Scene &scene,
                    const BufferView<MediumSample> &medium_samples,
                    BufferView<Intersection> medium_isects,
                    BufferView<Vector3> medium_points,
-                   BufferView<Vector3> throughputs,
-                   BufferView<Real> medium_distances);
+                   BufferView<Vector3> throughputs);
 
 void d_sample_medium(const Scene &scene,
                      const BufferView<int> &active_pixels,
+                     const BufferView<Intersection> &surface_isects,
                      const BufferView<Ray> &incoming_rays,
                      const BufferView<MediumSample> &medium_samples,
                      BufferView<Intersection> medium_isects,

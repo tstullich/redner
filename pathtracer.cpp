@@ -83,7 +83,6 @@ struct PathBuffer {
             edge_medium_isects = Buffer<Intersection>(use_gpu, 4 * num_pixels);
             medium_points = Buffer<Vector3>(use_gpu, (max_bounces + 1) * num_pixels);
             edge_medium_points = Buffer<Vector3>(use_gpu, 4 * num_pixels);
-            medium_distances = Buffer<Real>(use_gpu, max_bounces * num_pixels); // TODO Check if this is correct
         }
 
         // OptiX buffers
@@ -138,7 +137,6 @@ struct PathBuffer {
     Buffer<Intersection> medium_isects, edge_medium_isects;
     Buffer<Vector3> medium_points, edge_medium_points;
     Buffer<Vector3> transmittances;
-    Buffer<Real> medium_distances;
 
     // OptiX related
     Buffer<OptiXRay> optix_rays;
@@ -268,11 +266,9 @@ void render(const Scene &scene,
         auto surface_points = path_buffer.surface_points.view(0, num_pixels);
         auto medium_isects = surface_isects;
         auto medium_points = BufferView<Vector3>();
-        auto medium_distances = BufferView<Real>();
         if (scene.mediums.size() > 0) {
             medium_isects = path_buffer.medium_isects.view(0, num_pixels);
             medium_points = path_buffer.medium_points.view(0, num_pixels);
-            medium_distances = path_buffer.medium_distances.view(0, num_pixels);
         }
         auto primary_active_pixels = path_buffer.primary_active_pixels.view(0, num_pixels);
         auto active_pixels = path_buffer.active_pixels.view(0, num_pixels);
@@ -316,8 +312,7 @@ void render(const Scene &scene,
                           medium_samples,
                           medium_isects,
                           medium_points,
-                          throughputs,
-                          medium_distances);
+                          throughputs);
         }
 
         accumulate_primary_contribs(scene,
@@ -353,11 +348,9 @@ void render(const Scene &scene,
                 depth * num_pixels, num_pixels);
             auto medium_isects = surface_isects;
             auto medium_points = BufferView<Vector3>();
-            auto medium_distances = BufferView<Real>();
             if (scene.mediums.size() > 0) {
                 medium_isects = path_buffer.medium_isects.view(depth * num_pixels, num_pixels);
                 medium_points = path_buffer.medium_points.view(depth * num_pixels, num_pixels);
-                medium_distances = path_buffer.medium_distances.view(depth * num_pixels, num_pixels);
             }
             auto light_isects = path_buffer.light_isects.view(depth * num_pixels, num_pixels);
             auto light_points = path_buffer.light_points.view(depth * num_pixels, num_pixels);
@@ -484,8 +477,7 @@ void render(const Scene &scene,
                               medium_samples,
                               medium_isects,
                               medium_points,
-                              next_throughputs,
-                              medium_distances);
+                              next_throughputs);
             }
 
             // Stream compaction: remove invalid bsdf intersections
@@ -581,6 +573,7 @@ void render(const Scene &scene,
                     sampler->next_medium_samples(medium_samples);
                     d_sample_medium(scene,
                                     active_pixels,
+                                    surface_isects,
                                     incoming_rays,
                                     medium_samples,
                                     medium_isects,

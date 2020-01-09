@@ -40,20 +40,6 @@ Real phase_HG(Real cos_theta, float g) {
     return Real(INV_4PI) * (1 - g * g) / (denom * sqrt(denom));
 }
 
-/**
- * Calculate the derivative of the HG phase function. The analytical
- * form of the phase function is used in order to find the derivative.
- * It is taken from a paper found at the following link:
- * https://www.astro.umd.edu/~jph/HG_note.pdf
- */
-DEVICE
-inline
-Real d_phase_HG(Real cos_theta, float g) {
-    auto numer = (g * g + 3.0) * cos_theta + g * (g * g - 5.0);
-    auto denom = 2.0 * pow((g * g - 2.0 * g * cos_theta + 1.0), 2.5);
-    return numer / denom;
-}
-
 // Evaluate the phase function at a point given incoming and outgoing direction.
 // The directions are assumed to be pointed outwards.
 DEVICE
@@ -68,6 +54,22 @@ Real phase_function(const PhaseFunction &phase_function,
         return 0;
     }
 }
+
+DEVICE
+inline
+Real d_phase_HG(Real cos_theta, float g) {
+    // Take the partial derivative of the phase function with respect to cos_theta
+    // auto denom = 1 + g * g + 2 * g * cos_theta;
+    auto d_denom = 2 * g;
+
+    // auto phase_HG = Real(INV_4PI) * (1 - g * g) / (denom * sqrt(denom));
+    auto d_pHG_cos = (Real(3 * M_PI) * (g * g - 1)) / (8 * pow(d_denom, 2.5));
+
+    // TODO Need to figure out where we need to backpropagate d_pHG_cos
+
+    return d_pHG_cos;
+}
+
 
 // Evaluate the derivative of the phase function. It works much like
 // d_pdf_phase() so perhaps we can refactor that a bit.
@@ -130,7 +132,8 @@ Real phase_function_pdf(const PhaseFunction &phase_function,
     }
 }
 
-// Derivative of the PDF evaluation
+// Derivative of the PDF evaluation. This returns the partial derivative
+// of the Henyey-Greenstein function with respect to cos_theta.
 DEVICE
 inline
 Real d_phase_function_pdf(const PhaseFunction &phase_function,
