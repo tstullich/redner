@@ -59,15 +59,14 @@ DEVICE
 inline
 Real d_phase_HG(Real cos_theta, float g) {
     // Take the partial derivative of the phase function with respect to cos_theta
-    // auto denom = 1 + g * g + 2 * g * cos_theta;
-    auto d_denom = 2 * g;
+    auto denom = 1 + g * g + 2 * g * cos_theta;
 
     // auto phase_HG = Real(INV_4PI) * (1 - g * g) / (denom * sqrt(denom));
-    auto d_pHG_cos = (Real(3 * M_PI) * (g * g - 1)) / (8 * pow(d_denom, 2.5));
+    auto numerator = Real(3 * M_PI) * (g * g - 1) * (2 * g);
+    auto d_phaseHG_cos = numerator / (8 * pow(denom, 2.5));
 
     // TODO Need to figure out where we need to backpropagate d_pHG_cos
-
-    return d_pHG_cos;
+    return d_phaseHG_cos;
 }
 
 
