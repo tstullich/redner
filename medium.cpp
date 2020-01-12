@@ -50,8 +50,8 @@ Vector3 sample(const Medium &medium,
                Vector3 *medium_point) {
     if (medium.type == MediumType::homogeneous) {
         auto h = medium.homogeneous;
-        Real dist = sample_distance(medium, sample);
-        auto t = min(dist * length(ray.dir), ray.tmax);
+        auto dist = sample_distance(medium, sample);
+        auto t = min(dist, ray.tmax);
         auto inside_medium = t < ray.tmax;
 
         // Compute the transmittance and sampling density
@@ -141,7 +141,9 @@ void sample_medium(const Scene &scene,
 }
 
 /**
- * Evaluate the derivative of the sampling process of the medium
+ * Evaluate the derivative of the sampling process of the medium. For
+ * this we need to find the derivative of the transmittance combined
+ * with the PDF of the overall density function.
  */
 DEVICE
 inline
@@ -153,16 +155,32 @@ Vector3 d_sample(const Medium &medium,
                  Vector3 *medium_point) {
     if (medium.type == MediumType::homogeneous) {
         auto h = medium.homogeneous;
-        Real dist = sample_distance(medium, sample);
-        auto t = min(dist * length(ray.dir), ray.tmax);
+        auto dist = sample_distance(medium, sample);
+        // Taking derivative of min(dist, tmax) can introduce a discontinuity!
+        auto t = min(dist, ray.tmax);
         auto inside_medium = t < ray.tmax;
 
         // Compute the transmittance and sampling density
         auto tr = exp(-h.sigma_t * min(t, MaxFloat));
 
+        // Calculate the partial derivative of the transmittance with respect to t
+        auto d_tr_t = d_transmittance(medium, ray);
+
         // Return the weighting factor for scattering inside of a homogeneous medium
+        // and its derivatives
         auto density = inside_medium ? (h.sigma_t * tr) : tr;
+        auto d_density_t = inside_medium ? h.sigma_t * d_tr_t : d_tr_t;
+
         auto pdf = sum(density) / 3;
+        auto d_pdf_t = sum(d_density_t) / 3;
+
+        // Find derivative of the weighting factor (beta) with respect to t using
+        // the quotient rule
+        // return inside_medium ? (tr * h.sigma_s / pdf) : (tr / pdf);
+        auto numerator = inside_medium ? h.sigma_s * (pdf * d_tr_t - tr * d_pdf_t) :
+                                         pdf * d_tr_t - tr * d_pdf_t;
+        auto d_beta_t = numerator / (pdf * pdf);
+
         // Update intersection data
         *medium_point = ray.org + ray.dir * t;
         if (inside_medium) {
@@ -304,8 +322,8 @@ Vector3 d_transmittance(const Medium &medium,
 
         // We assume that tmax will always be less than or equal to MaxFloat
         // so that the derivative will not be discontinuous if tmax > MaxFloat
-        auto t = min(ray.tmax, MaxFloat);
-        auto d_tr_t = h.sigma_t * (-exp(-h.sigma_t * t));
+        // tr = exp(-h.sigma_t * min(ray.tmax, MaxFloat));
+        auto d_tr_t = h.sigma_t * -exp(-h.sigma_t * min(ray.tmax, MaxFloat));
 
         // Backpropagate the derivative of the transmittance with respect to t
         // to the intersection function.

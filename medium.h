@@ -164,3 +164,9 @@ void d_evaluate_transmittance(const Scene &scene,
                               const BufferView<Intersection> &medium_isects,
                               const BufferView<Vector3> &medium_points,
                               BufferView<Vector3> transmittances);
+
+// Calculate the transmittance of a ray segment given a ray
+Vector3 transmittance(const Medium &medium, const Ray &ray);
+
+//
+Vector3 d_transmittance(const Medium &medium, const Ray &ray);
