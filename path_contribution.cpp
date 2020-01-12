@@ -319,15 +319,10 @@ struct d_path_contribs_accumulator {
 
                             // Compute the derivative of the phase function pdf and
                             // find the necessary components for it
-                            auto d_nee_contrib = d_path_contrib * throughput;
-                            auto d_geometry_term = weight * sum(d_nee_contrib * light_contrib);
 
-                            auto d_cos_light = cos_light > 0 ?
-                                d_geometry_term / dist_sq : -d_geometry_term / dist_sq;
-
-                            auto d_wo = d_cos_light * light_point.geom_normal;
                             // TODO Figure out how to get d_wi here
                             auto d_wi = Vector3{0, 0, 0};
+                            auto d_wo = Vector3{0, 0, 0};
                             auto d_pdf_phase = d_phase_function_pdf(
                                 get_phase_function(scene.mediums[medium_isect.medium_id]),
                                 d_wo, d_wi);
