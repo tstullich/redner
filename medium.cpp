@@ -155,10 +155,11 @@ Vector3 d_sample(const Medium &medium,
                  Vector3 *medium_point) {
     if (medium.type == MediumType::homogeneous) {
         auto h = medium.homogeneous;
+        // Sample a distance within the medium
         auto dist = sample_distance(medium, sample);
+
         // Taking derivative of min(dist, tmax) can introduce a discontinuity!
         auto t = min(dist, ray.tmax);
-        auto inside_medium = t < ray.tmax;
 
         // Compute the transmittance and sampling density
         auto tr = exp(-h.sigma_t * min(t, MaxFloat));
@@ -166,6 +167,7 @@ Vector3 d_sample(const Medium &medium,
         // Calculate the partial derivative of the transmittance with respect to t
         auto d_tr_t = d_transmittance(medium, ray);
 
+        auto inside_medium = t < ray.tmax;
         // Return the weighting factor for scattering inside of a homogeneous medium
         // and its derivatives
         auto density = inside_medium ? (h.sigma_t * tr) : tr;
@@ -180,6 +182,23 @@ Vector3 d_sample(const Medium &medium,
         auto numerator = inside_medium ? h.sigma_s * (pdf * d_tr_t - tr * d_pdf_t) :
                                          pdf * d_tr_t - tr * d_pdf_t;
         auto d_beta_t = numerator / (pdf * pdf);
+
+        // Backpropagate the partial derivative d_beta_t
+        // TODO Figure out correct parameters
+        // d_intersect(Vector3{0, 0, 0},
+        //             Vector3{0, 0, 0},
+        //             Vector3{0, 0, 0},
+        //             ray,
+        //             nullptr,
+        //             d_beta_t,
+        //             Vector2{0, 0},
+        //             Vector2{0, 0},
+        //             Vector2{0, 0},
+        //             Vector3{0, 0, 0},
+        //             Vector3{0, 0, 0},
+        //             Vector3{0, 0, 0},
+        //             nullptr,
+        //             nullptr);
 
         // Update intersection data
         *medium_point = ray.org + ray.dir * t;

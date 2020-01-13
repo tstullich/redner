@@ -41,7 +41,8 @@ Real phase_HG(Real cos_theta, float g) {
 }
 
 // Evaluate the phase function at a point given incoming and outgoing direction.
-// The directions are assumed to be pointed outwards.
+// The directions are assumed to be pointed outwards. This function returns
+// the PDF contribution
 DEVICE
 inline
 Real phase_function(const PhaseFunction &phase_function,
@@ -75,11 +76,11 @@ Real d_phase_HG(Real cos_theta, float g) {
 DEVICE
 inline
 Real d_phase_function(const PhaseFunction &phase_function,
-                      const Vector3 &wo,
-                      const Vector3 &wi) {
+                      const Vector3 &d_wo,
+                      Vector3 &d_wi) {
     if (phase_function.type == PhaseFunctionType::HenyeyGreenstein) {
         auto hg = phase_function.hg;
-        return d_phase_HG(dot(wo, wi), hg.g);
+        return d_phase_HG(dot(d_wo, d_wi), hg.g);
     } else {
         return 0;
     }
@@ -114,34 +115,5 @@ Vector3 sample_phase_function(const PhaseFunction &phase_function,
                cos_theta * -wi;
     } else {
         return Vector3{0, 0, 0};
-    }
-}
-
-// PDF evaluation.
-DEVICE
-inline
-Real phase_function_pdf(const PhaseFunction &phase_function,
-                        const Vector3 &wo,
-                        const Vector3 &wi) {
-    if (phase_function.type == PhaseFunctionType::HenyeyGreenstein) {
-        auto hg = phase_function.hg;
-        return phase_HG(dot(wo, wi), hg.g);
-    }  else {
-        return 0;
-    }
-}
-
-// Derivative of the PDF evaluation. This returns the partial derivative
-// of the Henyey-Greenstein function with respect to cos_theta.
-DEVICE
-inline
-Real d_phase_function_pdf(const PhaseFunction &phase_function,
-                          const Vector3 &wo,
-                          const Vector3 &wi) {
-    if (phase_function.type == PhaseFunctionType::HenyeyGreenstein) {
-        auto hg = phase_function.hg;
-        return d_phase_HG(dot(wo, wi), hg.g);
-    } else {
-        return 0;
     }
 }

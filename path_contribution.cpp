@@ -318,17 +318,82 @@ struct d_path_contribs_accumulator {
                                 (mis_weight * geometry_term / pdf_nee) * light_contrib * nee_transmittances[pixel_id];
 
                             // Compute the derivative of the phase function pdf and
-                            // find the necessary components for it
+                            // the necessary components for it
 
-                            // TODO Figure out how to get d_wi here
+                            // path_contrib = throughput * (nee_contrib + scatter_contrib)
+                            auto d_nee_contrib = d_path_contrib * throughput;
+                            d_throughput += d_path_contrib * nee_contrib;
+
+                            auto weight = mis_weight / pdf_nee;
+                            // nee_contrib = (weight * geometry_term) * bsdf_val * light_contrib
+                            // Ignore derivatives of MIS & PMF
+                            // TODO Check if we use nee_transmittances again
+                            auto d_weight = geometry_term *
+                                sum(d_nee_contrib * nee_transmittances[pixel_id] * light_contrib);
+
+                            // weight = mis_weight / pdf_nee
+                            auto d_pdf_nee = -d_weight * weight / pdf_nee;
+
+                            // TODO Check if we need to use nee_transmittances
+                            // for the two derivatives, since we do not have a bsdf_val
+                            // nee_contrib = (weight * geometry_term) * bsdf_val * light_contrib
+                            auto d_geometry_term = weight * sum(d_nee_contrib * nee_transmittances[pixel_id] * light_contrib);
+                            auto d_light_contrib = weight * d_nee_contrib * geometry_term * nee_transmittances[pixel_id];
+
+                            // pdf_nee = light_pmf / light_area
+                            //         = light_pmf * tri_pmf / tri_area
+                            auto d_area =
+                                -d_pdf_nee * pdf_nee / get_area(light_shape, light_isect.tri_id);
+                            d_get_area(light_shape, light_isect.tri_id, d_area, d_light_vertices);
+
+                            // light_contrib = light.intensity
+                            atomic_add(d_area_lights[light_shape.light_id].intensity, d_light_contrib);
+
+                            // geometry_term = fabs(cos_light) / dist_sq
+                            auto d_cos_light = cos_light > 0 ?
+                                d_geometry_term / dist_sq : -d_geometry_term / dist_sq;
+                            auto d_dist_sq = -d_geometry_term * geometry_term / dist_sq;
+
+                            // cos_light = dot(wo, light_point.geom_normal)
+                            auto d_wo = d_cos_light * light_point.geom_normal;
+                            // TODO Need to check how this can be done for point
+                            // in medium that is not on a surface. In our case the
+                            // surface point should s_p = x - D * ray.dir
+                            auto d_light_point = SurfacePoint::zero();
+                            d_light_point.geom_normal = d_cos_light * wo;
+
+                            // TODO Figure out how to get d_wi here and how to adjust
+                            // d_phase_function_pdf accordingly
                             auto d_wi = Vector3{0, 0, 0};
-                            auto d_wo = Vector3{0, 0, 0};
-                            auto d_pdf_phase = d_phase_function_pdf(
+                            auto d_phase = d_phase_function(
                                 get_phase_function(scene.mediums[medium_isect.medium_id]),
                                 d_wo, d_wi);
 
-                            // Need to backpropagate to shape
-                            //d_sample_shape();
+                            // wo = dir / sqrt(dist_sq)
+                            auto d_dir = d_wo / sqrt(dist_sq);
+                            // sqrt(dist_sq)
+                            auto d_sqrt_dist_sq = -sum(d_wo * dir) / dist_sq;
+                            d_dist_sq += (0.5f * d_sqrt_dist_sq / sqrt(dist_sq));
+                            // dist_sq = length_squared(dir)
+                            d_dir += d_length_squared(dir, d_dist_sq);
+                            // dir = light_point.position - p
+                            d_light_point.position += d_dir;
+                            d_shading_point.position -= d_dir;
+                            // wi = -incoming_ray.dir
+                            d_incoming_ray.dir -= d_wi;
+
+                            // Need to backpropagate to shape by sampling point on light
+                            d_sample_shape(light_shape, light_isect.tri_id,
+                                light_sample.uv, d_light_point, d_light_vertices);
+
+                            // Accumulate derivatives
+                            auto light_tri_index = get_indices(light_shape, light_isect.tri_id);
+                            atomic_add(&d_shapes[light_isect.shape_id].vertices[3 * light_tri_index[0]],
+                                d_light_vertices[0]);
+                            atomic_add(&d_shapes[light_isect.shape_id].vertices[3 * light_tri_index[1]],
+                                d_light_vertices[1]);
+                            atomic_add(&d_shapes[light_isect.shape_id].vertices[3 * light_tri_index[2]],
+                                d_light_vertices[2]);
                         } else {
                             // Compute the BSDF pdf and everything associated with it
                             auto bsdf_val = bsdf(material, surface_point, wi, wo, min_rough);
@@ -371,7 +436,7 @@ struct d_path_contribs_accumulator {
                             auto d_wo = d_cos_light * light_point.geom_normal;
                             auto d_light_point = SurfacePoint::zero();
                             d_light_point.geom_normal = d_cos_light * wo;
-                            // bsdf_val = bsdf(material, shading_point, wi, wo)
+                            // bsdf_val = bsdf(material, surface_point, wi, wo, min_rough)
                             auto d_wi = Vector3{0, 0, 0};
                             d_bsdf(material, surface_point, wi, wo, min_rough, d_bsdf_val,
                                 d_material, d_shading_point, d_wi, d_wo);
