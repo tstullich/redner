@@ -653,19 +653,12 @@ struct d_path_contribs_accumulator {
 
                 auto d_wi = Vector3{0, 0, 0};
                 auto d_wo = d_next_ray.dir;
-                auto d_pdf_phase = Real(0);
                 // pdf_bsdf = bsdf_pdf(material, shading_point, wi, wo, min_rough)
                 // d_bsdf_pdf(material, shading_point, wi, wo, min_rough, d_pdf_bsdf,
                 //            d_roughness_tex, d_shading_point, d_wi, d_wo);
                 // bsdf_val = bsdf(material, shading_point, wi, wo)
-                if (medium_isect.medium_id > 0) {
-                    // TODO Find out how this contributes
-                    d_pdf_phase = d_phase_function(get_phase_function(scene.mediums[medium_isect.medium_id]),
-                                                   d_wo, d_wi);
-                } else {
-                    d_bsdf(material, surface_point, wi, wo, min_rough, d_bsdf_val,
-                        d_material, d_shading_point, d_wi, d_wo);
-                }
+                d_bsdf(material, surface_point, wi, wo, min_rough, d_bsdf_val,
+                    d_material, d_shading_point, d_wi, d_wo);
 
                 // wo = dir / sqrt(dist_sq)
                 auto d_dir = d_wo / sqrt(dist_sq);
