@@ -48,7 +48,7 @@ struct path_contribs_accumulator {
                             // We assume we are perfectly importance sampling the phase functions,
                             // and the phase functions integrates to 1. So we don't need "phase_val".
                             // Still we need the phase function PDF for MIS.
-                            auto pdf_phase = phase_function_pdf(
+                            auto pdf_phase = phase_function(
                                 get_phase_function(scene.mediums[medium_isect.medium_id]),
                                 wo, wi);
                             auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
@@ -84,7 +84,7 @@ struct path_contribs_accumulator {
                         // We assume we are perfectly importance sampling the phase functions,
                         // and the phase functions integrates to 1. So we don't need "phase_val".
                         // Still we need the phase function PDF for MIS.
-                        auto pdf_phase = phase_function_pdf(
+                        auto pdf_phase = phase_function(
                             get_phase_function(scene.mediums[medium_isect.medium_id]),
                             wo, wi);
                         auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
@@ -114,7 +114,7 @@ struct path_contribs_accumulator {
                 auto directional_pdf = Real(1);
                 if (medium_isect.medium_id >= 0) {
                     // Inside a medium
-                    directional_pdf = phase_function_pdf(
+                    directional_pdf = phase_function(
                         get_phase_function(scene.mediums[medium_isect.medium_id]),
                         wo, wi);
                     // Perfect importance sampling
@@ -154,7 +154,7 @@ struct path_contribs_accumulator {
                 auto directional_pdf = Real(1);
                 if (medium_isect.medium_id >= 0) {
                     // Inside a medium
-                    directional_pdf = phase_function_pdf(
+                    directional_pdf = phase_function(
                         get_phase_function(scene.mediums[medium_isect.medium_id]),
                         wo, wi);
                     // Perfect importance sampling
@@ -310,7 +310,7 @@ struct d_path_contribs_accumulator {
 
                         if (medium_isect.medium_id >= 0) {
                             // Compute the phase function pdf
-                            auto pdf_phase = phase_function_pdf(
+                            auto pdf_phase = phase_function(
                                 get_phase_function(scene.mediums[medium_isect.medium_id]),
                                 wo, wi);
                             auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
@@ -490,13 +490,31 @@ struct d_path_contribs_accumulator {
                         auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
                         nee_contrib = (mis_weight / pdf_nee) * light_contrib * nee_transmittances[pixel_id];
 
+                        // path_contrib = throughput * (nee_contrib + scatter contrib)
+                        auto d_nee_contrib = d_path_contrib * throughput;
+                        d_throughput += d_path_contrib * nee_contrib;
+
+                        auto weight = mis_weight / pdf_nee;
+
+                        // nee_contrib = weight * bsdf_val * light_contrib
+                        // TODO Check if we used nee_transmittances here instead of bsdf_val
+                        auto d_light_contrib = weight * d_nee_contrib * nee_transmittances[pixel_id];
+                        auto d_wo = Vector3{0, 0, 0};
+                        auto d_ray_diff = RayDifferential{
+                            Vector3{0, 0, 0}, Vector3{0, 0, 0},
+                            Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+
+                        // light_contrib = eval_envmap(*scene.envmap, wo, ray_diff)
+                        d_envmap_eval(*scene.envmap, wo, ray_diff, d_light_contrib,
+                            *d_envmap, d_wo, d_ray_diff);
+
                         // Compute the derivative of the phase function
                         // TODO Figure out how to find derivatives
                         auto d_wi = Vector3{0, 0, 0};
-                        auto d_wo = Vector3{0, 0, 0};
                         auto d_pdf_phase = d_phase_function(
                             get_phase_function(scene.mediums[medium_isect.medium_id]),
                             d_wo, d_wi);
+                        d_incoming_ray.dir -= d_wi;
                     } else {
                         auto bsdf_val = bsdf(material, surface_point, wi, wo, min_rough);
                         auto pdf_bsdf = bsdf_pdf(material, surface_point, wi, wo, min_rough);
@@ -551,7 +569,7 @@ struct d_path_contribs_accumulator {
             auto directional_pdf = Real(1);
             if (medium_isect.medium_id >= 0) {
                 // Inside a medium
-                directional_pdf = phase_function_pdf(
+                directional_pdf = phase_function(
                     get_phase_function(scene.mediums[medium_isect.medium_id]),
                     wo, wi);
                 // Perfect importance sampling
@@ -757,7 +775,7 @@ struct d_path_contribs_accumulator {
             auto directional_val = Vector3{1, 1, 1};
             if (medium_isect.medium_id >= 0) {
                 // Intersection with medium was made. Get PDF of phase function
-                directional_pdf = phase_function_pdf(
+                directional_pdf = phase_function(
                     get_phase_function(scene.mediums[medium_isect.medium_id]),
                     wo, wi);
                 directional_val = Vector3{directional_pdf, directional_pdf, directional_pdf};
