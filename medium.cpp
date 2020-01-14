@@ -184,21 +184,36 @@ Vector3 d_sample(const Medium &medium,
         auto d_beta_t = numerator / (pdf * pdf);
 
         // Backpropagate the partial derivative d_beta_t
-        // TODO Figure out correct parameters
-        // d_intersect(Vector3{0, 0, 0},
-        //             Vector3{0, 0, 0},
-        //             Vector3{0, 0, 0},
-        //             ray,
-        //             nullptr,
-        //             d_beta_t,
-        //             Vector2{0, 0},
-        //             Vector2{0, 0},
-        //             Vector2{0, 0},
-        //             Vector3{0, 0, 0},
-        //             Vector3{0, 0, 0},
-        //             Vector3{0, 0, 0},
-        //             nullptr,
-        //             nullptr);
+        // TODO Figure out correct parameters since we are technically
+        // not on the surface
+        auto ray_diff = RayDifferential {
+            Vector3{0, 0, 0}, Vector3{0, 0, 0},
+            Vector3{0, 0, 0}, Vector3{0, 0, 0}
+        };
+
+        auto d_v0 = Vector3{0, 0, 0};
+        auto d_v1 = Vector3{0, 0, 0};
+        auto d_v2 = Vector3{0, 0, 0};
+        auto d_ray = DRay{Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+        auto d_ray_diff = RayDifferential {
+            Vector3{0, 0, 0}, Vector3{0, 0, 0},
+            Vector3{0, 0, 0}, Vector3{0, 0, 0}
+        };
+
+        d_intersect(Vector3{0, 0, 0},
+                    Vector3{0, 0, 0},
+                    Vector3{0, 0, 0},
+                    ray,
+                    ray_diff,
+                    d_tr_t,
+                    Vector2{0, 0},
+                    Vector2{0, 0},
+                    Vector2{0, 0},
+                    d_v0,
+                    d_v1,
+                    d_v2,
+                    d_ray,
+                    d_ray_diff);
 
         // Update intersection data
         *medium_point = ray.org + ray.dir * t;
@@ -347,20 +362,32 @@ Vector3 d_transmittance(const Medium &medium,
         // Backpropagate the derivative of the transmittance with respect to t
         // to the intersection function.
         // TODO Figure out the correct parameters
-        //d_intersect(Vector3{0, 0, 0},
-        //            Vector3{0, 0, 0},
-        //            Vector3{0, 0, 0},
-        //            ray,
-        //            nullptr,
-        //            d_tr_t,
-        //            Vector2{0, 0},
-        //            Vector2{0, 0},
-        //            Vector2{0, 0},
-        //            Vector3{0, 0, 0},
-        //            Vector3{0, 0, 0},
-        //            Vector3{0, 0, 0},
-        //            nullptr,
-        //            nullptr);
+        auto ray_diff = RayDifferential {
+            Vector3{0, 0, 0}, Vector3{0, 0, 0},
+            Vector3{0, 0, 0}, Vector3{0, 0, 0}
+        };
+        auto d_v0 = Vector3{0, 0, 0};
+        auto d_v1 = Vector3{0, 0, 0};
+        auto d_v2 = Vector3{0, 0, 0};
+        auto d_ray = DRay{Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+        auto d_ray_diff = RayDifferential {
+            Vector3{0, 0, 0}, Vector3{0, 0, 0},
+            Vector3{0, 0, 0}, Vector3{0, 0, 0}
+        };
+        d_intersect(Vector3{0, 0, 0},
+                    Vector3{0, 0, 0},
+                    Vector3{0, 0, 0},
+                    ray,
+                    ray_diff,
+                    d_tr_t,
+                    Vector2{0, 0},
+                    Vector2{0, 0},
+                    Vector2{0, 0},
+                    d_v0,
+                    d_v1,
+                    d_v2,
+                    d_ray,
+                    d_ray_diff);
 
         return d_tr_t;
     } else {

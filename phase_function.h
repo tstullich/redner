@@ -75,7 +75,6 @@ Real d_phase_HG(const Vector3 &wi,
 
     // auto phase_HG = Real(INV_4PI) * (1 - g * g) / (denom * sqrt(denom));
     auto numerator = Real(3 * M_PI) * (g * g - 1) * (d_denom_cos);
-    // TODO Figure out if we can simplify denom^(5/2) somehow
     return numerator / (8 * pow(denom, 2.5));
 }
 
