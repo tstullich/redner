@@ -35,7 +35,8 @@ struct PhaseFunction {
 // and a scattering factor g
 DEVICE
 inline
-Real phase_HG(Real cos_theta, float g) {
+Real phase_HG(const Vector3 &wi, const Vector3 &wo, float g) {
+    auto cos_theta = dot(wi, wo);
     auto denom = 1 + g * g + 2 * g * cos_theta;
     return Real(INV_4PI) * (1 - g * g) / (denom * sqrt(denom));
 }
@@ -50,7 +51,7 @@ Real phase_function(const PhaseFunction &phase_function,
                     const Vector3 &wi) {
     if (phase_function.type == PhaseFunctionType::HenyeyGreenstein) {
         auto hg = phase_function.hg;
-        return phase_HG(dot(wo, wi), hg.g);
+        return phase_HG(wo, wi, hg.g);
     }  else {
         return 0;
     }
@@ -58,29 +59,37 @@ Real phase_function(const PhaseFunction &phase_function,
 
 DEVICE
 inline
-Real d_phase_HG(Real cos_theta, float g) {
+Real d_phase_HG(const Vector3 &wi,
+                const Vector3 &wo,
+                float g,
+                Vector3 &d_wi,
+                Vector3 &d_wo) {
     // Take the partial derivative of the phase function with respect to cos_theta
+    // TODO Figure out correctness
+    auto cos_theta = dot(wi, wo);
+    d_wi += wi;
+    d_wo += wo;
+
     auto denom = 1 + g * g + 2 * g * cos_theta;
+    auto d_denom_cos = 2 * g * g * cos_theta;
 
     // auto phase_HG = Real(INV_4PI) * (1 - g * g) / (denom * sqrt(denom));
-    auto numerator = Real(3 * M_PI) * (g * g - 1) * (2 * g);
-    auto d_phaseHG_cos = numerator / (8 * pow(denom, 2.5));
-
-    // TODO Need to figure out where we need to backpropagate d_pHG_cos
-    return d_phaseHG_cos;
+    auto numerator = Real(3 * M_PI) * (g * g - 1) * (d_denom_cos);
+    // TODO Figure out if we can simplify denom^(5/2) somehow
+    return numerator / (8 * pow(denom, 2.5));
 }
 
-
-// Evaluate the derivative of the phase function. It works much like
-// d_pdf_phase() so perhaps we can refactor that a bit.
+// Evaluate the derivative of the phase function.
 DEVICE
 inline
 Real d_phase_function(const PhaseFunction &phase_function,
-                      const Vector3 &d_wo,
-                      Vector3 &d_wi) {
+                      const Vector3 &wi,
+                      const Vector3 &wo,
+                      Vector3 &d_wi,
+                      Vector3 &d_wo) {
     if (phase_function.type == PhaseFunctionType::HenyeyGreenstein) {
         auto hg = phase_function.hg;
-        return d_phase_HG(dot(d_wo, d_wi), hg.g);
+        return d_phase_HG(wi, wo, hg.g, d_wi, d_wo);
     } else {
         return 0;
     }

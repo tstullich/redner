@@ -367,7 +367,7 @@ struct d_path_contribs_accumulator {
                             auto d_wi = Vector3{0, 0, 0};
                             auto d_phase = d_phase_function(
                                 get_phase_function(scene.mediums[medium_isect.medium_id]),
-                                d_wo, d_wi);
+                                wi, wo, d_wi, d_wo);
 
                             // wo = dir / sqrt(dist_sq)
                             auto d_dir = d_wo / sqrt(dist_sq);
@@ -513,7 +513,7 @@ struct d_path_contribs_accumulator {
                         auto d_wi = Vector3{0, 0, 0};
                         auto d_pdf_phase = d_phase_function(
                             get_phase_function(scene.mediums[medium_isect.medium_id]),
-                            d_wo, d_wi);
+                            wi, wo, d_wi, d_wo);
                         d_incoming_ray.dir -= d_wi;
                     } else {
                         auto bsdf_val = bsdf(material, surface_point, wi, wo, min_rough);
