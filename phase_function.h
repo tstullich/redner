@@ -35,10 +35,11 @@ struct PhaseFunction {
 // and a scattering factor g
 DEVICE
 inline
-Real phase_HG(const Vector3 &wi, const Vector3 &wo, float g) {
+Real phase_HG(const Vector3 &wi, const Vector3 &wo, const float &g) {
     auto cos_theta = dot(wi, wo);
-    auto denom = 1 + g * g + 2 * g * cos_theta;
-    return Real(INV_4PI) * (1 - g * g) / (denom * sqrt(denom));
+    auto numerator = Real(INV_4PI) * (1 - g * g);
+    auto denominator = 1 + g * g + 2 * g * cos_theta;
+    return numerator / (denominator * sqrt(denominator));
 }
 
 // Evaluate the phase function at a point given incoming and outgoing direction.
