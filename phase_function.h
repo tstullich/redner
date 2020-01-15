@@ -62,21 +62,28 @@ DEVICE
 inline
 Real d_phase_HG(const Vector3 &wi,
                 const Vector3 &wo,
-                float g,
+                const float &g,
                 Vector3 &d_wi,
                 Vector3 &d_wo) {
     // Take the partial derivative of the phase function with respect to cos_theta
     // TODO Figure out correctness
     auto cos_theta = dot(wi, wo);
-    d_wi += wi;
-    d_wo += wo;
+    auto numerator = Real(INV_4PI) * (1 - g * g);
+    auto denominator = 1 + g * g + 2 * g * cos_theta;
+    auto phase_HG = numerator / (denominator * sqrt(denominator));
 
-    auto denom = 1 + g * g + 2 * g * cos_theta;
-    auto d_denom_cos = 2 * g * g * cos_theta;
+    // Backpropagate
+    // auto phase_HG = numerator / (denominator * sqrt(denominator));
+    auto d_numerator = (-3 * numerator * d_denom) / pow(2 * denominator, 1.5);
 
-    // auto phase_HG = Real(INV_4PI) * (1 - g * g) / (denom * sqrt(denom));
-    auto numerator = Real(3 * M_PI) * (g * g - 1) * (d_denom_cos);
-    return numerator / (8 * pow(denom, 2.5));
+    // auto denominator = 1 + g * g + 2 * g * cos_theta;
+
+    // auto numerator = Real(INV_4PI) * (1 - g * g);
+
+    //auto cos_theta = dot(wi, wo);
+
+    d_wi += d_cos_theta * wi;
+    d_wo += d_cos_theta * wo;
 }
 
 // Evaluate the derivative of the phase function.
