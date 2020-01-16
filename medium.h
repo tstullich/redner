@@ -168,5 +168,5 @@ void d_evaluate_transmittance(const Scene &scene,
 // Calculate the transmittance of a ray segment given a ray
 Vector3 transmittance(const Medium &medium, const Ray &ray);
 
-//
-Vector3 d_transmittance(const Medium &medium, const Ray &ray);
+// Calculate the derivative of the transmittance w.r.t tmax
+void d_transmittance(const Medium &medium, const Ray &ray, DRay &d_ray);

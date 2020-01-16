@@ -50,6 +50,8 @@ Vector3 sample(const Medium &medium,
                Vector3 *medium_point) {
     if (medium.type == MediumType::homogeneous) {
         auto h = medium.homogeneous;
+        // Sample a distance point along the ray and compare it
+        // to tmax to see if we are inside of a medium or not
         auto dist = sample_distance(medium, sample);
         auto t = min(dist, ray.tmax);
         auto inside_medium = t < ray.tmax;
@@ -147,73 +149,29 @@ void sample_medium(const Scene &scene,
  */
 DEVICE
 inline
-Vector3 d_sample(const Medium &medium,
-                 const Ray &ray,
-                 const Intersection &surface_isect,
-                 const MediumSample &sample,
-                 Intersection *medium_isect,
-                 Vector3 *medium_point) {
+void d_sample(const Medium &medium,
+              const Ray &ray,
+              const Intersection &surface_isect,
+              const MediumSample &sample,
+              const Vector3 &d_output,
+              Intersection *medium_isect,
+              Vector3 *medium_point,
+              DRay &d_ray) {
     if (medium.type == MediumType::homogeneous) {
         auto h = medium.homogeneous;
-        // Sample a distance within the medium
+        // Sample a distance within the medium and compare it
+        // to tmax to see if we are inside of a medium or not
         auto dist = sample_distance(medium, sample);
-
-        // Taking derivative of min(dist, tmax) can introduce a discontinuity!
         auto t = min(dist, ray.tmax);
+        auto inside_medium = t < ray.tmax;
 
         // Compute the transmittance and sampling density
         auto tr = exp(-h.sigma_t * min(t, MaxFloat));
 
-        // Calculate the partial derivative of the transmittance with respect to t
-        auto d_tr_t = d_transmittance(medium, ray);
-
-        auto inside_medium = t < ray.tmax;
         // Return the weighting factor for scattering inside of a homogeneous medium
         // and its derivatives
         auto density = inside_medium ? (h.sigma_t * tr) : tr;
-        auto d_density_t = inside_medium ? h.sigma_t * d_tr_t : d_tr_t;
-
         auto pdf = sum(density) / 3;
-        auto d_pdf_t = sum(d_density_t) / 3;
-
-        // Find derivative of the weighting factor (beta) with respect to t using
-        // the quotient rule
-        // return inside_medium ? (tr * h.sigma_s / pdf) : (tr / pdf);
-        auto numerator = inside_medium ? h.sigma_s * (pdf * d_tr_t - tr * d_pdf_t) :
-                                         pdf * d_tr_t - tr * d_pdf_t;
-        auto d_beta_t = numerator / (pdf * pdf);
-
-        // Backpropagate the partial derivative d_beta_t
-        // TODO Figure out correct parameters since we are technically
-        // not on the surface
-        auto ray_diff = RayDifferential {
-            Vector3{0, 0, 0}, Vector3{0, 0, 0},
-            Vector3{0, 0, 0}, Vector3{0, 0, 0}
-        };
-
-        auto d_v0 = Vector3{0, 0, 0};
-        auto d_v1 = Vector3{0, 0, 0};
-        auto d_v2 = Vector3{0, 0, 0};
-        auto d_ray = DRay{Vector3{0, 0, 0}, Vector3{0, 0, 0}};
-        auto d_ray_diff = RayDifferential {
-            Vector3{0, 0, 0}, Vector3{0, 0, 0},
-            Vector3{0, 0, 0}, Vector3{0, 0, 0}
-        };
-
-        d_intersect(Vector3{0, 0, 0},
-                    Vector3{0, 0, 0},
-                    Vector3{0, 0, 0},
-                    ray,
-                    ray_diff,
-                    d_tr_t,
-                    Vector2{0, 0},
-                    Vector2{0, 0},
-                    Vector2{0, 0},
-                    d_v0,
-                    d_v1,
-                    d_v2,
-                    d_ray,
-                    d_ray_diff);
 
         // Update intersection data
         *medium_point = ray.org + ray.dir * t;
@@ -235,11 +193,51 @@ Vector3 d_sample(const Medium &medium,
                 *medium_isect = surface_isect;
             }
         }
-        return inside_medium ? (tr * h.sigma_s / pdf) : (tr / pdf);
-    } else if (medium.type == MediumType::heterogeneous) {
-        return Vector3{0, 0, 0};
-    } else {
-        return Vector3{0, 0, 0};
+
+        //auto beta = inside_medium ? (tr * h.sigma_s / pdf) : (tr / pdf);
+
+        // Calculate the partial derivative of the transmittance with respect to t
+        // We assume that f'/pdf is equivalent to (f/pdf)' in terms of expectation
+        // auto beta = inside_medium ? (tr * h.sigma_s / pdf) : (tr / pdf);
+        auto d_beta_tr = inside_medium ? (d_output * h.sigma_s / pdf) : (d_output / pdf);
+
+        // TODO Check if we need to update medium_point
+        // *medium_point = ray.org + ray.dir * t
+
+        // auto tr = exp(-h.sigma_t * min(t, MaxFloat))
+        auto d_tr_t = exp(-h.sigma_t * min(d_beta_tr, MaxFloat));
+
+        // auto t = min(dist, ray.tmax)
+        // This can introduce a discontinuity!
+        auto d_t = min(d_tr_t, ray.tmax);
+
+        // Backpropagate the derivative of the transmittance with respect
+        // to t_max to the intersection function.
+        auto ray_diff = RayDifferential {
+            Vector3{0, 0, 0}, Vector3{0, 0, 0},
+            Vector3{0, 0, 0}, Vector3{0, 0, 0}
+        };
+        auto d_v0 = Vector3{0, 0, 0};
+        auto d_v1 = Vector3{0, 0, 0};
+        auto d_v2 = Vector3{0, 0, 0};
+        auto d_ray_diff = RayDifferential {
+            Vector3{0, 0, 0}, Vector3{0, 0, 0},
+            Vector3{0, 0, 0}, Vector3{0, 0, 0}
+        };
+        d_intersect(Vector3{0, 0, 0},
+                    Vector3{0, 0, 0},
+                    Vector3{0, 0, 0},
+                    ray,
+                    ray_diff,
+                    d_t,
+                    Vector2{0, 0},
+                    Vector2{0, 0},
+                    Vector2{0, 0},
+                    d_v0,
+                    d_v1,
+                    d_v2,
+                    d_ray,
+                    d_ray_diff);
     }
 }
 
@@ -253,12 +251,17 @@ struct d_medium_sampler {
         auto &medium_point = medium_points[pixel_id];
 
         if (medium_isect.medium_id >= 0) {
-            auto result = d_sample(scene.mediums[medium_isect.medium_id],
-                                   incoming_ray,
-                                   surface_isect,
-                                   medium_sample,
-                                   &medium_isect,
-                                   &medium_point);
+            // TODO Hook up d_output and d_ray correctly
+            auto d_output = Vector3{0, 0, 0};
+            auto d_ray = DRay{Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+            d_sample(scene.mediums[medium_isect.medium_id],
+                     incoming_ray,
+                     surface_isect,
+                     medium_sample,
+                     d_output,
+                     &medium_isect,
+                     &medium_point,
+                     d_ray);
         }
     }
 
@@ -344,24 +347,26 @@ void evaluate_transmittance(const Scene &scene,
 }
 
 /**
- * Find the derivative of the transmittance. This requires
- * us to have the previously computed transmittances
+ * Backpropagate the derivative of the transmittance with respect to t_max.
  */
 DEVICE
 inline
-Vector3 d_transmittance(const Medium &medium,
-                        const Ray &ray) {
+void d_transmittance(const Medium &medium, const Ray &ray, DRay &d_ray) {
     if (medium.type == MediumType::homogeneous) {
         auto h = medium.homogeneous;
 
         // We assume that tmax will always be less than or equal to MaxFloat
         // so that the derivative will not be discontinuous if tmax > MaxFloat
-        // tr = exp(-h.sigma_t * min(ray.tmax, MaxFloat));
+        auto tr = exp(-h.sigma_t * min(ray.tmax, MaxFloat));
+
+        // Backpropagate
         auto d_tr_t = h.sigma_t * -exp(-h.sigma_t * min(ray.tmax, MaxFloat));
 
-        // Backpropagate the derivative of the transmittance with respect to t
-        // to the intersection function.
-        // TODO Figure out the correct parameters
+        // auto tr = exp(-h.sigma_t * min(ray.tmax, MaxFloat));
+        auto d_tr = exp(-h.sigma_t * min(d_tr_t, MaxFloat));
+
+        // Backpropagate the derivative of the transmittance with respect
+        // to t_max to the intersection function.
         auto ray_diff = RayDifferential {
             Vector3{0, 0, 0}, Vector3{0, 0, 0},
             Vector3{0, 0, 0}, Vector3{0, 0, 0}
@@ -369,7 +374,6 @@ Vector3 d_transmittance(const Medium &medium,
         auto d_v0 = Vector3{0, 0, 0};
         auto d_v1 = Vector3{0, 0, 0};
         auto d_v2 = Vector3{0, 0, 0};
-        auto d_ray = DRay{Vector3{0, 0, 0}, Vector3{0, 0, 0}};
         auto d_ray_diff = RayDifferential {
             Vector3{0, 0, 0}, Vector3{0, 0, 0},
             Vector3{0, 0, 0}, Vector3{0, 0, 0}
@@ -379,7 +383,7 @@ Vector3 d_transmittance(const Medium &medium,
                     Vector3{0, 0, 0},
                     ray,
                     ray_diff,
-                    d_tr_t,
+                    d_tr,
                     Vector2{0, 0},
                     Vector2{0, 0},
                     Vector2{0, 0},
@@ -388,10 +392,6 @@ Vector3 d_transmittance(const Medium &medium,
                     d_v2,
                     d_ray,
                     d_ray_diff);
-
-        return d_tr_t;
-    } else {
-        return Vector3{0, 0, 0};
     }
 }
 
@@ -402,8 +402,9 @@ struct d_transmittance_sampler {
         // tmax <= 0 means the ray is occluded
         if (medium_isects[pixel_id].medium_id >= 0 && ray.tmax > 0) {
             // TODO Check if this should be stored in transmittances
-            auto d_tr = d_transmittance(mediums[medium_isects[pixel_id].medium_id],
-                                        ray);
+            auto d_ray = DRay{Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+            d_transmittance(mediums[medium_isects[pixel_id].medium_id],
+                            ray, d_ray);
         }
     }
 

@@ -292,4 +292,3 @@ inline void d_intersect(const TVector3<T> &v0,
     d_v1 += d_e1;
     d_v0 -= d_e1;
 }
-

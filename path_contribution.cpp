@@ -48,7 +48,7 @@ struct path_contribs_accumulator {
                             // We assume we are perfectly importance sampling the phase functions,
                             // and the phase functions integrates to 1. So we don't need "phase_val".
                             // Still we need the phase function PDF for MIS.
-                            auto pdf_phase = phase_function(
+                            auto pdf_phase = phase_function_pdf(
                                 get_phase_function(scene.mediums[medium_isect.medium_id]),
                                 wo, wi);
                             auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
@@ -84,7 +84,7 @@ struct path_contribs_accumulator {
                         // We assume we are perfectly importance sampling the phase functions,
                         // and the phase functions integrates to 1. So we don't need "phase_val".
                         // Still we need the phase function PDF for MIS.
-                        auto pdf_phase = phase_function(
+                        auto pdf_phase = phase_function_pdf(
                             get_phase_function(scene.mediums[medium_isect.medium_id]),
                             wo, wi);
                         auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
@@ -114,7 +114,7 @@ struct path_contribs_accumulator {
                 auto directional_pdf = Real(1);
                 if (medium_isect.medium_id >= 0) {
                     // Inside a medium
-                    directional_pdf = phase_function(
+                    directional_pdf = phase_function_pdf(
                         get_phase_function(scene.mediums[medium_isect.medium_id]),
                         wo, wi);
                     // Perfect importance sampling
@@ -154,7 +154,7 @@ struct path_contribs_accumulator {
                 auto directional_pdf = Real(1);
                 if (medium_isect.medium_id >= 0) {
                     // Inside a medium
-                    directional_pdf = phase_function(
+                    directional_pdf = phase_function_pdf(
                         get_phase_function(scene.mediums[medium_isect.medium_id]),
                         wo, wi);
                     // Perfect importance sampling
@@ -310,7 +310,7 @@ struct d_path_contribs_accumulator {
 
                         if (medium_isect.medium_id >= 0) {
                             // Compute the phase function pdf
-                            auto pdf_phase = phase_function(
+                            auto pdf_phase = phase_function_pdf(
                                 get_phase_function(scene.mediums[medium_isect.medium_id]),
                                 wo, wi);
                             auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
@@ -325,7 +325,7 @@ struct d_path_contribs_accumulator {
                             d_throughput += d_path_contrib * nee_contrib;
 
                             auto weight = mis_weight / pdf_nee;
-                            // nee_contrib = (weight * geometry_term) * bsdf_val * light_contrib
+                            // nee_contrib = (weight * geometry_term) * nee_transmittances * light_contrib
                             // Ignore derivatives of MIS & PMF
                             // TODO Check if we use nee_transmittances again
                             auto d_weight = geometry_term *
@@ -362,12 +362,13 @@ struct d_path_contribs_accumulator {
                             auto d_light_point = SurfacePoint::zero();
                             d_light_point.geom_normal = d_cos_light * wo;
 
-                            // TODO Figure out how to get d_wi here and how to adjust
-                            // d_phase_function_pdf accordingly
-                            auto d_wi = Vector3{0, 0, 0};
-                            auto d_phase = d_phase_function(
-                                get_phase_function(scene.mediums[medium_isect.medium_id]),
-                                wi, wo, d_wi, d_wo);
+                            // Skipping gradient of phase_function_pdf() for
+                            // now since it causes high variance and the expectation
+                            // does not change. Instead we need to propagate d_tmax
+                            // to d_wi
+                            auto d_ray = DRay{Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+                            d_transmittance(scene.mediums[medium_isect.medium_id],
+                                incoming_ray, d_ray);
 
                             // wo = dir / sqrt(dist_sq)
                             auto d_dir = d_wo / sqrt(dist_sq);
@@ -380,7 +381,7 @@ struct d_path_contribs_accumulator {
                             d_light_point.position += d_dir;
                             d_shading_point.position -= d_dir;
                             // wi = -incoming_ray.dir
-                            d_incoming_ray.dir -= d_wi;
+                            d_incoming_ray.dir -= d_ray.dir;
 
                             // Need to backpropagate to shape by sampling point on light
                             d_sample_shape(light_shape, light_isect.tri_id,
@@ -484,7 +485,7 @@ struct d_path_contribs_accumulator {
                     if (medium_isect.medium_id >= 0) {
                         // Compute the phase function PDF instead of the BSDF
                         // if we are inside of a medium.
-                        auto pdf_phase = phase_function(
+                        auto pdf_phase = phase_function_pdf(
                             get_phase_function(scene.mediums[medium_isect.medium_id]),
                             wo, wi);
                         auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
@@ -508,13 +509,17 @@ struct d_path_contribs_accumulator {
                         d_envmap_eval(*scene.envmap, wo, ray_diff, d_light_contrib,
                             *d_envmap, d_wo, d_ray_diff);
 
-                        // Compute the derivative of the phase function
-                        // TODO Figure out how to find derivatives
-                        auto d_wi = Vector3{0, 0, 0};
-                        auto d_pdf_phase = d_phase_function(
-                            get_phase_function(scene.mediums[medium_isect.medium_id]),
-                            wi, wo, d_wi, d_wo);
-                        d_incoming_ray.dir -= d_wi;
+                        // See comment above about why we do not find the gradient
+                        // of phase_function_pdf()
+                        // auto d_pdf_phase = d_phase_function(
+                        //     get_phase_function(scene.mediums[medium_isect.medium_id]),
+                        //     wi, wo, d_wi, d_wo);
+                        auto d_ray = DRay{Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+                        d_transmittance(scene.mediums[medium_isect.medium_id],
+                            incoming_ray, d_ray);
+
+                        // wi = -incoming_ray.dir;
+                        d_incoming_ray.dir -= d_ray.dir;
                     } else {
                         auto bsdf_val = bsdf(material, surface_point, wi, wo, min_rough);
                         auto pdf_bsdf = bsdf_pdf(material, surface_point, wi, wo, min_rough);
@@ -569,7 +574,7 @@ struct d_path_contribs_accumulator {
             auto directional_pdf = Real(1);
             if (medium_isect.medium_id >= 0) {
                 // Inside a medium
-                directional_pdf = phase_function(
+                directional_pdf = phase_function_pdf(
                     get_phase_function(scene.mediums[medium_isect.medium_id]),
                     wo, wi);
                 // Perfect importance sampling
@@ -768,7 +773,7 @@ struct d_path_contribs_accumulator {
             auto directional_val = Vector3{1, 1, 1};
             if (medium_isect.medium_id >= 0) {
                 // Intersection with medium was made. Get PDF of phase function
-                directional_pdf = phase_function(
+                directional_pdf = phase_function_pdf(
                     get_phase_function(scene.mediums[medium_isect.medium_id]),
                     wo, wi);
                 directional_val = Vector3{directional_pdf, directional_pdf, directional_pdf};

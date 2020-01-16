@@ -31,11 +31,11 @@ struct PhaseFunction {
     };
 };
 
-// Calculate the phase function based on the angle between wo and wi
-// and a scattering factor g
+// Calculate the phase function probability distribution function
+// based on the angle between wo and wi and a scattering factor g
 DEVICE
 inline
-Real phase_HG(const Vector3 &wi, const Vector3 &wo, const float &g) {
+Real phase_HG_pdf(const Vector3 &wi, const Vector3 &wo, const float &g) {
     auto cos_theta = dot(wi, wo);
     auto numerator = Real(INV_4PI) * (1 - g * g);
     auto denominator = 1 + g * g + 2 * g * cos_theta;
@@ -47,57 +47,13 @@ Real phase_HG(const Vector3 &wi, const Vector3 &wo, const float &g) {
 // the PDF contribution
 DEVICE
 inline
-Real phase_function(const PhaseFunction &phase_function,
-                    const Vector3 &wo,
-                    const Vector3 &wi) {
+Real phase_function_pdf(const PhaseFunction &phase_function,
+                        const Vector3 &wo,
+                        const Vector3 &wi) {
     if (phase_function.type == PhaseFunctionType::HenyeyGreenstein) {
         auto hg = phase_function.hg;
-        return phase_HG(wo, wi, hg.g);
+        return phase_HG_pdf(wo, wi, hg.g);
     }  else {
-        return 0;
-    }
-}
-
-DEVICE
-inline
-Real d_phase_HG(const Vector3 &wi,
-                const Vector3 &wo,
-                const float &g,
-                Vector3 &d_wi,
-                Vector3 &d_wo) {
-    // Take the partial derivative of the phase function with respect to cos_theta
-    // TODO Figure out correctness
-    auto cos_theta = dot(wi, wo);
-    auto numerator = Real(INV_4PI) * (1 - g * g);
-    auto denominator = 1 + g * g + 2 * g * cos_theta;
-    auto phase_HG = numerator / (denominator * sqrt(denominator));
-
-    // Backpropagate
-    // auto phase_HG = numerator / (denominator * sqrt(denominator));
-    auto d_numerator = (-3 * numerator * d_denom) / pow(2 * denominator, 1.5);
-
-    // auto denominator = 1 + g * g + 2 * g * cos_theta;
-
-    // auto numerator = Real(INV_4PI) * (1 - g * g);
-
-    //auto cos_theta = dot(wi, wo);
-
-    d_wi += d_cos_theta * wi;
-    d_wo += d_cos_theta * wo;
-}
-
-// Evaluate the derivative of the phase function.
-DEVICE
-inline
-Real d_phase_function(const PhaseFunction &phase_function,
-                      const Vector3 &wi,
-                      const Vector3 &wo,
-                      Vector3 &d_wi,
-                      Vector3 &d_wo) {
-    if (phase_function.type == PhaseFunctionType::HenyeyGreenstein) {
-        auto hg = phase_function.hg;
-        return d_phase_HG(wi, wo, hg.g, d_wi, d_wo);
-    } else {
         return 0;
     }
 }
