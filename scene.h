@@ -102,7 +102,7 @@ struct DScene {
            const std::vector<DMaterial*> &materials,
            const std::vector<DAreaLight*> &lights,
            const std::shared_ptr<DEnvironmentMap> &envmap,
-           const std::vector<Medium*> &mediums,
+           const std::vector<DMedium*> &mediums,
            bool use_gpu,
            int gpu_index);
     ~DScene();
@@ -112,7 +112,7 @@ struct DScene {
     Buffer<DMaterial> materials;
     Buffer<DAreaLight> area_lights;
     DEnvironmentMap *envmap;
-    Buffer<Medium> mediums;
+    Buffer<DMedium> mediums;
     bool use_gpu;
     int gpu_index;
 };

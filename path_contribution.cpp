@@ -272,15 +272,7 @@ struct d_path_contribs_accumulator {
             Vector3{0, 0, 0}, Vector3{0, 0, 0},
             Vector3{0, 0, 0}, Vector3{0, 0, 0}};
         d_shading_point = SurfacePoint::zero();
-
-        if (medium_isect.medium_id > 0) {
-            // Initializing this way since a Medium can have two different
-            // types and accessing member fields would be too cumbersome
-            d_medium.set_type(scene.mediums[medium_isect.medium_id].get_type());
-            d_medium.set_sigma_a(Vector3{0, 0, 0});
-            d_medium.set_sigma_s(Vector3{0, 0, 0});
-            d_medium.set_g(Real(0));
-        }
+        d_medium = DMedium{};
 
         // Next event estimation
         auto nee_contrib = Vector3{0, 0, 0};
@@ -395,6 +387,12 @@ struct d_path_contribs_accumulator {
                                 d_light_vertices[1]);
                             atomic_add(&d_shapes[light_isect.shape_id].vertices[3 * light_tri_index[2]],
                                 d_light_vertices[2]);
+
+                            // For testing purposes. Replace with actual values later
+                            auto d_s = Vector3{1.0, 1.0, 1.0};
+                            atomic_add(&d_mediums[medium_isect.medium_id].sigma_a[0], d_s[0]);
+                            atomic_add(&d_mediums[medium_isect.medium_id].sigma_a[0], d_s[1]);
+                            atomic_add(&d_mediums[medium_isect.medium_id].sigma_a[0], d_s[2]);
                         } else {
                             // Compute the BSDF pdf and everything associated with it
                             auto bsdf_val = bsdf(material, surface_point, wi, wo, min_rough);
@@ -497,8 +495,7 @@ struct d_path_contribs_accumulator {
 
                         auto weight = mis_weight / pdf_nee;
 
-                        // nee_contrib = weight * bsdf_val * light_contrib
-                        // TODO Check if we used nee_transmittances here instead of bsdf_val
+                        // nee_contrib = weight * light_contrib * nee_transmittances
                         auto d_light_contrib = weight * d_nee_contrib * nee_transmittances[pixel_id];
                         auto d_wo = Vector3{0, 0, 0};
                         auto d_ray_diff = RayDifferential{
@@ -890,7 +887,7 @@ struct d_path_contribs_accumulator {
     DRay *d_incoming_rays;
     RayDifferential *d_incoming_ray_differentials;
     SurfacePoint *d_shading_points;
-    Medium *d_mediums;
+    DMedium *d_mediums;
 };
 
 void accumulate_path_contribs(const Scene &scene,
@@ -970,7 +967,7 @@ void d_accumulate_path_contribs(const Scene &scene,
                                 BufferView<DRay> d_incoming_rays,
                                 BufferView<RayDifferential> d_incoming_ray_differentials,
                                 BufferView<SurfacePoint> d_shading_points,
-                                BufferView<Medium> d_mediums) {
+                                BufferView<DMedium> d_mediums) {
     parallel_for(d_path_contribs_accumulator{
         get_flatten_scene(scene),
         active_pixels.begin(),

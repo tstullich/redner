@@ -73,7 +73,7 @@ PYBIND11_MODULE(redner, m) {
                       const std::vector<DMaterial*> &,
                       const std::vector<DAreaLight*> &,
                       const std::shared_ptr<DEnvironmentMap> &,
-                      const std::vector<Medium*> &,
+                      const std::vector<DMedium*> &,
                       bool,
                       int>());
 
@@ -109,13 +109,20 @@ PYBIND11_MODULE(redner, m) {
 
     py::class_<Medium>(m, "Medium")
         .def(py::init<HomogeneousMedium>())
-        .def_readonly("type", &Medium::type)
-        .def("get_sigma_a", &Medium::get_sigma_a)
-        .def("get_sigma_s", &Medium::get_sigma_s)
-        .def("get_g", &Medium::get_g);
+        .def_readonly("type", &Medium::type);
 
     py::enum_<MediumType>(m, "medium_type")
         .value("homogeneous", MediumType::homogeneous);
+
+    py::class_<DMedium>(m, "DMedium")
+        .def(py::init<MediumType,
+                      Vector3f, // sigma_a
+                      Vector3f, // sigma_s
+                      float>()) // forward/backward scattering factor
+        .def_readonly("type", &DMedium::type)
+        .def_readonly("sigma_a", &DMedium::sigma_a)
+        .def_readonly("sigma_s", &DMedium::sigma_s)
+        .def_readonly("g", &DMedium::g);
 
     py::class_<DShape>(m, "DShape")
         .def(py::init<ptr<float>,

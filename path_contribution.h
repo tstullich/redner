@@ -70,4 +70,4 @@ void d_accumulate_path_contribs(const Scene &scene,
                                 BufferView<DRay> d_incoming_rays,
                                 BufferView<RayDifferential> d_incoming_ray_differentials,
                                 BufferView<SurfacePoint> d_shading_points,
-                                BufferView<Medium> d_mediums);
+                                BufferView<DMedium> d_mediums);

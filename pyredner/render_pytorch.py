@@ -869,10 +869,11 @@ class RenderFunction(torch.autograd.Function):
         d_mediums = []
         for m in ctx.mediums:
             if m.type == redner.medium_type.homogeneous:
-                d_mediums.append(redner.Medium(redner.HomogeneousMedium(\
+                d_mediums.append(redner.DMedium(\
+                    redner.medium_type.homogeneous,
                     redner.Vector3f(0, 0, 0),
                     redner.Vector3f(0, 0, 0),
-                    0)))
+                    0))
             else:
                 assert(False)
 
@@ -1022,9 +1023,11 @@ class RenderFunction(torch.autograd.Function):
         for d_m in d_mediums:
             ret_list.append(None) # type
             if d_m.type == redner.medium_type.homogeneous:
-                d_sigma_a = d_m.get_sigma_a()
-                d_sigma_s = d_m.get_sigma_s()
-                d_g = d_m.get_g()
+                # Converting the medium gradients into data types that are
+                # compatible with pytorch
+                d_sigma_a = d_m.sigma_a
+                d_sigma_s = d_m.sigma_s
+                d_g = d_m.g
                 sigma_a = torch.tensor((d_sigma_a.x, d_sigma_a.y, d_sigma_a.z),
                                        dtype = torch.float32, device = pyredner.get_device())
                 sigma_s = torch.tensor((d_sigma_s.x, d_sigma_s.y, d_sigma_s.z),

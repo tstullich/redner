@@ -333,7 +333,7 @@ DScene::DScene(const DCamera &camera,
                const std::vector<DMaterial*> &materials,
                const std::vector<DAreaLight*> &area_lights,
                const std::shared_ptr<DEnvironmentMap> &envmap,
-               const std::vector<Medium*> &mediums,
+               const std::vector<DMedium*> &mediums,
                bool use_gpu,
                int gpu_index) : use_gpu(use_gpu), gpu_index(gpu_index) {
 #ifdef __NVCC__
@@ -384,7 +384,7 @@ DScene::DScene(const DCamera &camera,
         this->envmap = nullptr;
     }
     if (mediums.size() > 0) {
-        this->mediums = Buffer<Medium>(use_gpu, mediums.size());
+        this->mediums = Buffer<DMedium>(use_gpu, mediums.size());
         for (int medium_id = 0; medium_id < (int)mediums.size(); medium_id++) {
             this->mediums[medium_id] = *mediums[medium_id];
         }
