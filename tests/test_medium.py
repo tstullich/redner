@@ -5,6 +5,11 @@ import redner
 pyredner.set_use_gpu(False)
 #pyredner.set_use_gpu(torch.cuda.is_available())
 
+# Intitialize information about the medium. We can set the
+# absorption as well as scattering factors for the medium.
+# g is a parameter that pertains to the phase function that is going
+# to be used. Redner currently only supports the Henyey-Greenstein
+# phase function, but it should be possible to add others in the future
 mediums = [pyredner.HomogeneousMedium(\
     sigma_a = torch.tensor([0.05, 0.05, 0.05]),
     sigma_s = torch.tensor([0.00001, 0.00001, 0.00001]),
@@ -36,6 +41,7 @@ mat_planes = pyredner.Material(\
 
 materials = [mat_sphere, mat_light, mat_planes]
 
+# Setup for various objects in the scene
 sphere = pyredner.generate_sphere(128, 64)
 shape_sphere = pyredner.Shape(\
     vertices = sphere[0],
