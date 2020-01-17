@@ -4,6 +4,7 @@
 #include "intersection.h"
 #include "buffer.h"
 #include "phase_function.h"
+#include "ptr.h"
 #include "ray.h"
 #include "vector.h"
 
@@ -26,16 +27,15 @@ enum class MediumType {
 
 // Struct to hold information about the derivatives of a medium
 struct DMedium {
-    DMedium(const MediumType &type = MediumType::homogeneous,
-            const Vector3f &sigma_a = Vector3f{0, 0, 0},
-            const Vector3f &sigma_s = Vector3f{0, 0, 0},
-            float g = 0) :
-        type(type), sigma_a(sigma_a), sigma_s(sigma_s),
-            sigma_t(sigma_a + sigma_s), g(g) {}
+    DMedium(const MediumType &type,
+            const ptr<float> sigma_a,
+            const ptr<float> sigma_s,
+            const ptr<float> g) :
+        type(type), sigma_a(sigma_a.get()), sigma_s(sigma_s.get()), g(g.get()) {}
 
     MediumType type;
-    Vector3f sigma_a, sigma_s, sigma_t;
-    float g;
+    float *sigma_a, *sigma_s;
+    float *g;
 };
 
 /**

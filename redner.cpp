@@ -116,13 +116,10 @@ PYBIND11_MODULE(redner, m) {
 
     py::class_<DMedium>(m, "DMedium")
         .def(py::init<MediumType,
-                      Vector3f, // sigma_a
-                      Vector3f, // sigma_s
-                      float>()) // forward/backward scattering factor
-        .def_readonly("type", &DMedium::type)
-        .def_readonly("sigma_a", &DMedium::sigma_a)
-        .def_readonly("sigma_s", &DMedium::sigma_s)
-        .def_readonly("g", &DMedium::g);
+                      ptr<float>, // sigma_a
+                      ptr<float>, // sigma_s
+                      ptr<float>>()) // forward/backward scattering factor
+        .def_readonly("type", &DMedium::type);
 
     py::class_<DShape>(m, "DShape")
         .def(py::init<ptr<float>,

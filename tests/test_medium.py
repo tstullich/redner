@@ -176,7 +176,7 @@ for t in range(200):
     # Take a gradient descent step
     optimizer.step()
     # Print the current absorption factor values
-    print('after gradient step:', mediums[0].sigma_a.grad)
+    print('sigma_a:', mediums[0].sigma_a.grad)
 
 # Render final result
 scene_args = pyredner.RenderFunction.serialize_scene(\

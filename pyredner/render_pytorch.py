@@ -866,14 +866,23 @@ class RenderFunction(torch.autograd.Function):
                 d_envmap_tex,
                 redner.float_ptr(d_world_to_env.data_ptr()))
 
+        d_sigma_a_list = []
+        d_sigma_s_list = []
+        d_g_list = []
         d_mediums = []
         for m in ctx.mediums:
             if m.type == redner.medium_type.homogeneous:
+                d_sigma_a = torch.zeros(3, device = pyredner.get_device())
+                d_sigma_a_list.append(d_sigma_a)
+                d_sigma_s = torch.zeros(3, device = pyredner.get_device())
+                d_sigma_s_list.append(d_sigma_s)
+                d_g = torch.zeros(1, device = pyredner.get_device())
+                d_g_list.append(d_g)
                 d_mediums.append(redner.DMedium(\
                     redner.medium_type.homogeneous,
-                    redner.Vector3f(0, 0, 0),
-                    redner.Vector3f(0, 0, 0),
-                    0))
+                    redner.float_ptr(d_sigma_a.data_ptr()),
+                    redner.float_ptr(d_sigma_s.data_ptr()),
+                    redner.float_ptr(d_g.data_ptr())))
             else:
                 assert(False)
 
@@ -1020,22 +1029,13 @@ class RenderFunction(torch.autograd.Function):
         else:
             ret_list.append(None)
 
-        for d_m in d_mediums:
+        num_mediums = len(ctx.mediums)
+        for i in range(num_mediums):
             ret_list.append(None) # type
-            if d_m.type == redner.medium_type.homogeneous:
-                # Converting the medium gradients into data types that are
-                # compatible with pytorch
-                d_sigma_a = d_m.sigma_a
-                d_sigma_s = d_m.sigma_s
-                d_g = d_m.g
-                sigma_a = torch.tensor((d_sigma_a.x, d_sigma_a.y, d_sigma_a.z),
-                                       dtype = torch.float32, device = pyredner.get_device())
-                sigma_s = torch.tensor((d_sigma_s.x, d_sigma_s.y, d_sigma_s.z),
-                                       dtype = torch.float32, device = pyredner.get_device())
-                g = torch.tensor(d_g, dtype = torch.float32, device = pyredner.get_device())
-                ret_list.append(sigma_a) # sigma_a
-                ret_list.append(sigma_s) # sigma_s
-                ret_list.append(g) # g - phase function scattering
+            if d_mediums[i].type == redner.medium_type.homogeneous:
+                ret_list.append(d_sigma_a_list[i].cpu()) # sigma_a
+                ret_list.append(d_sigma_s_list[i].cpu()) # sigma_s
+                ret_list.append(d_g_list[i].cpu()) # g - phase function scattering
             else:
                 assert(False)
 

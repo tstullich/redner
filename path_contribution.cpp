@@ -237,12 +237,12 @@ struct d_path_contribs_accumulator {
         const auto &light_ray = light_rays[pixel_id];
         const auto &min_rough = min_roughness[pixel_id];
         const auto &medium_isect = medium_isects[pixel_id];
+        const auto &medium = scene.mediums[medium_isect.medium_id];
 
         auto &d_throughput = d_throughputs[pixel_id];
         auto &d_incoming_ray = d_incoming_rays[pixel_id];
         auto &d_incoming_ray_differential = d_incoming_ray_differentials[pixel_id];
         auto &d_shading_point = d_shading_points[pixel_id];
-        auto &d_medium = d_mediums[pixel_id];
 
         auto wi = -incoming_ray.dir;
         auto p = surface_point.position;
@@ -272,7 +272,6 @@ struct d_path_contribs_accumulator {
             Vector3{0, 0, 0}, Vector3{0, 0, 0},
             Vector3{0, 0, 0}, Vector3{0, 0, 0}};
         d_shading_point = SurfacePoint::zero();
-        d_medium = DMedium{};
 
         // Next event estimation
         auto nee_contrib = Vector3{0, 0, 0};
@@ -303,8 +302,7 @@ struct d_path_contribs_accumulator {
                         if (medium_isect.medium_id >= 0) {
                             // Compute the phase function pdf
                             auto pdf_phase = phase_function_pdf(
-                                get_phase_function(scene.mediums[medium_isect.medium_id]),
-                                wo, wi);
+                                get_phase_function(medium), wo, wi);
                             auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
                             nee_contrib =
                                 (mis_weight * geometry_term / pdf_nee) * light_contrib * nee_transmittances[pixel_id];
@@ -359,8 +357,7 @@ struct d_path_contribs_accumulator {
                             // does not change. Instead we need to propagate d_tmax
                             // to d_wi
                             auto d_ray = DRay{Vector3{0, 0, 0}, Vector3{0, 0, 0}};
-                            d_transmittance(scene.mediums[medium_isect.medium_id],
-                                incoming_ray, d_ray);
+                            d_transmittance(medium, incoming_ray, d_ray);
 
                             // wo = dir / sqrt(dist_sq)
                             auto d_dir = d_wo / sqrt(dist_sq);
@@ -389,10 +386,10 @@ struct d_path_contribs_accumulator {
                                 d_light_vertices[2]);
 
                             // For testing purposes. Replace with actual values later
-                            auto d_s = Vector3{1.0, 1.0, 1.0};
-                            atomic_add(&d_mediums[medium_isect.medium_id].sigma_a[0], d_s[0]);
-                            atomic_add(&d_mediums[medium_isect.medium_id].sigma_a[0], d_s[1]);
-                            atomic_add(&d_mediums[medium_isect.medium_id].sigma_a[0], d_s[2]);
+                            //auto d_s = Vector3{1.0, 1.0, 1.0};
+                            atomic_add(&d_mediums[medium_isect.medium_id].sigma_a[0], 0.001);
+                            atomic_add(&d_mediums[medium_isect.medium_id].sigma_a[1], 0.001);
+                            atomic_add(&d_mediums[medium_isect.medium_id].sigma_a[2], 0.001);
                         } else {
                             // Compute the BSDF pdf and everything associated with it
                             auto bsdf_val = bsdf(material, surface_point, wi, wo, min_rough);
@@ -484,8 +481,7 @@ struct d_path_contribs_accumulator {
                         // Compute the phase function PDF instead of the BSDF
                         // if we are inside of a medium.
                         auto pdf_phase = phase_function_pdf(
-                            get_phase_function(scene.mediums[medium_isect.medium_id]),
-                            wo, wi);
+                            get_phase_function(medium), wo, wi);
                         auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
                         nee_contrib = (mis_weight / pdf_nee) * light_contrib * nee_transmittances[pixel_id];
 
@@ -509,11 +505,10 @@ struct d_path_contribs_accumulator {
                         // See comment above about why we do not find the gradient
                         // of phase_function_pdf()
                         // auto d_pdf_phase = d_phase_function(
-                        //     get_phase_function(scene.mediums[medium_isect.medium_id]),
+                        //     get_phase_function(medium),
                         //     wi, wo, d_wi, d_wo);
                         auto d_ray = DRay{Vector3{0, 0, 0}, Vector3{0, 0, 0}};
-                        d_transmittance(scene.mediums[medium_isect.medium_id],
-                            incoming_ray, d_ray);
+                        d_transmittance(medium, incoming_ray, d_ray);
 
                         // wi = -incoming_ray.dir;
                         d_incoming_ray.dir -= d_ray.dir;
@@ -572,7 +567,7 @@ struct d_path_contribs_accumulator {
             if (medium_isect.medium_id >= 0) {
                 // Inside a medium
                 directional_pdf = phase_function_pdf(
-                    get_phase_function(scene.mediums[medium_isect.medium_id]),
+                    get_phase_function(medium),
                     wo, wi);
                 // Perfect importance sampling
                 directional_val = Vector3{directional_pdf, directional_pdf, directional_pdf};
@@ -771,8 +766,7 @@ struct d_path_contribs_accumulator {
             if (medium_isect.medium_id >= 0) {
                 // Intersection with medium was made. Get PDF of phase function
                 directional_pdf = phase_function_pdf(
-                    get_phase_function(scene.mediums[medium_isect.medium_id]),
-                    wo, wi);
+                    get_phase_function(medium), wo, wi);
                 directional_val = Vector3{directional_pdf, directional_pdf, directional_pdf};
             } else {
                 // Intersection with surface was made. Get BSDF PDF
@@ -883,11 +877,11 @@ struct d_path_contribs_accumulator {
     DMaterial *d_materials;
     DAreaLight *d_area_lights;
     DEnvironmentMap *d_envmap;
+    DMedium *d_mediums;
     Vector3 *d_throughputs;
     DRay *d_incoming_rays;
     RayDifferential *d_incoming_ray_differentials;
     SurfacePoint *d_shading_points;
-    DMedium *d_mediums;
 };
 
 void accumulate_path_contribs(const Scene &scene,
@@ -966,8 +960,7 @@ void d_accumulate_path_contribs(const Scene &scene,
                                 BufferView<Vector3> d_throughputs,
                                 BufferView<DRay> d_incoming_rays,
                                 BufferView<RayDifferential> d_incoming_ray_differentials,
-                                BufferView<SurfacePoint> d_shading_points,
-                                BufferView<DMedium> d_mediums) {
+                                BufferView<SurfacePoint> d_shading_points) {
     parallel_for(d_path_contribs_accumulator{
         get_flatten_scene(scene),
         active_pixels.begin(),
@@ -1000,10 +993,10 @@ void d_accumulate_path_contribs(const Scene &scene,
         d_scene->materials.data,
         d_scene->area_lights.data,
         d_scene->envmap,
+        d_scene->mediums.data,
         d_throughputs.begin(),
         d_incoming_rays.begin(),
         d_incoming_ray_differentials.begin(),
-        d_shading_points.begin(),
-        d_mediums.begin()},
+        d_shading_points.begin()},
         active_pixels.size(), scene.use_gpu);
 }
