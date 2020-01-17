@@ -7,11 +7,11 @@ pyredner.set_use_gpu(False)
 
 mediums = [pyredner.HomogeneousMedium(\
     sigma_a = torch.tensor([0.05, 0.05, 0.05]),
-    sigma_s = torch.tensor([0.1, 0.1, 0.1]),
-    g = torch.tensor([0.5]))]
+    sigma_s = torch.tensor([0.00001, 0.00001, 0.00001]),
+    g = torch.tensor([0.0]))]
 
-# Attach a medium to the camera to get a fog effect throughout
-# the whole scene
+# Attach medium information to the camera to get a fog effect
+# throughout the whole scene
 cam = pyredner.Camera(position = torch.tensor([0.0, 0.5, 5.0]),
                       look_at = torch.tensor([0.0, 0.0, 0.0]),
                       up = torch.tensor([0.0, 1.0, 0.0]),
@@ -21,16 +21,20 @@ cam = pyredner.Camera(position = torch.tensor([0.0, 0.5, 5.0]),
                       medium_id = 0)
 
 # The materials for the scene - one for the sphere and one for the
-# surrounding planes
+# surrounding planes. The light source emits white light
 mat_sphere = pyredner.Material(\
     diffuse_reflectance = \
-        torch.tensor([0.07, 0.07, 0.07], device = pyredner.get_device()))
+        torch.tensor([0.89, 0.15, 0.21], device = pyredner.get_device()))
+
+mat_light = pyredner.Material(\
+    diffuse_reflectance = \
+        torch.tensor([1.0, 1.0, 1.0], device = pyredner.get_device()))
 
 mat_planes = pyredner.Material(\
     diffuse_reflectance = \
-        torch.tensor([0.6, 0.6, 0.9], device = pyredner.get_device()))
+        torch.tensor([0.0, 0.19, 0.56], device = pyredner.get_device()))
 
-materials = [mat_sphere, mat_planes]
+materials = [mat_sphere, mat_light, mat_planes]
 
 sphere = pyredner.generate_sphere(128, 64)
 shape_sphere = pyredner.Shape(\
@@ -43,15 +47,17 @@ shape_sphere = pyredner.Shape(\
 
 # Manually translating sphere since redner does not seem to support
 # geometric transformations
-shape_sphere.vertices = shape_sphere.vertices + torch.tensor([-1.0, 1.0, 0.0])
+shape_sphere.vertices = shape_sphere.vertices + torch.tensor([0.0, 1.0, 0.0])
 
+# Shape describing the light. In this case we use an area light source
+# facing downward onto the scene
 shape_light = pyredner.Shape(\
-    vertices = torch.tensor([[-5.0,  3.0,  1.0],
-                             [-5.0,  3.0, -1.0],
-                             [-4.0,  5.0,  1.0],
-                             [-4.0,  5.0, -1.0]],
+    vertices = torch.tensor([[5.0, 6.5,  5.0],
+                             [5.0, 6.5, -5.0],
+                             [-5.0, 6.5,-5.0],
+                             [-5.0, 6.5, 5.0]],
                              device = pyredner.get_device()),
-    indices = torch.tensor([[0, 1, 2],[1, 3, 2]],
+    indices = torch.tensor([[2, 1, 0],[3, 2, 0]],
         dtype = torch.int32, device = pyredner.get_device()),
     uvs = None,
     normals = None,
@@ -68,38 +74,65 @@ shape_floor = pyredner.Shape(\
         dtype = torch.int32, device = pyredner.get_device()),
     uvs = None,
     normals = None,
-    material_id = 1)
+    material_id = 2)
 
 # Shape describing the backplane
 shape_back = pyredner.Shape(\
-    vertices = torch.tensor([[5.0,  -1.5, -5.0],
-                             [5.0,   6.0, -5.0],
-                             [-6.0,  6.0, -5.0],
-                             [-6.0, -1.5, -5.0]],
+    vertices = torch.tensor([[8.0,  -9.0, -5.0],
+                             [8.0,   7.0, -5.0],
+                             [-8.0,  7.0, -5.0],
+                             [-8.0, -9.0, -5.0]],
                              device = pyredner.get_device()),
     indices = torch.tensor([[0, 1, 2],[0, 2, 3]],
         dtype = torch.int32, device = pyredner.get_device()),
     uvs = None,
     normals = None,
-    material_id = 1)
+    material_id = 2)
+
+# Shape describing the left side of the box
+shape_left = pyredner.Shape(\
+    vertices = torch.tensor([[-5.0,  -1.5,  5.0],
+                             [-5.0,   6.0,  5.0],
+                             [-5.0,   6.0, -5.0],
+                             [-5.0,  -1.5, -5.0]],
+                             device = pyredner.get_device()),
+    indices = torch.tensor([[2, 1, 0],[3, 2, 0]],
+        dtype = torch.int32, device = pyredner.get_device()),
+    uvs = None,
+    normals = None,
+    material_id = 2)
+
 
 # Shape describing the right side of the box
 shape_right = pyredner.Shape(\
     vertices = torch.tensor([[5.0,  -1.5,  5.0],
                              [5.0,   6.0,  5.0],
-                             [5.0,   6.0, -7.0],
-                             [5.0,  -1.5, -7.0]],
+                             [5.0,   6.0, -5.0],
+                             [5.0,  -1.5, -5.0]],
                              device = pyredner.get_device()),
     indices = torch.tensor([[0, 1, 2],[0, 2, 3]],
         dtype = torch.int32, device = pyredner.get_device()),
     uvs = None,
     normals = None,
-    material_id = 1)
+    material_id = 2)
 
 # The shape list of our scene containing multiple shapes
-shapes = [shape_sphere, shape_light, shape_floor, shape_back, shape_right]
+# We can remove different parts of the scene to observe the effects the presence
+# has on the overall scene. Comment out the different configurations to test
 
-light = pyredner.AreaLight(shape_id = 1,
+# Config 1 - A complete box + a sphere
+#shapes = [shape_light, shape_sphere, shape_floor, shape_back, shape_left, shape_right]
+
+# Config 2 - Complete box only
+#shapes = [shape_light, shape_floor, shape_back, shape_left, shape_right]
+
+# Config 3 - Sphere + a floor plane
+#shapes = [shape_light, shape_sphere, shape_floor]
+
+# Config 4 - Back plane only
+shapes = [shape_light, shape_back]
+
+light = pyredner.AreaLight(shape_id = 0,
                            intensity = torch.tensor([10.0, 10.0, 10.0]))
 area_lights = [light]
 
@@ -112,7 +145,7 @@ scene = pyredner.Scene(cam,
 scene_args = pyredner.RenderFunction.serialize_scene(\
     scene = scene,
     num_samples = 256,
-    max_bounces = 5)
+    max_bounces = 2)
 
 render = pyredner.RenderFunction.apply
 img = render(0, *scene_args)
@@ -122,8 +155,11 @@ target = pyredner.imread('results/test_medium/target.exr')
 if pyredner.get_use_gpu():
     target = target.cuda(device = pyredner.get_device())
 
-# Perturb the medium for the initial guess
-# Here we set the absorption factor to be optimized
+# Perturb the medium for the initial guess.
+# Here we set the absorption factor to be optimized.
+# A higher medium absorption factor corresponds to less light being
+# transmitted so the goal is to move from a darkened image
+# to a lighter one.
 mediums[0].sigma_a = torch.tensor(\
     [0.5, 0.5, 0.5],
     device = pyredner.get_device(),
@@ -133,7 +169,7 @@ mediums[0].sigma_a = torch.tensor(\
 scene_args = pyredner.RenderFunction.serialize_scene(\
     scene = scene,
     num_samples = 256,
-    max_bounces = 5,
+    max_bounces = 2,
     # Disable edge sampling for now
     use_primary_edge_sampling = False,
     use_secondary_edge_sampling = False)
@@ -156,7 +192,7 @@ for t in range(200):
     scene_args = pyredner.RenderFunction.serialize_scene(\
         scene = scene,
         num_samples = 256,
-        max_bounces = 5,
+        max_bounces = 2,
         use_primary_edge_sampling = False,
         use_secondary_edge_sampling = False)
 
@@ -182,7 +218,7 @@ for t in range(200):
 scene_args = pyredner.RenderFunction.serialize_scene(\
     scene = scene,
     num_samples = 256,
-    max_bounces = 5,
+    max_bounces = 2,
     use_primary_edge_sampling = False,
     use_secondary_edge_sampling = False)
 img = render(202, *scene_args)
