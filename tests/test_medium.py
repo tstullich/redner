@@ -124,7 +124,8 @@ shape_right = pyredner.Shape(\
 
 # The shape list of our scene containing multiple shapes
 # We can remove different parts of the scene to observe the effects the presence
-# has on the overall scene. Comment out the different configurations to test
+# of participating media has on the overall scene.
+# Comment out the different configurations to test
 
 # Config 1 - A complete box + a sphere
 #shapes = [shape_light, shape_sphere, shape_floor, shape_back, shape_left, shape_right]
@@ -167,7 +168,7 @@ if pyredner.get_use_gpu():
 # transmitted so the goal is to move from a darkened image
 # to a lighter one.
 mediums[0].sigma_a = torch.tensor(\
-    [0.5, 0.5, 0.5],
+    [0.3, 0.3, 0.3],
     device = pyredner.get_device(),
     requires_grad = True)
 
