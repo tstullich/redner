@@ -18,7 +18,10 @@ Real sample_distance(const Medium &medium, const MediumSample &sample) {
 
 DEVICE
 inline
-Real d_sample_distance(const Medium &medium, const MediumSample &sample) {
+void d_sample_distance(const Medium &medium,
+                       const MediumSample &sample,
+                       Real &d_output,
+                       DMedium &d_medium) {
     if (medium.type == MediumType::homogeneous) {
         // Sample a channel and distance along the ray
         auto h = medium.homogeneous;
@@ -26,13 +29,23 @@ Real d_sample_distance(const Medium &medium, const MediumSample &sample) {
 
         // Derivative of the distance sampling function with respect to the
         // sample which varies. We assume that max()' = 1
-        //auto t = Real(-log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel]);
-        auto d_t = 1 / (h.sigma_t[channel] - h.sigma_t[channel] * sample.uv[1]);
+        auto t = Real(-log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel]);
 
-        // TODO Need to figure out where t needs to be to backpropagated
-        return d_t;
-    } else {
-        return Real(0);
+        // Backpropagate
+        // TODO Check if we need more samples to not correlate the sampling
+        // auto t = Real(-log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel]);
+        auto d_t = 1 / (h.sigma_t[channel] - d_output);
+        auto d_t_sigma_t = log(max(1 - sample.uv[1], Real(1e-20))) / (h.sigma_t[channel] * h.sigma_t[channel]);
+
+        auto d_sigma_a = h.sigma_s + d_t_sigma_t;
+        atomic_add(&d_medium.sigma_a[0], d_sigma_a[0]);
+        atomic_add(&d_medium.sigma_a[1], d_sigma_a[1]);
+        atomic_add(&d_medium.sigma_a[2], d_sigma_a[2]);
+
+        auto d_sigma_s = h.sigma_a + d_t_sigma_t;
+        atomic_add(&d_medium.sigma_s[0], d_sigma_s[0]);
+        atomic_add(&d_medium.sigma_s[1], d_sigma_s[1]);
+        atomic_add(&d_medium.sigma_s[2], d_sigma_s[2]);
     }
 }
 
@@ -154,6 +167,7 @@ void d_sample(const Medium &medium,
               const Intersection &surface_isect,
               const MediumSample &sample,
               const Vector3 &d_output,
+              DMedium &d_medium,
               Intersection *medium_isect,
               Vector3 *medium_point,
               DRay &d_ray) {
@@ -194,22 +208,55 @@ void d_sample(const Medium &medium,
             }
         }
 
-        //auto beta = inside_medium ? (tr * h.sigma_s / pdf) : (tr / pdf);
-
         // Calculate the partial derivative of the transmittance with respect to t
         // We assume that f'/pdf is equivalent to (f/pdf)' in terms of expectation
         // auto beta = inside_medium ? (tr * h.sigma_s / pdf) : (tr / pdf);
         auto d_beta_tr = inside_medium ? (d_output * h.sigma_s / pdf) : (d_output / pdf);
 
+        if (inside_medium) {
+            std::cout << "d_output: " << d_output.x << ", " << d_output.y << ", " << d_output.z << std::endl;
+            std::cout << "d_beta_tr: " << d_beta_tr.x << ", " << d_beta_tr.y << ", " << d_beta_tr.z << std::endl;
+            std::cout << "tr: " << tr.x << ", " << tr.y << ", " << tr.z << std::endl;
+
+            // Only make this add if we are inside a medium. The derivative
+            // of beta with respect to sigma_s should not change otherwise
+            // auto beta = tr * sigma_s / pdf;
+            auto d_beta_sigma_s = tr * d_beta_tr / pdf;
+            std::cout << "d_beta_sigma_s: " << d_beta_sigma_s.x << ", " << d_beta_sigma_s.y << ", " << d_beta_sigma_s.z << std::endl;
+            std::cout << "pdf: " << pdf << std::endl;
+            atomic_add(&d_medium.sigma_s[0], d_beta_sigma_s[0]);
+            atomic_add(&d_medium.sigma_s[1], d_beta_sigma_s[1]);
+            atomic_add(&d_medium.sigma_s[2], d_beta_sigma_s[2]);
+        }
+
         // TODO Check if we need to update medium_point
-        // *medium_point = ray.org + ray.dir * t
+        //*medium_point = ray.org + ray.dir * t;
+
 
         // auto tr = exp(-h.sigma_t * min(t, MaxFloat))
-        auto d_tr_t = exp(-h.sigma_t * min(d_beta_tr, MaxFloat));
+        // We assume min(t, MaxFloat) will always be less than MaxFloat
+        // for simplification purposes
+        auto d_tr_t = h.sigma_t * -exp(-h.sigma_t * d_beta_tr);
+        auto d_tr_sigma_t = d_beta_tr * -exp(-h.sigma_t * d_beta_tr);
+        // Need to recover d_sigma_a and d_sigma_s from d_tr_sigma_t since
+        // sigma_t = sigma_a + sigma_s
+        auto d_sigma_a = h.sigma_s + d_tr_sigma_t;
+        atomic_add(&d_medium.sigma_a[0], d_sigma_a[0]);
+        atomic_add(&d_medium.sigma_a[1], d_sigma_a[1]);
+        atomic_add(&d_medium.sigma_a[2], d_sigma_a[2]);
+
+        auto d_sigma_s = h.sigma_a + d_tr_sigma_t;
+        atomic_add(&d_medium.sigma_s[0], d_sigma_s[0]);
+        atomic_add(&d_medium.sigma_s[1], d_sigma_s[1]);
+        atomic_add(&d_medium.sigma_s[2], d_sigma_s[2]);
 
         // auto t = min(dist, ray.tmax)
         // This can introduce a discontinuity!
         auto d_t = min(d_tr_t, ray.tmax);
+
+        // auto dist = sample_distance(medium, sample);
+        auto d_dist = Real(0);
+        d_sample_distance(medium, sample, d_dist, d_medium);
 
         // Backpropagate the derivative of the transmittance with respect
         // to t_max to the intersection function.
@@ -249,16 +296,19 @@ struct d_medium_sampler {
         const auto &medium_sample = medium_samples[pixel_id];
         auto &medium_isect = medium_isects[pixel_id];
         auto &medium_point = medium_points[pixel_id];
+        auto &d_medium = d_mediums[pixel_id];
 
         if (medium_isect.medium_id >= 0) {
-            // TODO Hook up d_output and d_ray correctly
-            auto d_output = Vector3{0, 0, 0};
-            auto d_ray = DRay{Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+            // TODO Check if d_output = d_throughput
+            // throughputs[pixel_id] *= transmittance;
+            auto d_transmittance = d_throughputs[pixel_id];
+            auto d_ray = d_rays[pixel_id];
             d_sample(scene.mediums[medium_isect.medium_id],
                      incoming_ray,
                      surface_isect,
                      medium_sample,
-                     d_output,
+                     d_transmittance,
+                     d_medium,
                      &medium_isect,
                      &medium_point,
                      d_ray);
@@ -270,6 +320,9 @@ struct d_medium_sampler {
     const Intersection *surface_isects;
     const Ray *incoming_rays;
     const MediumSample *medium_samples;
+    const Vector3 *d_throughputs;
+    DMedium *d_mediums;
+    DRay *d_rays;
     Intersection *medium_isects;
     Vector3 *medium_points;
     Vector3 *throughputs;
@@ -280,6 +333,9 @@ void d_sample_medium(const Scene &scene,
                      const BufferView<Intersection> &surface_isects,
                      const BufferView<Ray> &incoming_rays,
                      const BufferView<MediumSample> &medium_samples,
+                     const BufferView<Vector3> &d_throughputs,
+                     DScene *d_scene,
+                     BufferView<DRay> &d_rays,
                      BufferView<Intersection> medium_isects,
                      BufferView<Vector3> medium_points,
                      BufferView<Vector3> throughputs) {
@@ -289,6 +345,9 @@ void d_sample_medium(const Scene &scene,
         surface_isects.begin(),
         incoming_rays.begin(),
         medium_samples.begin(),
+        d_throughputs.begin(),
+        d_scene->mediums.data,
+        d_rays.begin(),
         medium_isects.begin(),
         medium_points.begin(),
         throughputs.begin()},
@@ -351,7 +410,11 @@ void evaluate_transmittance(const Scene &scene,
  */
 DEVICE
 inline
-void d_transmittance(const Medium &medium, const Ray &ray, DRay &d_ray) {
+void d_transmittance(const Medium &medium,
+                     const Ray &ray,
+                     const Vector3 &d_output,
+                     DRay &d_ray,
+                     DMedium &d_medium) {
     if (medium.type == MediumType::homogeneous) {
         auto h = medium.homogeneous;
 
@@ -360,10 +423,21 @@ void d_transmittance(const Medium &medium, const Ray &ray, DRay &d_ray) {
         auto tr = exp(-h.sigma_t * min(ray.tmax, MaxFloat));
 
         // Backpropagate
+        // TODO Figure out if we need to add d_output into this
         auto d_tr_t = h.sigma_t * -exp(-h.sigma_t * min(ray.tmax, MaxFloat));
+        auto d_tr_sigma_t = h.sigma_t * -exp(-h.sigma_t * d_tr_t);
 
-        // auto tr = exp(-h.sigma_t * min(ray.tmax, MaxFloat));
-        auto d_tr = exp(-h.sigma_t * min(d_tr_t, MaxFloat));
+        // Need to recover d_sigma_a and d_sigma_s from d_tr_sigma_t since
+        // sigma_t = sigma_a + sigma_s
+        auto d_sigma_a = h.sigma_s + d_tr_sigma_t;
+        atomic_add(&d_medium.sigma_a[0], d_sigma_a[0]);
+        atomic_add(&d_medium.sigma_a[1], d_sigma_a[1]);
+        atomic_add(&d_medium.sigma_a[2], d_sigma_a[2]);
+
+        auto d_sigma_s = h.sigma_a + d_tr_sigma_t;
+        atomic_add(&d_medium.sigma_s[0], d_sigma_s[0]);
+        atomic_add(&d_medium.sigma_s[1], d_sigma_s[1]);
+        atomic_add(&d_medium.sigma_s[2], d_sigma_s[2]);
 
         // Backpropagate the derivative of the transmittance with respect
         // to t_max to the intersection function.
@@ -383,7 +457,7 @@ void d_transmittance(const Medium &medium, const Ray &ray, DRay &d_ray) {
                     Vector3{0, 0, 0},
                     ray,
                     ray_diff,
-                    d_tr,
+                    d_tr_t,
                     Vector2{0, 0},
                     Vector2{0, 0},
                     Vector2{0, 0},
@@ -399,12 +473,16 @@ struct d_transmittance_sampler {
     DEVICE void operator()(int idx) {
         auto pixel_id = active_pixels[idx];
         const auto &ray = rays[pixel_id];
+        auto &d_medium = d_mediums[pixel_id];
+
         // tmax <= 0 means the ray is occluded
         if (medium_isects[pixel_id].medium_id >= 0 && ray.tmax > 0) {
-            // TODO Check if this should be stored in transmittances
-            auto d_ray = DRay{Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+            // TODO Check if this how we get d_tr or if we just
+            // initialize a Vector3{1, 1, 1}
+            auto &d_tr = transmittances[pixel_id];
+            auto d_ray = d_rays[pixel_id];
             d_transmittance(mediums[medium_isects[pixel_id].medium_id],
-                            ray, d_ray);
+                            ray, d_tr, d_ray, d_medium);
         }
     }
 
@@ -412,20 +490,25 @@ struct d_transmittance_sampler {
     const int *active_pixels;
     const Ray *rays;
     const Intersection *medium_isects;
-    Vector3 *transmittances;
+    const Vector3 *transmittances;
+    DMedium *d_mediums;
+    DRay *d_rays;
 };
 
 void d_evaluate_transmittance(const Scene &scene,
                               const BufferView<int> &active_pixels,
                               const BufferView<Ray> &rays,
                               const BufferView<Intersection> &medium_isects,
-                              const BufferView<Vector3> &medium_points,
-                              BufferView<Vector3> transmittances) {
+                              const BufferView<Vector3> &transmittances,
+                              BufferView<DMedium> d_mediums,
+                              BufferView<DRay> d_rays) {
     parallel_for(d_transmittance_sampler{
         scene.mediums.data,
         active_pixels.begin(),
         rays.begin(),
         medium_isects.begin(),
-        transmittances.begin()},
+        transmittances.begin(),
+        d_mediums.begin(),
+        d_rays.begin()},
         active_pixels.size(), scene.use_gpu);
 }

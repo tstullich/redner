@@ -9,6 +9,7 @@
 #include "vector.h"
 
 // Forward declarations
+struct DScene;
 struct MediumInteraction;
 struct Sampler;
 struct Scene;
@@ -113,6 +114,9 @@ void d_sample_medium(const Scene &scene,
                      const BufferView<Intersection> &surface_isects,
                      const BufferView<Ray> &incoming_rays,
                      const BufferView<MediumSample> &medium_samples,
+                     const BufferView<Vector3> &d_throughputs,
+                     DScene *d_scene,
+                     BufferView<DRay> &d_rays,
                      BufferView<Intersection> medium_isects,
                      BufferView<Vector3> medium_points,
                      BufferView<Vector3> throughputs);
@@ -130,10 +134,15 @@ void d_evaluate_transmittance(const Scene &scene,
                               const BufferView<Ray> &rays,
                               const BufferView<Intersection> &medium_isects,
                               const BufferView<Vector3> &medium_points,
-                              BufferView<Vector3> transmittances);
+                              BufferView<Vector3> transmittances,
+                              BufferView<Vector3> d_rays);
 
 // Calculate the transmittance of a ray segment given a ray
 Vector3 transmittance(const Medium &medium, const Ray &ray);
 
 // Calculate the derivative of the transmittance w.r.t tmax
-void d_transmittance(const Medium &medium, const Ray &ray, DRay &d_ray);
+void d_transmittance(const Medium &medium,
+                     const Ray &ray,
+                     const Vector3 &d_output,
+                     DRay &d_ray,
+                     DMedium &d_medium);
