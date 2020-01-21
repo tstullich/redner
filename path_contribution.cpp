@@ -353,8 +353,9 @@ struct d_path_contribs_accumulator {
                             // now since it causes high variance and the expectation
                             // does not change. Instead we need to propagate d_tmax
                             // to d_wi
-                            auto d_medium = d_mediums[pixel_id];
-                            //d_transmittance(medium, incoming_ray, d_incoming_ray, d_medium);
+                            auto d_medium = d_mediums[medium_isect.medium_id];
+                            auto d_output = Vector3{0, 0, 0};
+                            d_transmittance(medium, incoming_ray, d_output, d_incoming_ray, d_medium);
 
                             // wo = dir / sqrt(dist_sq)
                             auto d_dir = d_wo / sqrt(dist_sq);
@@ -502,8 +503,9 @@ struct d_path_contribs_accumulator {
                         //     get_phase_function(medium),
                         //     wi, wo, d_wi, d_wo);
                         //auto d_ray = DRay{Vector3{0, 0, 0}, Vector3{0, 0, 0}};
-                        auto d_medium = d_mediums[pixel_id];
-                        //d_transmittance(medium, incoming_ray, d_incoming_ray, d_medium);
+                        auto d_medium = d_mediums[medium_isect.medium_id];
+                        auto d_output = Vector3{0, 0, 0};
+                        d_transmittance(medium, incoming_ray, d_output, d_incoming_ray, d_medium);
 
                         // wi = -incoming_ray.dir;
                         // TODO Uncomment this later

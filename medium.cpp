@@ -29,10 +29,9 @@ void d_sample_distance(const Medium &medium,
 
         // Derivative of the distance sampling function with respect to the
         // sample which varies. We assume that max()' = 1
-        auto t = Real(-log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel]);
+        //auto t = Real(-log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel]);
 
         // Backpropagate
-        // TODO Check if we need more samples to not correlate the sampling
         // auto t = Real(-log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel]);
         auto d_t = 1 / (h.sigma_t[channel] - d_output);
         auto d_t_sigma_t = log(max(1 - sample.uv[1], Real(1e-20))) / (h.sigma_t[channel] * h.sigma_t[channel]);
@@ -211,44 +210,38 @@ void d_sample(const Medium &medium,
         // Calculate the partial derivative of the transmittance with respect to t
         // We assume that f'/pdf is equivalent to (f/pdf)' in terms of expectation
         // auto beta = inside_medium ? (tr * h.sigma_s / pdf) : (tr / pdf);
-        auto d_beta_tr = inside_medium ? (d_output * h.sigma_s / pdf) : (d_output / pdf);
+        auto d_beta_tr = inside_medium ? (tr * h.sigma_s / pdf) : (tr / pdf);
 
         if (inside_medium) {
-            std::cout << "d_output: " << d_output.x << ", " << d_output.y << ", " << d_output.z << std::endl;
-            std::cout << "d_beta_tr: " << d_beta_tr.x << ", " << d_beta_tr.y << ", " << d_beta_tr.z << std::endl;
-            std::cout << "tr: " << tr.x << ", " << tr.y << ", " << tr.z << std::endl;
-
             // Only make this add if we are inside a medium. The derivative
             // of beta with respect to sigma_s should not change otherwise
             // auto beta = tr * sigma_s / pdf;
             auto d_beta_sigma_s = tr * d_beta_tr / pdf;
-            std::cout << "d_beta_sigma_s: " << d_beta_sigma_s.x << ", " << d_beta_sigma_s.y << ", " << d_beta_sigma_s.z << std::endl;
-            std::cout << "pdf: " << pdf << std::endl;
-            atomic_add(&d_medium.sigma_s[0], d_beta_sigma_s[0]);
-            atomic_add(&d_medium.sigma_s[1], d_beta_sigma_s[1]);
-            atomic_add(&d_medium.sigma_s[2], d_beta_sigma_s[2]);
+            atomic_add(d_medium.sigma_s[0], d_beta_sigma_s[0]);
+            atomic_add(d_medium.sigma_s[1], d_beta_sigma_s[1]);
+            atomic_add(d_medium.sigma_s[2], d_beta_sigma_s[2]);
         }
 
         // TODO Check if we need to update medium_point
         //*medium_point = ray.org + ray.dir * t;
 
-
-        // auto tr = exp(-h.sigma_t * min(t, MaxFloat))
         // We assume min(t, MaxFloat) will always be less than MaxFloat
         // for simplification purposes
+        // auto tr = exp(-h.sigma_t * min(t, MaxFloat))
         auto d_tr_t = h.sigma_t * -exp(-h.sigma_t * d_beta_tr);
         auto d_tr_sigma_t = d_beta_tr * -exp(-h.sigma_t * d_beta_tr);
+
         // Need to recover d_sigma_a and d_sigma_s from d_tr_sigma_t since
         // sigma_t = sigma_a + sigma_s
         auto d_sigma_a = h.sigma_s + d_tr_sigma_t;
-        atomic_add(&d_medium.sigma_a[0], d_sigma_a[0]);
-        atomic_add(&d_medium.sigma_a[1], d_sigma_a[1]);
-        atomic_add(&d_medium.sigma_a[2], d_sigma_a[2]);
+        atomic_add(d_medium.sigma_a[0], d_sigma_a[0]);
+        atomic_add(d_medium.sigma_a[1], d_sigma_a[1]);
+        atomic_add(d_medium.sigma_a[2], d_sigma_a[2]);
 
         auto d_sigma_s = h.sigma_a + d_tr_sigma_t;
-        atomic_add(&d_medium.sigma_s[0], d_sigma_s[0]);
-        atomic_add(&d_medium.sigma_s[1], d_sigma_s[1]);
-        atomic_add(&d_medium.sigma_s[2], d_sigma_s[2]);
+        atomic_add(d_medium.sigma_s[0], d_sigma_s[0]);
+        atomic_add(d_medium.sigma_s[1], d_sigma_s[1]);
+        atomic_add(d_medium.sigma_s[2], d_sigma_s[2]);
 
         // auto t = min(dist, ray.tmax)
         // This can introduce a discontinuity!
@@ -296,12 +289,12 @@ struct d_medium_sampler {
         const auto &medium_sample = medium_samples[pixel_id];
         auto &medium_isect = medium_isects[pixel_id];
         auto &medium_point = medium_points[pixel_id];
-        auto &d_medium = d_mediums[pixel_id];
+        auto &d_medium = d_mediums[medium_isect.medium_id];
 
         if (medium_isect.medium_id >= 0) {
             // TODO Check if d_output = d_throughput
             // throughputs[pixel_id] *= transmittance;
-            auto d_transmittance = d_throughputs[pixel_id];
+            auto d_transmittance = transmittances[pixel_id] * d_throughputs[pixel_id];
             auto d_ray = d_rays[pixel_id];
             d_sample(scene.mediums[medium_isect.medium_id],
                      incoming_ray,
@@ -320,6 +313,7 @@ struct d_medium_sampler {
     const Intersection *surface_isects;
     const Ray *incoming_rays;
     const MediumSample *medium_samples;
+    const Vector3 *transmittances;
     const Vector3 *d_throughputs;
     DMedium *d_mediums;
     DRay *d_rays;
@@ -333,6 +327,7 @@ void d_sample_medium(const Scene &scene,
                      const BufferView<Intersection> &surface_isects,
                      const BufferView<Ray> &incoming_rays,
                      const BufferView<MediumSample> &medium_samples,
+                     const BufferView<Vector3> &transmittances,
                      const BufferView<Vector3> &d_throughputs,
                      DScene *d_scene,
                      BufferView<DRay> &d_rays,
@@ -345,6 +340,7 @@ void d_sample_medium(const Scene &scene,
         surface_isects.begin(),
         incoming_rays.begin(),
         medium_samples.begin(),
+        transmittances.begin(),
         d_throughputs.begin(),
         d_scene->mediums.data,
         d_rays.begin(),
