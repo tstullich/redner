@@ -317,16 +317,13 @@ struct d_path_contribs_accumulator {
                             auto weight = mis_weight / pdf_nee;
                             // nee_contrib = (weight * geometry_term) * nee_transmittances * light_contrib
                             // Ignore derivatives of MIS & PMF
-                            // TODO Check if we use nee_transmittances again
                             auto d_weight = geometry_term *
                                 sum(d_nee_contrib * nee_transmittances[pixel_id] * light_contrib);
 
                             // weight = mis_weight / pdf_nee
                             auto d_pdf_nee = -d_weight * weight / pdf_nee;
 
-                            // TODO Check if we need to use nee_transmittances
-                            // for the two derivatives, since we do not have a bsdf_val
-                            // nee_contrib = (weight * geometry_term) * bsdf_val * light_contrib
+                            // nee_contrib = (weight * geometry_term) * nee_transmittances * light_contrib
                             auto d_geometry_term = weight * sum(d_nee_contrib * nee_transmittances[pixel_id] * light_contrib);
                             auto d_light_contrib = weight * d_nee_contrib * geometry_term * nee_transmittances[pixel_id];
 
@@ -356,8 +353,8 @@ struct d_path_contribs_accumulator {
                             // now since it causes high variance and the expectation
                             // does not change. Instead we need to propagate d_tmax
                             // to d_wi
-                            auto d_ray = DRay{Vector3{0, 0, 0}, Vector3{0, 0, 0}};
-                            d_transmittance(medium, incoming_ray, d_ray);
+                            auto d_medium = d_mediums[pixel_id];
+                            //d_transmittance(medium, incoming_ray, d_incoming_ray, d_medium);
 
                             // wo = dir / sqrt(dist_sq)
                             auto d_dir = d_wo / sqrt(dist_sq);
@@ -370,7 +367,8 @@ struct d_path_contribs_accumulator {
                             d_light_point.position += d_dir;
                             d_shading_point.position -= d_dir;
                             // wi = -incoming_ray.dir
-                            d_incoming_ray.dir -= d_ray.dir;
+                            // TODO Figure out how to propagate this properly
+                            //d_incoming_ray.dir -= d_ray.dir;
 
                             // Need to backpropagate to shape by sampling point on light
                             d_sample_shape(light_shape, light_isect.tri_id,
@@ -385,11 +383,7 @@ struct d_path_contribs_accumulator {
                             atomic_add(&d_shapes[light_isect.shape_id].vertices[3 * light_tri_index[2]],
                                 d_light_vertices[2]);
 
-                            // For testing purposes. Replace with actual values later
-                            //auto d_s = Vector3{1.0, 1.0, 1.0};
-                            atomic_add(&d_mediums[medium_isect.medium_id].sigma_a[0], 0.001);
-                            atomic_add(&d_mediums[medium_isect.medium_id].sigma_a[1], 0.001);
-                            atomic_add(&d_mediums[medium_isect.medium_id].sigma_a[2], 0.001);
+                            // Accumulate medium derivatives
                         } else {
                             // Compute the BSDF pdf and everything associated with it
                             auto bsdf_val = bsdf(material, surface_point, wi, wo, min_rough);
@@ -507,11 +501,13 @@ struct d_path_contribs_accumulator {
                         // auto d_pdf_phase = d_phase_function(
                         //     get_phase_function(medium),
                         //     wi, wo, d_wi, d_wo);
-                        auto d_ray = DRay{Vector3{0, 0, 0}, Vector3{0, 0, 0}};
-                        d_transmittance(medium, incoming_ray, d_ray);
+                        //auto d_ray = DRay{Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+                        auto d_medium = d_mediums[pixel_id];
+                        //d_transmittance(medium, incoming_ray, d_incoming_ray, d_medium);
 
                         // wi = -incoming_ray.dir;
-                        d_incoming_ray.dir -= d_ray.dir;
+                        // TODO Uncomment this later
+                        //d_incoming_ray.dir -= d_ray.dir;
                     } else {
                         auto bsdf_val = bsdf(material, surface_point, wi, wo, min_rough);
                         auto pdf_bsdf = bsdf_pdf(material, surface_point, wi, wo, min_rough);
@@ -654,8 +650,11 @@ struct d_path_contribs_accumulator {
                 // d_bsdf_pdf(material, shading_point, wi, wo, min_rough, d_pdf_bsdf,
                 //            d_roughness_tex, d_shading_point, d_wi, d_wo);
                 // bsdf_val = bsdf(material, shading_point, wi, wo)
-                d_bsdf(material, surface_point, wi, wo, min_rough, d_bsdf_val,
-                    d_material, d_shading_point, d_wi, d_wo);
+                if (medium_isect.medium_id < 0) {
+                    // Only estimate d_bsdf if we did not have a medium interaction
+                    d_bsdf(material, surface_point, wi, wo, min_rough, d_bsdf_val,
+                        d_material, d_shading_point, d_wi, d_wo);
+                }
 
                 // wo = dir / sqrt(dist_sq)
                 auto d_dir = d_wo / sqrt(dist_sq);
@@ -816,8 +815,12 @@ struct d_path_contribs_accumulator {
                               *d_envmap, d_wo, d_ray_diff);
                 auto d_wi = Vector3{0, 0, 0};
                 // bsdf_val = bsdf(material, shading_point, wi, wo)
-                d_bsdf(material, surface_point, wi, wo, min_rough, d_bsdf_val,
-                       d_material, d_shading_point, d_wi, d_wo);
+
+                if (medium_isect.medium_id < 0) {
+                    // Do not estimate d_bsdf if we had a medium interaction
+                    d_bsdf(material, surface_point, wi, wo, min_rough, d_bsdf_val,
+                        d_material, d_shading_point, d_wi, d_wo);
+                }
 
                 // pdf_bsdf = bsdf_pdf(material, shading_point, wi, wo, min_rough)
                 // d_bsdf_pdf(material, shading_point, wi, wo, min_rough, d_pdf_bsdf,
