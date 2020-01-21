@@ -152,7 +152,9 @@ scene = pyredner.Scene(cam,
 scene_args = pyredner.RenderFunction.serialize_scene(\
     scene = scene,
     num_samples = 256,
-    max_bounces = 2)
+    max_bounces = 2,
+    use_primary_edge_sampling = False,
+    use_secondary_edge_sampling = False)
 
 render = pyredner.RenderFunction.apply
 img = render(0, *scene_args)
