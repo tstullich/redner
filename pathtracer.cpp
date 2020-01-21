@@ -573,6 +573,9 @@ void render(const Scene &scene,
                                     surface_isects,
                                     incoming_rays,
                                     medium_samples,
+                                    d_throughputs,
+                                    d_scene.get(),
+                                    d_rays,
                                     medium_isects,
                                     medium_points,
                                     throughputs);
@@ -758,22 +761,26 @@ void render(const Scene &scene,
                                               nee_rays);
                         occluded(scene, active_pixels, nee_rays, optix_rays, optix_hits);
 
-                        if (scene.mediums.size() > 0) {
-                            // Backpropagate the transmittance
-                            d_evaluate_transmittance(scene,
-                                                     active_pixels,
-                                                     incoming_rays,
-                                                     medium_isects,
-                                                     medium_points,
-                                                     nee_transmittances);
-                        }
-
                         // Sample directions based on BRDF
                         edge_sampler->next_directional_samples(tmp_directional_samples);
                         // Copy the samples
                         parallel_for(copy_interleave<DirectionalSample>{
                             tmp_directional_samples.begin(), directional_samples.begin()},
                             tmp_directional_samples.size(), scene.use_gpu);
+
+                        // Transmittance is set to 0 if occluded
+                        if (scene.mediums.size() > 0) {
+                            evaluate_transmittance(scene,
+                                                   active_pixels,
+                                                   nee_rays,
+                                                   medium_isects,
+                                                   nee_transmittances);
+                        } else {
+                            // Set transmittance to 1
+                            DISPATCH(scene.use_gpu, thrust::fill,
+                                nee_transmittances.begin(), nee_transmittances.end(), Vector3{1, 1, 1});
+                        }
+
                         bsdf_or_phase_sample(scene,
                                              active_pixels,
                                              incoming_rays,
@@ -822,6 +829,19 @@ void render(const Scene &scene,
                             next_throughputs,
                             nullptr,
                             edge_contribs);
+
+                        if (scene.mediums.size() > 0 && depth != max_bounces - 1) {
+                            // Sample medium
+                            sampler->next_medium_samples(medium_samples);
+                            sample_medium(scene,
+                                          active_pixels,
+                                          bsdf_isects,
+                                          next_rays,
+                                          medium_samples,
+                                          medium_isects,
+                                          medium_points,
+                                          next_throughputs);
+                        }
 
                         // Stream compaction: remove invalid bsdf intersections
                         // active_pixels -> next_active_pixels
