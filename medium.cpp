@@ -27,14 +27,9 @@ void d_sample_distance(const Medium &medium,
         auto h = medium.homogeneous;
         auto channel = min(int(sample.uv[0] * 3), 2);
 
-        // Derivative of the distance sampling function with respect to the
-        // sample which varies. We assume that max()' = 1
-        //auto t = Real(-log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel]);
-
-        // Backpropagate
         // auto t = Real(-log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel]);
-        auto d_t = 1 / (h.sigma_t[channel] - d_output);
-        auto d_t_sigma_t = log(max(1 - sample.uv[1], Real(1e-20))) / (h.sigma_t[channel] * h.sigma_t[channel]);
+        //auto d_t = 1 / (h.sigma_t[channel] - d_output);
+        auto d_t_sigma_t = log(max(1 - sample.uv[1], Real(1e-20))) / square(h.sigma_t[channel]);
 
         auto d_sigma_a = h.sigma_s + d_t_sigma_t;
         atomic_add(&d_medium.sigma_a[0], d_sigma_a[0]);
@@ -222,9 +217,6 @@ void d_sample(const Medium &medium,
             atomic_add(d_medium.sigma_s[2], d_beta_sigma_s[2]);
         }
 
-        // TODO Check if we need to update medium_point
-        //*medium_point = ray.org + ray.dir * t;
-
         // We assume min(t, MaxFloat) will always be less than MaxFloat
         // for simplification purposes
         // auto tr = exp(-h.sigma_t * min(t, MaxFloat))
@@ -242,6 +234,12 @@ void d_sample(const Medium &medium,
         atomic_add(d_medium.sigma_s[0], d_sigma_s[0]);
         atomic_add(d_medium.sigma_s[1], d_sigma_s[1]);
         atomic_add(d_medium.sigma_s[2], d_sigma_s[2]);
+
+        //*medium_point = ray.org + ray.dir * t;
+        // TODO Check how we can d_transmittance
+        //auto d_medium_point_t = d_output;
+        d_ray.org += d_tr_t;
+        d_ray.dir += ray.dir * t;
 
         // auto t = min(dist, ray.tmax)
         // This can introduce a discontinuity!
@@ -416,12 +414,10 @@ void d_transmittance(const Medium &medium,
 
         // We assume that tmax will always be less than or equal to MaxFloat
         // so that the derivative will not be discontinuous if tmax > MaxFloat
-        auto tr = exp(-h.sigma_t * min(ray.tmax, MaxFloat));
-
-        // Backpropagate
         // TODO Figure out if we need to add d_output into this
+        // auto tr = exp(-h.sigma_t * min(ray.tmax, MaxFloat));
         auto d_tr_t = h.sigma_t * -exp(-h.sigma_t * min(ray.tmax, MaxFloat));
-        auto d_tr_sigma_t = h.sigma_t * -exp(-h.sigma_t * d_tr_t);
+        auto d_tr_sigma_t = min(ray.tmax, MaxFloat) * -exp(-h.sigma_t * d_tr_t);
 
         // Need to recover d_sigma_a and d_sigma_s from d_tr_sigma_t since
         // sigma_t = sigma_a + sigma_s
@@ -448,12 +444,14 @@ void d_transmittance(const Medium &medium,
             Vector3{0, 0, 0}, Vector3{0, 0, 0},
             Vector3{0, 0, 0}, Vector3{0, 0, 0}
         };
+
+        auto d_uvt = Vector3{0.0, 0.0, sum(d_tr_t)};
         d_intersect(Vector3{0, 0, 0},
                     Vector3{0, 0, 0},
                     Vector3{0, 0, 0},
                     ray,
                     ray_diff,
-                    d_tr_t,
+                    d_uvt,
                     Vector2{0, 0},
                     Vector2{0, 0},
                     Vector2{0, 0},
