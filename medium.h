@@ -118,6 +118,7 @@ void d_sample_medium(const Scene &scene,
                      const BufferView<Vector3> &d_throughputs,
                      DScene *d_scene,
                      BufferView<DRay> &d_rays,
+                     BufferView<Vector3> &d_transmittances,
                      BufferView<Intersection> medium_isects,
                      BufferView<Vector3> medium_points,
                      BufferView<Vector3> throughputs);
@@ -134,9 +135,9 @@ void d_evaluate_transmittance(const Scene &scene,
                               const BufferView<int> &active_pixels,
                               const BufferView<Ray> &rays,
                               const BufferView<Intersection> &medium_isects,
-                              const BufferView<Vector3> &medium_points,
-                              BufferView<Vector3> transmittances,
-                              BufferView<Vector3> d_rays);
+                              const BufferView<Vector3> &d_transmittances,
+                              BufferView<DMedium> d_mediums,
+                              BufferView<DRay> d_rays);
 
 // Calculate the transmittance of a ray segment given a ray
 Vector3 transmittance(const Medium &medium, const Ray &ray);
@@ -144,6 +145,6 @@ Vector3 transmittance(const Medium &medium, const Ray &ray);
 // Calculate the derivative of the transmittance w.r.t tmax
 void d_transmittance(const Medium &medium,
                      const Ray &ray,
-                     const Vector3 &d_output,
+                     Vector3 &d_transmittance,
                      DRay &d_ray,
                      DMedium &d_medium);

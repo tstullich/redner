@@ -205,7 +205,7 @@ void d_sample(const Medium &medium,
         // Calculate the partial derivative of the transmittance with respect to t
         // We assume that f'/pdf is equivalent to (f/pdf)' in terms of expectation
         // auto beta = inside_medium ? (tr * h.sigma_s / pdf) : (tr / pdf);
-        auto d_beta_tr = inside_medium ? (tr * h.sigma_s / pdf) : (tr / pdf);
+        auto d_beta_tr = inside_medium ? (d_output * h.sigma_s / pdf) : (d_output/ pdf);
 
         if (inside_medium) {
             // Only make this add if we are inside a medium. The derivative
@@ -315,6 +315,7 @@ struct d_medium_sampler {
     const Vector3 *d_throughputs;
     DMedium *d_mediums;
     DRay *d_rays;
+    Vector3 *d_transmittances;
     Intersection *medium_isects;
     Vector3 *medium_points;
     Vector3 *throughputs;
@@ -329,6 +330,7 @@ void d_sample_medium(const Scene &scene,
                      const BufferView<Vector3> &d_throughputs,
                      DScene *d_scene,
                      BufferView<DRay> &d_rays,
+                     BufferView<Vector3> &d_transmittances,
                      BufferView<Intersection> medium_isects,
                      BufferView<Vector3> medium_points,
                      BufferView<Vector3> throughputs) {
@@ -342,6 +344,7 @@ void d_sample_medium(const Scene &scene,
         d_throughputs.begin(),
         d_scene->mediums.data,
         d_rays.begin(),
+        d_transmittances.begin(),
         medium_isects.begin(),
         medium_points.begin(),
         throughputs.begin()},
@@ -406,7 +409,7 @@ DEVICE
 inline
 void d_transmittance(const Medium &medium,
                      const Ray &ray,
-                     const Vector3 &d_output,
+                     Vector3 &d_transmittance,
                      DRay &d_ray,
                      DMedium &d_medium) {
     if (medium.type == MediumType::homogeneous) {
@@ -417,6 +420,10 @@ void d_transmittance(const Medium &medium,
         // TODO Figure out if we need to add d_output into this
         // auto tr = exp(-h.sigma_t * min(ray.tmax, MaxFloat));
         auto d_tr_t = h.sigma_t * -exp(-h.sigma_t * min(ray.tmax, MaxFloat));
+        d_transmittance[0] += d_tr_t[0];
+        d_transmittance[1] += d_tr_t[1];
+        d_transmittance[2] += d_tr_t[2];
+
         auto d_tr_sigma_t = min(ray.tmax, MaxFloat) * -exp(-h.sigma_t * d_tr_t);
 
         // Need to recover d_sigma_a and d_sigma_s from d_tr_sigma_t since
@@ -473,7 +480,7 @@ struct d_transmittance_sampler {
         if (medium_isects[pixel_id].medium_id >= 0 && ray.tmax > 0) {
             // TODO Check if this how we get d_tr or if we just
             // initialize a Vector3{1, 1, 1}
-            auto &d_tr = transmittances[pixel_id];
+            auto &d_tr = d_transmittances[pixel_id];
             auto d_ray = d_rays[pixel_id];
             d_transmittance(mediums[medium_isects[pixel_id].medium_id],
                             ray, d_tr, d_ray, d_medium);
@@ -484,7 +491,7 @@ struct d_transmittance_sampler {
     const int *active_pixels;
     const Ray *rays;
     const Intersection *medium_isects;
-    const Vector3 *transmittances;
+    Vector3 *d_transmittances;
     DMedium *d_mediums;
     DRay *d_rays;
 };
@@ -493,7 +500,7 @@ void d_evaluate_transmittance(const Scene &scene,
                               const BufferView<int> &active_pixels,
                               const BufferView<Ray> &rays,
                               const BufferView<Intersection> &medium_isects,
-                              const BufferView<Vector3> &transmittances,
+                              BufferView<Vector3> &d_transmittances,
                               BufferView<DMedium> d_mediums,
                               BufferView<DRay> d_rays) {
     parallel_for(d_transmittance_sampler{
@@ -501,7 +508,7 @@ void d_evaluate_transmittance(const Scene &scene,
         active_pixels.begin(),
         rays.begin(),
         medium_isects.begin(),
-        transmittances.begin(),
+        d_transmittances.begin(),
         d_mediums.begin(),
         d_rays.begin()},
         active_pixels.size(), scene.use_gpu);

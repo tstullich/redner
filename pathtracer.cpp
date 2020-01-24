@@ -98,6 +98,7 @@ struct PathBuffer {
         d_rays = Buffer<DRay>(use_gpu, num_pixels);
         d_ray_differentials = Buffer<RayDifferential>(use_gpu, num_pixels);
         d_points = Buffer<SurfacePoint>(use_gpu, num_pixels);
+        d_transmittances = Buffer<Vector3>(use_gpu, num_pixels);
 
         primary_edge_samples = Buffer<PrimaryEdgeSample>(use_gpu, num_pixels);
         secondary_edge_samples = Buffer<SecondaryEdgeSample>(use_gpu, num_pixels);
@@ -150,6 +151,7 @@ struct PathBuffer {
     Buffer<DRay> d_rays;
     Buffer<RayDifferential> d_ray_differentials;
     Buffer<SurfacePoint> d_points;
+    Buffer<Vector3> d_transmittances;
 
     // Edge sampling related
     Buffer<PrimaryEdgeSample> primary_edge_samples;
@@ -547,6 +549,7 @@ void render(const Scene &scene,
                 auto d_rays = path_buffer.d_rays.view(0, num_pixels);
                 auto d_ray_differentials = path_buffer.d_ray_differentials.view(0, num_pixels);
                 auto d_points = path_buffer.d_points.view(0, num_pixels);
+                auto d_transmittances = path_buffer.d_transmittances.view(0, num_pixels);
 
                 if (first) {
                     first = false;
@@ -563,6 +566,9 @@ void render(const Scene &scene,
                     DISPATCH(scene.use_gpu, thrust::fill,
                         d_next_points.begin(), d_next_points.end(),
                         SurfacePoint::zero());
+                    DISPATCH(scene.use_gpu, thrust::fill,
+                        d_transmittances.begin(), d_transmittances.end(),
+                        Vector3{0, 0, 0});
                 }
 
                 // Backpropagate the sampling of the medium
@@ -577,6 +583,7 @@ void render(const Scene &scene,
                                     d_throughputs,
                                     d_scene.get(),
                                     d_rays,
+                                    d_transmittances,
                                     medium_isects,
                                     medium_points,
                                     throughputs);
