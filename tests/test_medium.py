@@ -53,7 +53,8 @@ shape_sphere = pyredner.Shape(\
 
 # Manually translating sphere since redner does not seem to support
 # geometric transformations
-shape_sphere.vertices = shape_sphere.vertices + torch.tensor([0.0, 1.0, 0.0])
+shape_sphere.vertices = shape_sphere.vertices + torch.tensor([0.0, 1.0, 0.0],\
+    device = pyredner.get_device())
 
 # Shape describing the light. In this case we use an area light source
 # facing downward onto the scene
@@ -216,12 +217,12 @@ for t in range(200):
     # Backpropagate the gradients
     loss.backward()
     # Print the gradients of the absorption factor
-    print('sigma_a:', mediums[0].sigma_a.grad)
+    print('grad:', mediums[0].sigma_a.grad)
 
     # Take a gradient descent step
     optimizer.step()
     # Print the current absorption factor values
-    print('sigma_a:', mediums[0].sigma_a.grad)
+    print('grad:', mediums[0].sigma_a.grad)
 
 # Render final result
 scene_args = pyredner.RenderFunction.serialize_scene(\
