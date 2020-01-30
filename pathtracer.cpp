@@ -279,7 +279,7 @@ void render(const Scene &scene,
         // Initialization
         init_paths(throughputs, min_roughness, scene.use_gpu);
         // Generate primary ray samples
-        sampler->next_camera_samples(camera_samples);
+        sampler->next_camera_samples(camera_samples, options.sample_pixel_center);
         sample_primary_rays(camera,
                             camera_samples,
                             rays,
