@@ -110,9 +110,15 @@ Scene::Scene(const Camera &camera,
         }
 
         optix_scene = optix_context->createModel();
-        optix_scene->setInstances(
-            (int)shapes.size(), RTP_BUFFER_TYPE_HOST, &optix_instances[0],
-            RTP_BUFFER_FORMAT_TRANSFORM_FLOAT4x4, RTP_BUFFER_TYPE_HOST, &transforms[0]);
+        if (shapes.size() > 0) {
+            optix_scene->setInstances(
+                (int)shapes.size(), RTP_BUFFER_TYPE_HOST, &optix_instances[0], 
+                RTP_BUFFER_FORMAT_TRANSFORM_FLOAT4x4, RTP_BUFFER_TYPE_HOST, &transforms[0]);
+        } else {
+            // Hack: the last argument is the pointer to a buffer, but optix prime
+            // complains if we pass nullptr. Therefore we give it a non zero number.
+            optix_scene->setTriangles(0, RTP_BUFFER_TYPE_CUDA_LINEAR, (const void *)1);
+        }
         optix_scene->update(RTP_MODEL_HINT_NONE);
         optix_scene->finish();
 #else
@@ -938,8 +944,14 @@ void test_sample_point_on_light(bool use_gpu) {
                  0, // materia_id
                  0, // light_id
                 -1}; // medium_id
-    AreaLight light0{0, Vector3f{1.f, 1.f, 1.f}, false};
-    AreaLight light1{1, Vector3f{2.f, 2.f, 2.f}, false};
+    AreaLight light0{0,
+                     Vector3f{1.f, 1.f, 1.f},
+                     false, // two_sided
+                     true}; // directly_visible
+    AreaLight light1{1,
+                     Vector3f{2.f, 2.f, 2.f},
+                     false, // two_sided
+                     true}; // directly_visible
 
     auto shapes = std::make_shared<std::vector<const Shape *>>(
         std::vector<const Shape*>{&shape0, &shape1});

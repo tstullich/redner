@@ -16,13 +16,17 @@ struct primary_contribs_accumulator {
             auto wi = -incoming_ray.dir;
             if (shading_shape.light_id >= 0) {
                 const auto &light = scene.area_lights[shading_shape.light_id];
-                if (light.two_sided || dot(wi, shading_point.shading_frame.n) > 0) {
-                    emission += light.intensity;
+                if (light.directly_visible) {
+                    if (light.two_sided || dot(wi, shading_point.shading_frame.n) > 0) {
+                        emission += light.intensity;
+                    }
                 }
             }
         } else if (scene.envmap != nullptr) {
-            auto dir = incoming_rays[pixel_id].dir;
-            emission = envmap_eval(*(scene.envmap), dir, incoming_ray_differentials[pixel_id]);
+            if (scene.envmap->directly_visible) {
+                auto dir = incoming_rays[pixel_id].dir;
+                emission = envmap_eval(*(scene.envmap), dir, incoming_ray_differentials[pixel_id]);
+            }
         }
         auto contrib = weight * throughput * emission;
         if (rendered_image != nullptr) {
@@ -210,10 +214,16 @@ struct primary_contribs_accumulator {
                         d += 3;
                     } break;
                     // when there are multiple samples per pixel,
-                    // we use the last sample for determining shape id & material id
+                    // we use the last sample for determining the ids
                     case Channels::shape_id: {
                         if (shading_isect.valid()) {
                             rendered_image[nd * pixel_id + d    ] = Real(shading_isect.shape_id);
+                        }
+                        d++;
+                    } break;
+                    case Channels::triangle_id: {
+                        if (shading_isect.valid()) {
+                            rendered_image[nd * pixel_id + d    ] = Real(shading_isect.tri_id);
                         }
                         d++;
                     } break;
@@ -369,8 +379,11 @@ struct primary_contribs_accumulator {
                         }
                         d += 3;
                     } break;
-                    // shape_id & material_id are not differentiable
+                    // ids are not differentiable
                     case Channels::shape_id: {
+                        d++;
+                    } break;
+                    case Channels::triangle_id: {
                         d++;
                     } break;
                     case Channels::material_id: {
@@ -424,23 +437,27 @@ struct d_primary_contribs_accumulator {
                         if (shading_shape.light_id >= 0 &&
                                 dot(wi, shading_point.shading_frame.n) > 0) {
                             const auto &light = scene.area_lights[shading_shape.light_id];
-                            if (light.two_sided || dot(wi, shading_point.shading_frame.n) > 0) {
-                                atomic_add(d_area_lights[shading_shape.light_id].intensity, d_emission);
+                            if (light.directly_visible) {
+                                if (light.two_sided || dot(wi, shading_point.shading_frame.n) > 0) {
+                                    atomic_add(d_area_lights[shading_shape.light_id].intensity, d_emission);
+                                }
                             }
                         }
                     } else if (scene.envmap != nullptr) {
-                        // Environment map
-                        auto dir = incoming_rays[pixel_id].dir;
-                        // emission = envmap_eval(*(scene.envmap),
-                        //                        dir,
-                        //                        incoming_ray_differentials[pixel_id])
-                        d_envmap_eval(*(scene.envmap),
-                                      dir,
-                                      incoming_ray_differentials[pixel_id],
-                                      d_emission,
-                                      *d_envmap,
-                                      d_incoming_rays[pixel_id].dir,
-                                      d_incoming_ray_differentials[pixel_id]);
+                        if (scene.envmap->directly_visible) {
+                            // Environment map
+                            auto dir = incoming_rays[pixel_id].dir;
+                            // emission = envmap_eval(*(scene.envmap),
+                            //                        dir,
+                            //                        incoming_ray_differentials[pixel_id])
+                            d_envmap_eval(*(scene.envmap),
+                                          dir,
+                                          incoming_ray_differentials[pixel_id],
+                                          d_emission,
+                                          *d_envmap,
+                                          d_incoming_rays[pixel_id].dir,
+                                          d_incoming_ray_differentials[pixel_id]);
+                        }
                     }
                     d += 3;
                 } break;
@@ -622,8 +639,11 @@ struct d_primary_contribs_accumulator {
                     }
                     d += 3;
                 } break;
-                // shape_id & material_id are not differentiable
+                // ids are not differentiable
                 case Channels::shape_id: {
+                    d++;
+                } break;
+                case Channels::triangle_id: {
                     d++;
                 } break;
                 case Channels::material_id: {

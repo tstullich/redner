@@ -13,17 +13,15 @@ endif()
 
 option(REDNER_CUDA "Build redner with GPU code path?" OFF)
 
-# TODO: CUDA does currently not work with Win32 as
-#       pybind11_add_module creates the redner target but the
-#       call to cuda_add_library tries to create it again.
-if(WIN32 AND REDNER_CUDA)
-  set(REDNER_CUDA OFF)
-  message(WARNING "GPU build currently not supported for Win32.")
-endif()
 
 if(REDNER_CUDA)
     message(STATUS "Build with CUDA support")
     find_package(CUDA 10 REQUIRED)
+    set(CMAKE_CUDA_STANDARD 11)
+    if(NOT WIN32)
+        # Hack: for some reason the line above doesn't work on some Linux systems.
+        set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -std=c++11")
+    endif()
     # We don't set REQUIRED here as the main OptiX lib will not be found
     # (only OptiX Prime is required)
     find_package(OptiX)
@@ -55,75 +53,106 @@ if(NOT REDNER_CUDA)
     add_compile_options("-DTHRUST_DEVICE_SYSTEM=THRUST_DEVICE_SYSTEM_CPP")
 endif()
 
-set(SRCS aabb.h
-         active_pixels.h
-         area_light.h
-         atomic.h
-         atomic_msvc.h
-         automatic_uv_map.h
-         bsdf_or_phase_sample.h
-         buffer.h
-         camera.h
-         channels.h
-         cuda_utils.h
-         directional_sample.h
-         edge.h
-         edge_tree.h
-         envmap.h
-         frame.h
-         intersection.h
-         line_clip.h
-         load_serialized.h
-         material.h
-         matrix.h
-         medium.h
-         miniz.h
-         parallel.h
-         path_contribution.h
-         pathtracer.h
-         pcg_sampler.h
-         phase_function.h
-         primary_contribution.h
-         primary_intersection.h
-         ptr.h
-         py_utils.h
-         ray.h
-         rebuild_topology.h
-         redner.h
-         sampler.h
-         scene.h
-         shape.h
-         sobol_sampler.h
-         test_utils.h
-         texture.h
-         transform.h
-         vector.h
+set(SRCS src/aabb.h
+         src/active_pixels.h
+         src/area_light.h
+         src/atomic.h
+         src/atomic_msvc.h
+         src/automatic_uv_map.h
+         src/bsdf_or_phase_sample.h
+         src/directional_sample.h
+         src/buffer.h
+         src/camera.h
+         src/channels.h
+         src/cuda_utils.h
+         src/edge.h
+         src/edge_tree.h
+         src/envmap.h
+         src/frame.h
+         src/intersection.h
+         src/line_clip.h
+         src/load_serialized.h
+         src/ltc.inc
+         src/material.h
+         src/matrix.h
+         src/medium.h
+         src/miniz.h
+         src/parallel.h
+         src/path_contribution.h
+         src/pathtracer.h
+         src/pcg_sampler.h
+         src/primary_contribution.h
+         src/primary_intersection.h
+         src/ptr.h
+         src/py_utils.h
+         src/ray.h
+         src/rebuild_topology.h
+         src/redner.h
+         src/sampler.h
+         src/scene.h
+         src/shape.h
+         src/sobol.inc
+         src/sobol_sampler.h
+         src/test_utils.h
+         src/texture.h
+         src/transform.h
+         src/vector.h
          xatlas/xatlas.h
-         aabb.cpp
-         active_pixels.cpp
-         automatic_uv_map.cpp
-         bsdf_or_phase_sample.cpp
-         camera.cpp
-         channels.cpp
-         edge.cpp
-         edge_tree.cpp
-         envmap.cpp
-         load_serialized.cpp
-         material.cpp
-         medium.cpp
-         miniz.c
-         parallel.cpp
-         path_contribution.cpp
-         pathtracer.cpp
-         pcg_sampler.cpp
-         primary_contribution.cpp
-         primary_intersection.cpp
-         rebuild_topology.cpp
-         redner.cpp
-         scene.cpp
-         shape.cpp
-         sobol_sampler.cpp
+         src/aabb.cpp
+         src/active_pixels.cpp
+         src/automatic_uv_map.cpp
+         src/bsdf_or_phase_sample.cpp
+         src/camera.cpp
+         src/channels.cpp
+         src/edge.cpp
+         src/edge_tree.cpp
+         src/envmap.cpp
+         src/load_serialized.cpp
+         src/material.cpp
+         src/medium.cpp
+         src/miniz.c
+         src/parallel.cpp
+         src/path_contribution.cpp
+         src/pathtracer.cpp
+         src/pcg_sampler.cpp
+         src/primary_contribution.cpp
+         src/primary_intersection.cpp
+         src/rebuild_topology.cpp
+         src/redner.cpp
+         src/scene.cpp
+         src/shape.cpp
+         src/sobol_sampler.cpp
          xatlas/xatlas.cpp)
+
+if(REDNER_CUDA)
+    add_compile_definitions(COMPILE_WITH_CUDA)
+    set_source_files_properties(
+        src/aabb.cpp
+        src/active_pixels.cpp
+        src/bsdf_or_phase_sample.cpp
+        src/camera.cpp
+        src/channels.cpp
+        src/edge.cpp
+        src/edge_tree.cpp
+        src/envmap.cpp
+        src/material.cpp
+        src/medium.cpp
+        src/parallel.cpp
+        src/path_contribution.cpp
+        src/pathtracer.cpp
+        src/pcg_sampler.cpp
+        src/primary_contribution.cpp
+        src/primary_intersection.cpp
+        src/scene.cpp
+        src/shape.cpp
+        src/sobol_sampler.cpp
+        PROPERTIES CUDA_SOURCE_PROPERTY_FORMAT OBJ)
+
+    cuda_add_library(redner MODULE ${SRCS})
+    target_link_libraries(redner ${optix_prime_LIBRARY})
+else()
+    add_library(redner MODULE ${SRCS})
+endif()
 
 if(APPLE)
     # The "-undefined dynamic_lookup" is a hack for systems with
@@ -136,61 +165,14 @@ if(APPLE)
     # at compile time.
     set(DYNAMIC_LOOKUP "-undefined dynamic_lookup")
 endif()
-if (WIN32)
-    pybind11_add_module(redner SHARED ${SRCS})
-endif()
 
-if(REDNER_CUDA)
-    add_compile_definitions(COMPILE_WITH_CUDA)
-    set_source_files_properties(
-        aabb.cpp
-        active_pixels.cpp
-        bsdf_or_phase_sample.cpp
-        camera.cpp
-        channels.cpp
-        edge.cpp
-        edge_tree.cpp
-        envmap.cpp
-        material.cpp
-        medium.cpp
-        parallel.cpp
-        path_contribution.cpp
-        pathtracer.cpp
-        pcg_sampler.cpp
-        primary_contribution.cpp
-        primary_intersection.cpp
-        scene.cpp
-        shape.cpp
-        sobol_sampler.cpp
-        PROPERTIES CUDA_SOURCE_PROPERTY_FORMAT OBJ)
-    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -std=c++11")
+target_link_libraries(redner ${EMBREE_LIBRARY} ${DYNAMIC_LOOKUP})
 
-    cuda_add_library(redner MODULE ${SRCS})
-    target_link_libraries(redner
-        ${EMBREE_LIBRARY}
-        ${optix_prime_LIBRARY}
-        ${DYNAMIC_LOOKUP})
-else()
-    # No CUDA
-    if (NOT WIN32)
-        add_library(redner MODULE ${SRCS})
-
-        # The "-undefined dynamic_lookup" is a hack for systems with
-        # multiple Python installed. If we link a particular Python version
-        # here, and we import it with a different Python version later.
-        # likely a segmentation fault.
-        # The solution for Linux/Mac OS machines, as mentioned in
-        # https://github.com/pybind/pybind11/blob/master/tools/pybind11Tools.cmake
-        # is to not link against Python library at all and resolve the symbols
-        # at compile time.
-        target_link_libraries(redner
-            ${EMBREE_LIBRARY}
-            ${DYNAMIC_LOOKUP})
-    else()
-        target_link_libraries(redner
-            PRIVATE
-            ${EMBREE_LIBRARY})
-    endif()
+if(WIN32)
+    # See: https://pybind11.readthedocs.io/en/master/compiling.html#advanced-interface-library-target
+    target_link_libraries(redner pybind11::module)
+    set_target_properties(redner PROPERTIES PREFIX "${PYTHON_MODULE_PREFIX}"
+                                            SUFFIX "${PYTHON_MODULE_EXTENSION}")
 endif()
 
 set_target_properties(redner PROPERTIES SKIP_BUILD_RPATH FALSE)

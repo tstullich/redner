@@ -1,6 +1,7 @@
 #include "channels.h"
 #include "cuda_utils.h"
 #include <iostream>
+#include <stdexcept>
 
 ChannelInfo::ChannelInfo(const std::vector<Channels> &channels,
                          bool use_gpu,
@@ -92,6 +93,9 @@ int compute_num_channels(const std::vector<Channels> &channels,
                 num_total_dimensions += 3;
             } break;
             case Channels::shape_id: {
+                num_total_dimensions += 1;
+            } break;
+            case Channels::triangle_id: {
                 num_total_dimensions += 1;
             } break;
             case Channels::material_id: {

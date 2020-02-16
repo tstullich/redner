@@ -196,6 +196,7 @@ void render(const Scene &scene,
             ptr<float> rendered_image,
             ptr<float> d_rendered_image,
             std::shared_ptr<DScene> d_scene,
+            ptr<float> screen_gradient_image,
             ptr<float> debug_image) {
 #ifdef __NVCC__
     int old_device_id = -1;
@@ -495,8 +496,42 @@ void render(const Scene &scene,
         if (d_rendered_image.get() != nullptr) {
             edge_sampler->begin_sample(sample_id);
 
+            // Initialize the derivatives for path vertices
+            auto d_throughputs = path_buffer.d_throughputs.view(0, num_pixels);
+            auto d_rays = path_buffer.d_rays.view(0, num_pixels);
+            auto d_ray_differentials = path_buffer.d_ray_differentials.view(0, num_pixels);
+            auto d_points = path_buffer.d_points.view(0, num_pixels);
+            auto d_next_throughputs = path_buffer.d_next_throughputs.view(0, num_pixels);
+            auto d_next_rays = path_buffer.d_next_rays.view(0, num_pixels);
+            auto d_next_ray_differentials =
+                path_buffer.d_next_ray_differentials.view(0, num_pixels);
+            auto d_next_points = path_buffer.d_next_points.view(0, num_pixels);
+            DISPATCH(scene.use_gpu, thrust::fill,
+                d_throughputs.begin(), d_throughputs.end(),
+                Vector3{0, 0, 0});
+            DISPATCH(scene.use_gpu, thrust::fill,
+                d_rays.begin(), d_rays.end(), DRay{});
+            DISPATCH(scene.use_gpu, thrust::fill,
+                d_ray_differentials.begin(), d_ray_differentials.end(),
+                RayDifferential{Vector3{0, 0, 0}, Vector3{0, 0, 0},
+                                Vector3{0, 0, 0}, Vector3{0, 0, 0}});
+            DISPATCH(scene.use_gpu, thrust::fill,
+                d_points.begin(), d_points.end(),
+                SurfacePoint::zero());
+            DISPATCH(scene.use_gpu, thrust::fill,
+                d_next_throughputs.begin(), d_next_throughputs.end(),
+                Vector3{0, 0, 0});
+            DISPATCH(scene.use_gpu, thrust::fill,
+                d_next_rays.begin(), d_next_rays.end(), DRay{});
+            DISPATCH(scene.use_gpu, thrust::fill,
+                d_next_ray_differentials.begin(), d_next_ray_differentials.end(),
+                RayDifferential{Vector3{0, 0, 0}, Vector3{0, 0, 0},
+                                Vector3{0, 0, 0}, Vector3{0, 0, 0}});
+            DISPATCH(scene.use_gpu, thrust::fill,
+                d_next_points.begin(), d_next_points.end(),
+                SurfacePoint::zero());
+
             // Traverse the path backward for the derivatives
-            bool first = true;
             for (int depth = max_bounces - 1; depth >= 0 && has_lights(scene); depth--) {
                 // Buffer views for this path vertex
                 auto num_actives = num_active_pixels[depth];
@@ -550,26 +585,6 @@ void render(const Scene &scene,
                 auto d_ray_differentials = path_buffer.d_ray_differentials.view(0, num_pixels);
                 auto d_points = path_buffer.d_points.view(0, num_pixels);
                 auto d_transmittances = path_buffer.d_transmittances.view(0, num_pixels);
-
-                if (first) {
-                    first = false;
-                    // Initialize the derivatives propagated from the next vertex
-                    DISPATCH(scene.use_gpu, thrust::fill,
-                        d_next_throughputs.begin(), d_next_throughputs.end(),
-                        Vector3{0, 0, 0});
-                    DISPATCH(scene.use_gpu, thrust::fill,
-                        d_next_rays.begin(), d_next_rays.end(), DRay{});
-                    DISPATCH(scene.use_gpu, thrust::fill,
-                        d_next_ray_differentials.begin(), d_next_ray_differentials.end(),
-                        RayDifferential{Vector3{0, 0, 0}, Vector3{0, 0, 0},
-                                        Vector3{0, 0, 0}, Vector3{0, 0, 0}});
-                    DISPATCH(scene.use_gpu, thrust::fill,
-                        d_next_points.begin(), d_next_points.end(),
-                        SurfacePoint::zero());
-                    DISPATCH(scene.use_gpu, thrust::fill,
-                        d_transmittances.begin(), d_transmittances.end(),
-                        Vector3{0, 0, 0});
-                }
 
                 // Backpropagate the sampling of the medium
                 if (scene.mediums.size() > 0) {
@@ -925,7 +940,8 @@ void render(const Scene &scene,
                                        d_rays,
                                        d_ray_differentials,
                                        d_points,
-                                       d_scene.get());
+                                       d_scene.get(),
+                                       screen_gradient_image.get());
             }
 
             /////////////////////////////////////////////////////////////////////////////////
@@ -1134,7 +1150,9 @@ void render(const Scene &scene,
                 // Convert edge contributions to vertex derivatives
                 compute_primary_edge_derivatives(
                     scene, edge_records, edge_contribs,
-                    d_scene->shapes.view(0, d_scene->shapes.size()), d_scene->camera);
+                    d_scene->shapes.view(0, d_scene->shapes.size()),
+                    d_scene->camera,
+                    screen_gradient_image.get());
             }
             /////////////////////////////////////////////////////////////////////////////////
         }

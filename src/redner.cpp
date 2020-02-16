@@ -176,9 +176,10 @@ PYBIND11_MODULE(redner, m) {
                       Texture3>()); // normal_map
 
     py::class_<AreaLight>(m, "AreaLight")
-        .def(py::init<int,
-                      ptr<float>,
-                      bool>());
+        .def(py::init<int, // shape_id
+                      ptr<float>, // intensity
+                      bool, // two_sided
+                      bool>()); // directly_visible
 
     py::class_<DAreaLight>(m, "DAreaLight")
         .def(py::init<ptr<float>>());
@@ -189,7 +190,8 @@ PYBIND11_MODULE(redner, m) {
                       ptr<float>, // world_to_env
                       ptr<float>, // sample_cdf_ys
                       ptr<float>, // sample_cdf_xs
-                      Real>())
+                      Real, // pdf_norm
+                      bool>()) // directly_visible
         .def("get_levels", &EnvironmentMap::get_levels)
         .def("get_size", &EnvironmentMap::get_size);
     py::class_<DEnvironmentMap, std::shared_ptr<DEnvironmentMap>>(m, "DEnvironmentMap")
@@ -210,6 +212,7 @@ PYBIND11_MODULE(redner, m) {
         .value("generic_texture", Channels::generic_texture)
         .value("vertex_color", Channels::vertex_color)
         .value("shape_id", Channels::shape_id)
+        .value("triangle_id", Channels::triangle_id)
         .value("material_id", Channels::material_id);
 
     m.def("compute_num_channels", compute_num_channels, "");
