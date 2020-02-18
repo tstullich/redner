@@ -10,9 +10,8 @@ pyredner.set_use_gpu(False)
 # g is a parameter that pertains to the phase function that is going
 # to be used. Redner currently only supports the Henyey-Greenstein
 # phase function, but it should be possible to add others in the future
-# sigma_a = torch.tensor([0.05, 0.05, 0.05]),
 mediums = [pyredner.HomogeneousMedium(\
-    sigma_a = torch.tensor([0.0, 0.0, 0.0]),
+    sigma_a = torch.tensor([0.05, 0.05, 0.05]),
     sigma_s = torch.tensor([0.00001, 0.00001, 0.00001]),
     g = torch.tensor([0.0]))]
 
@@ -44,6 +43,7 @@ materials = [mat_sphere, mat_light, mat_planes]
 
 # Setup for various objects in the scene
 sphere = pyredner.generate_sphere(128, 64)
+sphere[0][:, 2] -= 0.3
 shape_sphere = pyredner.Shape(\
     vertices = sphere[0],
     indices = sphere[1],
@@ -141,7 +141,7 @@ shape_right = pyredner.Shape(\
 # Comment out the different configurations to test
 
 # Config 1 - A complete box + a sphere
-#shapes = [shape_light, shape_sphere, shape_floor, shape_back, shape_left, shape_right]
+shapes = [shape_light, shape_sphere, shape_floor, shape_back, shape_left, shape_right]
 
 # Config 2 - Complete box only
 #shapes = [shape_light, shape_floor, shape_back, shape_left, shape_right]
@@ -150,7 +150,7 @@ shape_right = pyredner.Shape(\
 #shapes = [shape_light, shape_sphere, shape_floor]
 
 # Config 4 - Back plane only
-shapes = [shape_light, shape_back]
+#shapes = [shape_light, shape_back]
 
 light = pyredner.AreaLight(shape_id = 0,
                            intensity = torch.tensor([10.0, 10.0, 10.0]))

@@ -86,7 +86,11 @@ Vector3 sample(const FlattenScene &scene,
                 } else {
                     *next_medium_id = shape.interior_medium_id;
                 }
+            } else {
+                *next_medium_id = -1;
             }
+        } else {
+            *next_medium_id = medium_id;
         }
         return inside_medium ? (tr * h.sigma_s / pdf) : (tr / pdf);
     } else {
@@ -230,6 +234,7 @@ struct medium_sampler {
                 &medium_distance);
         } else {
             transmittances[pixel_id] = Vector3{1, 1, 1};
+            next_medium_id = -1;
         }
     }
 

@@ -489,7 +489,7 @@ void render(const Scene &scene,
             // active_pixels -> next_active_pixels
             update_active_pixels(active_pixels,
                                  bsdf_isects,
-                                 medium_ids,
+                                 next_medium_ids,
                                  next_active_pixels,
                                  scene.use_gpu);
 

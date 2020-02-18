@@ -38,12 +38,6 @@ struct bsdf_or_phase_sampler {
         } else {
             // Sample BSDF
             const auto &surface_isect = surface_isects[pixel_id];
-            if (!surface_isect.valid()) {
-                std::cerr << "pixel_id:" << pixel_id << std::endl;
-                std::cerr << "medium_id:" << medium_ids[pixel_id] << std::endl;
-                std::cerr << "medium_distance:" << medium_distances[pixel_id] << std::endl;
-                std::cerr << "incoming_ray.tmax:" << incoming_ray.tmax << std::endl;
-            }
             assert(surface_isect.valid());
             const auto &shape = scene.shapes[surface_isect.shape_id];
             const auto &surface_point = surface_points[pixel_id];
