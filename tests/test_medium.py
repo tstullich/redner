@@ -43,7 +43,6 @@ materials = [mat_sphere, mat_light, mat_planes]
 
 # Setup for various objects in the scene
 sphere = pyredner.generate_sphere(128, 64)
-sphere[0][:, 2] -= 0.3
 shape_sphere = pyredner.Shape(\
     vertices = sphere[0],
     indices = sphere[1],
@@ -51,11 +50,11 @@ shape_sphere = pyredner.Shape(\
     normals = sphere[3],
     material_id = 0,
     interior_medium_id = -1,
-    exterior_medium_id = 0)
+    exterior_medium_id = -1)
 
 # Manually translating sphere since redner does not seem to support
 # geometric transformations
-shape_sphere.vertices = shape_sphere.vertices + torch.tensor([0.0, 1.0, 0.0],\
+shape_sphere.vertices = shape_sphere.vertices + torch.tensor([0.0, 0.0, -0.3],\
     device = pyredner.get_device())
 
 # Shape describing the light. In this case we use an area light source
@@ -153,7 +152,7 @@ shapes = [shape_light, shape_sphere, shape_floor, shape_back, shape_left, shape_
 #shapes = [shape_light, shape_back]
 
 light = pyredner.AreaLight(shape_id = 0,
-                           intensity = torch.tensor([10.0, 10.0, 10.0]))
+                           intensity = torch.tensor([1.0, 1.0, 1.0]))
 area_lights = [light]
 
 # Finally we construct our scene using all the variables we setup previously.
@@ -165,7 +164,7 @@ scene = pyredner.Scene(cam,
 scene_args = pyredner.RenderFunction.serialize_scene(\
     scene = scene,
     num_samples = 256,
-    max_bounces = 2,
+    max_bounces = 1,
     use_primary_edge_sampling = False,
     use_secondary_edge_sampling = False)
 

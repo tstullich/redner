@@ -35,11 +35,27 @@ struct PhaseFunction {
 // based on the angle between wo and wi and a scattering factor g
 DEVICE
 inline
-Real phase_HG_pdf(const Vector3 &wi, const Vector3 &wo, const float &g) {
+Real phase_HG(const Vector3 &wi, const Vector3 &wo, const float &g) {
     auto cos_theta = dot(wi, wo);
     auto numerator = Real(INV_4PI) * (1 - g * g);
     auto denominator = 1 + g * g + 2 * g * cos_theta;
     return numerator / (denominator * sqrt(denominator));
+}
+
+// Evaluate the phase function at a point given incoming and outgoing direction.
+// The directions are assumed to be pointed outwards. This function returns
+// the contribution
+DEVICE
+inline
+Real phase_function_eval(const PhaseFunction &phase_function,
+                         const Vector3 &wo,
+                         const Vector3 &wi) {
+    if (phase_function.type == PhaseFunctionType::HenyeyGreenstein) {
+        auto hg = phase_function.hg;
+        return phase_HG(wo, wi, hg.g);
+    }  else {
+        return 0;
+    }
 }
 
 // Evaluate the phase function at a point given incoming and outgoing direction.
@@ -52,7 +68,7 @@ Real phase_function_pdf(const PhaseFunction &phase_function,
                         const Vector3 &wi) {
     if (phase_function.type == PhaseFunctionType::HenyeyGreenstein) {
         auto hg = phase_function.hg;
-        return phase_HG_pdf(wo, wi, hg.g);
+        return phase_HG(wo, wi, hg.g); // perfect importance sampling
     }  else {
         return 0;
     }

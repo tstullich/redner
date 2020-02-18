@@ -748,7 +748,8 @@ struct light_point_sampler {
             // it would be nice to sample it according to the geometry term
             // see Kulla & Fajardo's work:
             // https://www.arnoldrenderer.com/research/egsr2012_volume.pdf
-            p = p + incoming_rays[pixel_id].dir * medium_distances[pixel_id];
+            p = incoming_rays[pixel_id].org +
+                incoming_rays[pixel_id].dir * medium_distances[pixel_id];
         }
         shadow_rays[pixel_id].org = p;
         // Select light source by binary search on light_cdf

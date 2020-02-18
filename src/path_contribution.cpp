@@ -22,8 +22,8 @@ struct path_contribs_accumulator {
         auto wi = -incoming_ray.dir;
         auto p = surface_point.position;
         if (medium_ids != nullptr && medium_distances != nullptr) {
-            if (medium_ids[pixel_id] > 0) {
-                p = p + incoming_ray.dir * medium_distances[pixel_id];
+            if (medium_ids[pixel_id] >= 0) {
+                p = incoming_ray.org + incoming_ray.dir * medium_distances[pixel_id];
             }
         }
 
@@ -58,16 +58,15 @@ struct path_contribs_accumulator {
                         auto light_area = scene.light_areas[light_shape.light_id];
                         auto pdf_nee = light_pmf / light_area;
                         if (eval_phase) {
-                            // Compute phase function instead of the bsdf if we are inside medium.
-                            // We assume we are perfectly importance sampling the phase functions,
-                            // and the phase functions integrates to 1. So we don't need "phase_val".
-                            // Still we need the phase function PDF for MIS.
-                            auto pdf_phase = phase_function_pdf(
+                            auto phase_val = phase_function_eval(
                                 get_phase_function(scene.mediums[medium_ids[pixel_id]]),
                                 wo, wi);
+                            auto pdf_phase = phase_function_pdf(
+                                get_phase_function(scene.mediums[medium_ids[pixel_id]]),
+                                wo, wi) * geometry_term;
                             auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
                             nee_contrib =
-                                (mis_weight * geometry_term / pdf_nee) * light_contrib;
+                                (mis_weight * geometry_term / pdf_nee) * phase_val * light_contrib;
                         } else {
                             // On a surface
                             const auto &surface_shape = scene.shapes[surface_isect.shape_id];
@@ -100,15 +99,14 @@ struct path_contribs_accumulator {
                                             Vector3{0, 0, 0}, Vector3{0, 0, 0}};
                     auto light_contrib = envmap_eval(*scene.envmap, wo, ray_diff);
                     if (eval_phase) {
-                        // Compute phase function instead of the bsdf if we are inside medium.
-                        // We assume we are perfectly importance sampling the phase functions,
-                        // and the phase functions integrates to 1. So we don't need "phase_val".
-                        // Still we need the phase function PDF for MIS.
+                        auto phase_val = phase_function_eval(
+                            get_phase_function(scene.mediums[medium_ids[pixel_id]]),
+                            wo, wi);
                         auto pdf_phase = phase_function_pdf(
                             get_phase_function(scene.mediums[medium_ids[pixel_id]]),
                             wo, wi);
                         auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
-                        nee_contrib = (mis_weight / pdf_nee) * light_contrib;
+                        nee_contrib = (mis_weight / pdf_nee) * phase_val * light_contrib;
                     } else {
                         const auto &surface_shape = scene.shapes[surface_isect.shape_id];
                         if (surface_shape.material_id >= 0) {
@@ -139,7 +137,7 @@ struct path_contribs_accumulator {
                 auto directional_pdf = Real(1);
                 if (eval_phase) {
                     // Inside a medium
-                    directional_pdf = phase_function_pdf(
+                    directional_pdf = phase_function_eval(
                         get_phase_function(scene.mediums[medium_ids[pixel_id]]),
                         wo, wi);
                     // Perfect importance sampling
@@ -173,11 +171,11 @@ struct path_contribs_accumulator {
                     next_throughput = throughput * (directional_val / directional_pdf);
                     if (transmittances != nullptr) {
                         next_throughput *= transmittances[pixel_id];
-                        scatter_contrib *= transmittances[pixel_id];
                     }
                 }
             }
         } else {
+            // Hit nothing
             auto wo = bsdf_ray.dir;
             // wo can be zero when bsdf_sample failed
             if (length_squared(wo) > 0) {
@@ -217,14 +215,16 @@ struct path_contribs_accumulator {
                 next_throughput = throughput * (directional_val / directional_pdf);
                 if (transmittances != nullptr) {
                     next_throughput *= transmittances[pixel_id];
-                    scatter_contrib *= transmittances[pixel_id];
                 }
             }
         }
 
-        auto path_contrib = throughput * (nee_contrib + scatter_contrib);
         assert(isfinite(nee_contrib));
         assert(isfinite(scatter_contrib));
+        auto path_contrib = throughput * (nee_contrib + scatter_contrib);
+        if (transmittances != nullptr) {
+            path_contrib *= transmittances[pixel_id];
+        }
         if (rendered_image != nullptr) {
             auto nd = channel_info.num_total_dimensions;
             auto d = channel_info.radiance_dimension;

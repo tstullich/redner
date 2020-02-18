@@ -4,45 +4,45 @@
 #include "scene.h"
 #include "thrust_utils.h"
 
-DEVICE
-inline
-Real sample_distance(const Medium &medium, const MediumSample &sample) {
-    if (medium.type == MediumType::homogeneous) {
-        // Sample a channel and distance along the ray
-        auto h = medium.homogeneous;
-        auto channel = min(int(sample.uv[0] * 3), 2);
-        return Real(-log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel]);
-    } else {
-        return Real(0);
-    }
-}
+// DEVICE
+// inline
+// Real sample_distance(const Medium &medium, const MediumSample &sample) {
+//     if (medium.type == MediumType::homogeneous) {
+//         // Sample a channel and distance along the ray
+//         auto h = medium.homogeneous;
+//         auto channel = min(int(sample.uv[0] * 3), 2);
+//         return Real(-log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel]);
+//     } else {
+//         return Real(0);
+//     }
+// }
 
-DEVICE
-inline
-void d_sample_distance(const Medium &medium,
-                       const MediumSample &sample,
-                       Real &d_output,
-                       DMedium &d_medium) {
-    if (medium.type == MediumType::homogeneous) {
-        // Sample a channel and distance along the ray
-        auto h = medium.homogeneous;
-        auto channel = min(int(sample.uv[0] * 3), 2);
+// DEVICE
+// inline
+// void d_sample_distance(const Medium &medium,
+//                        const MediumSample &sample,
+//                        Real &d_output,
+//                        DMedium &d_medium) {
+//     if (medium.type == MediumType::homogeneous) {
+//         // Sample a channel and distance along the ray
+//         auto h = medium.homogeneous;
+//         auto channel = min(int(sample.uv[0] * 3), 2);
 
-        // auto t = Real(-log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel]);
-        //auto d_t = 1 / (h.sigma_t[channel] - d_output);
-        auto d_t_sigma_t = log(max(1 - sample.uv[1], Real(1e-20))) / square(h.sigma_t[channel]);
+//         // auto t = Real(-log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel]);
+//         //auto d_t = 1 / (h.sigma_t[channel] - d_output);
+//         auto d_t_sigma_t = log(max(1 - sample.uv[1], Real(1e-20))) / square(h.sigma_t[channel]);
 
-        auto d_sigma_a = h.sigma_s + d_t_sigma_t;
-        atomic_add(&d_medium.sigma_a[0], d_sigma_a[0]);
-        atomic_add(&d_medium.sigma_a[1], d_sigma_a[1]);
-        atomic_add(&d_medium.sigma_a[2], d_sigma_a[2]);
+//         auto d_sigma_a = h.sigma_s + d_t_sigma_t;
+//         atomic_add(&d_medium.sigma_a[0], d_sigma_a[0]);
+//         atomic_add(&d_medium.sigma_a[1], d_sigma_a[1]);
+//         atomic_add(&d_medium.sigma_a[2], d_sigma_a[2]);
 
-        auto d_sigma_s = h.sigma_a + d_t_sigma_t;
-        atomic_add(&d_medium.sigma_s[0], d_sigma_s[0]);
-        atomic_add(&d_medium.sigma_s[1], d_sigma_s[1]);
-        atomic_add(&d_medium.sigma_s[2], d_sigma_s[2]);
-    }
-}
+//         auto d_sigma_s = h.sigma_a + d_t_sigma_t;
+//         atomic_add(&d_medium.sigma_s[0], d_sigma_s[0]);
+//         atomic_add(&d_medium.sigma_s[1], d_sigma_s[1]);
+//         atomic_add(&d_medium.sigma_s[2], d_sigma_s[2]);
+//     }
+// }
 
 /**
  * Sample the given medium to see if the ray is affected by it. The
@@ -63,7 +63,8 @@ Vector3 sample(const FlattenScene &scene,
         auto h = medium.homogeneous;
         // Sample a distance point along the ray and compare it
         // to tmax to see if we are inside of a medium or not
-        auto dist = sample_distance(medium, sample);
+        auto channel = min(int(sample.uv[0] * 3), 2);
+        auto dist = Real(-log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel]);
         auto t = min(dist, ray.tmax);
         auto inside_medium = t < ray.tmax;
 
