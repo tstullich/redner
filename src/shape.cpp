@@ -25,7 +25,8 @@ void test_d_intersect() {
                 1, // num_triangles
                 0, // material_id
                 -1, // light_id
-                -1}; // medium_id
+                -1, // interior_medium_id
+                -1}; // exterior_medium_id
     SurfacePoint d_point;
     d_point.position = Vector3{1, 1, 1};
     d_point.geom_normal = Vector3{1, 1, 1};
@@ -290,7 +291,8 @@ void test_d_sample_shape() {
                 1, // num_triangles
                 0, // material_id
                 -1, // light_id
-                -1}; // medium_id
+                -1, // interior_medium_id
+                -1}; // exterior_medium_id
     auto sample = Vector2{0.5, 0.5};
     SurfacePoint d_point;
     d_point.position = Vector3{1, 1, 1};

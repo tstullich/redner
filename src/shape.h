@@ -21,7 +21,8 @@ struct Shape {
           int num_triangles,
           int material_id,
           int light_id,
-          int medium_id) :
+          int interior_medium_id,
+          int exterior_medium_id) :
         vertices(vertices.get()),
         indices(indices.get()),
         uvs(uvs.get()),
@@ -35,7 +36,8 @@ struct Shape {
         num_triangles(num_triangles),
         material_id(material_id),
         light_id(light_id),
-        medium_id(medium_id) {}
+        interior_medium_id(interior_medium_id),
+        exterior_medium_id(exterior_medium_id) {}
 
     inline bool has_uvs() const {
         return uvs != nullptr;
@@ -62,7 +64,8 @@ struct Shape {
     int num_triangles;
     int material_id;
     int light_id;
-    int medium_id;
+    int interior_medium_id;
+    int exterior_medium_id;
 };
 
 struct DShape {

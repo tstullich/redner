@@ -32,9 +32,8 @@ struct primary_ray_sampler {
         auto dir_dy = pixel_size_y * (ray_dy.dir - ray.dir) / delta;
         ray_differentials[idx] = RayDifferential{org_dx, org_dy, dir_dx, dir_dy};
 
-        if (isects != nullptr) {
-            isects[idx] = Intersection();
-            isects[idx].medium_id = camera.medium_id;
+        if (medium_ids != nullptr) {
+            medium_ids[idx] = camera.medium_id;
         }
     }
 
@@ -42,18 +41,18 @@ struct primary_ray_sampler {
     const CameraSample *samples;
     Ray *rays;
     RayDifferential *ray_differentials;
-    Intersection *isects;
+    int *medium_ids;
 };
 
 void sample_primary_rays(const Camera &camera,
                          const BufferView<CameraSample> &samples,
                          BufferView<Ray> rays,
                          BufferView<RayDifferential> ray_differentials,
-                         BufferView<Intersection> isects,
+                         BufferView<int> medium_ids,
                          bool use_gpu) {
     parallel_for(primary_ray_sampler{
         camera,
-        samples.begin(), rays.begin(), ray_differentials.begin(), isects.begin()},
+        samples.begin(), rays.begin(), ray_differentials.begin(), medium_ids.begin()},
         samples.size(), use_gpu);
 }
 
@@ -88,7 +87,7 @@ void test_sample_primary_rays(bool use_gpu) {
                         samples.view(0, 1),
                         rays.view(0, 1),
                         ray_differentials.view(0, 1),
-                        BufferView<Intersection>(),
+                        BufferView<int>(),
                         use_gpu);
     cuda_synchronize();
 

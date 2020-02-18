@@ -479,18 +479,31 @@ __global__ void intersect_shape_kernel(
         out_isects[pixel_id].shape_id = shape_id;
         out_isects[pixel_id].tri_id = tri_id;
         const auto &shape = shapes[shape_id];
-        out_isects[pixel_id].medium_id = shape.medium_id;
         const auto &ray = rays[pixel_id];
-        const auto &ray_differential = ray_differentials[pixel_id];
-        out_points[pixel_id] =
-            intersect_shape(shape, tri_id, ray, ray_differential,
-                new_ray_differentials[pixel_id]);
+        if (ray_differentials != nullptr &&
+                new_ray_differentials != nullptr) {
+            const auto &ray_differential = ray_differentials[pixel_id];
+            out_points[pixel_id] =
+                intersect_shape(shape, tri_id, ray, ray_differential,
+                    new_ray_differentials[pixel_id]);
+        } else {
+            RayDifferential ray_diff{
+                Vector3{0, 0, 0}, Vector3{0, 0, 0},
+                Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+            RayDifferential new_ray_diff{
+                Vector3{0, 0, 0}, Vector3{0, 0, 0},
+                Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+            out_points[pixel_id] =
+                intersect_shape(shape, tri_id, ray, ray_diff, new_ray_diff);
+        }
         rays[pixel_id].tmax = hits[idx].t;
     } else {
         out_isects[pixel_id].shape_id = -1;
         out_isects[pixel_id].tri_id = -1;
-        out_isects[pixel_id].medium_id = -1;
-        new_ray_differentials[pixel_id] = ray_differentials[pixel_id];
+        if (ray_differentials != nullptr &&
+                new_ray_differentials != nullptr) {
+            new_ray_differentials[pixel_id] = ray_differentials[pixel_id];
+        }
     }
 }
 
@@ -523,7 +536,6 @@ void intersect(const Scene &scene,
                const BufferView<RayDifferential> &ray_differentials,
                BufferView<Intersection> surface_intersections,
                BufferView<SurfacePoint> points,
-               BufferView<Intersection> medium_intersections,
                BufferView<RayDifferential> new_ray_differentials,
                BufferView<OptiXRay> optix_rays,
                BufferView<OptiXHit> optix_hits) {
@@ -591,46 +603,42 @@ void intersect(const Scene &scene,
                 // TODO: switch to rtcIntersect16
                 rtcIntersect1(scene.embree_scene, &rtc_context, &rtc_ray_hit);
                 if (rtc_ray_hit.hit.geomID == RTC_INVALID_GEOMETRY_ID ||
-                         length_squared(ray.dir) <= 1e-3f) {
-                    surface_intersections[pixel_id] = Intersection{-1, -1, -1, -1, -1};
-                    new_ray_differentials[pixel_id] = ray_differentials[pixel_id];
+                        length_squared(ray.dir) <= 1e-3f) {
+                    surface_intersections[pixel_id] = Intersection{-1, -1};
+                    if (ray_differentials.data != nullptr &&
+                            new_ray_differentials.data != nullptr) {
+                        new_ray_differentials[pixel_id] = ray_differentials[pixel_id];
+                    }
                 } else {
                     auto shape_id = (int)rtc_ray_hit.hit.geomID;
                     auto tri_id = (int)rtc_ray_hit.hit.primID;
                     const auto &shape = scene.shapes[shape_id];
-                    Intersection intersection{shape_id, tri_id};
-
-                    // Set the medium information
-                    intersection.medium_id = shape.medium_id >= 0 ? shape.medium_id :
-                        medium_intersections[pixel_id].medium_id;
-
-                    // Set the previous medium ID only if there has been a prior interaction
-                    intersection.prev_medium_id = medium_intersections[pixel_id].medium_id >= 0 ?
-                                                  medium_intersections[pixel_id].medium_id : -1;
-
-                    // Set this only if we have a shape associated with a medium
-                    intersection.prev_shape_id = medium_intersections[pixel_id].shape_id >= 0 ?
-                                                 medium_intersections[pixel_id].shape_id : -1;
-
-                    if (intersection.medium_id >= 0) {
-                        // Intersection with a medium was made
-                        medium_intersections[pixel_id] = intersection;
+                    surface_intersections[pixel_id] =
+                        Intersection{shape_id, tri_id};
+                    if (ray_differentials.data != nullptr &&
+                            new_ray_differentials.data != nullptr) {
+                        const auto &ray_differential = ray_differentials[pixel_id];
+                        points[pixel_id] =
+                            intersect_shape(shape,
+                                            tri_id,
+                                            ray,
+                                            ray_differential,
+                                            new_ray_differentials[pixel_id]);
+                    } else {
+                        RayDifferential ray_diff{
+                            Vector3{0, 0, 0}, Vector3{0, 0, 0},
+                            Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+                        RayDifferential new_ray_diff{
+                            Vector3{0, 0, 0}, Vector3{0, 0, 0},
+                            Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+                        points[pixel_id] =
+                            intersect_shape(shape,
+                                            tri_id,
+                                            ray,
+                                            ray_diff,
+                                            new_ray_diff);
                     }
-
-                    if (intersection.shape_id >= 0) {
-                        // Intersection with a regular surface was made
-                        surface_intersections[pixel_id] = intersection;
-                    }
-
-                    const auto &ray_differential = ray_differentials[pixel_id];
-                    points[pixel_id] =
-                        intersect_shape(shape,
-                                        tri_id,
-                                        ray,
-                                        ray_differential,
-                                        new_ray_differentials[pixel_id]);
                     ray.tmax = rtc_ray_hit.ray.tfar;
-
                 }
             }
         }, num_threads);
@@ -734,8 +742,14 @@ void occluded(const Scene &scene,
 struct light_point_sampler {
     DEVICE void operator()(int idx) {
         auto pixel_id = active_pixels[idx];
-        auto p = medium_points != nullptr ?
-            medium_points[pixel_id] : surface_points[pixel_id].position;
+        auto p = surface_points[pixel_id].position;
+        if (medium_distances != nullptr) {
+            // TODO: currently we sample the point in medium based on transmittance only
+            // it would be nice to sample it according to the geometry term
+            // see Kulla & Fajardo's work:
+            // https://www.arnoldrenderer.com/research/egsr2012_volume.pdf
+            p = p + incoming_rays[pixel_id].dir * medium_distances[pixel_id];
+        }
         shadow_rays[pixel_id].org = p;
         // Select light source by binary search on light_cdf
         auto sample = samples[pixel_id];
@@ -777,7 +791,8 @@ struct light_point_sampler {
     const FlattenScene scene;
     const int *active_pixels;
     const SurfacePoint *surface_points;
-    const Vector3 *medium_points;
+    const Ray *incoming_rays;
+    const Real *medium_distances;
     const LightSample *samples;
     Intersection *light_isects;
     SurfacePoint *light_points;
@@ -787,7 +802,8 @@ struct light_point_sampler {
 void sample_point_on_light(const Scene &scene,
                            const BufferView<int> &active_pixels,
                            const BufferView<SurfacePoint> &surface_points,
-                           const BufferView<Vector3> &medium_points,
+                           const BufferView<Ray> &incoming_rays,
+                           const BufferView<Real> &medium_distances,
                            const BufferView<LightSample> &samples,
                            BufferView<Intersection> light_isects,
                            BufferView<SurfacePoint> light_points,
@@ -796,7 +812,8 @@ void sample_point_on_light(const Scene &scene,
         get_flatten_scene(scene),
         active_pixels.begin(),
         surface_points.begin(),
-        medium_points.begin(),
+        incoming_rays.begin(),
+        medium_distances.begin(),
         samples.begin(),
         light_isects.begin(),
         light_points.begin(),
@@ -839,7 +856,8 @@ void test_scene_intersect(bool use_gpu) {
                    1, // num_triangles
                    0, // material_id
                    -1, // light_id
-                   -1}; // medium_id
+                   -1, // interior_medium_id
+                   -1}; // exterior_medium_id
     auto pos = Vector3f{0, 0, 0};
     auto look = Vector3f{0, 0, 1};
     auto up = Vector3f{0, 1, 0};
@@ -872,7 +890,6 @@ void test_scene_intersect(bool use_gpu) {
               ray_diffs.view(0, rays.size()),
               isects.view(0, rays.size()),
               surface_points.view(0, rays.size()),
-              isects.view(0, rays.size()),
               ray_diffs.view(0, rays.size()),
               optix_rays.view(0, rays.size()),
               optix_hits.view(0, rays.size()));
@@ -929,7 +946,8 @@ void test_sample_point_on_light(bool use_gpu) {
                  2, // num_triangles
                  0, // material_id
                  0, // light_id
-                 -1}; // medium_id
+                 -1, // interior_medium_id
+                 -1}; // exterior_medium_id
     Shape shape1{(float*)vertices1.data,
                  (int*)indices1.data,
                  nullptr, // uvs
@@ -943,7 +961,8 @@ void test_sample_point_on_light(bool use_gpu) {
                  1, // num_triangles
                  0, // materia_id
                  0, // light_id
-                -1}; // medium_id
+                 -1, // interior_medium_id
+                 -1}; // exterior_medium_id
     AreaLight light0{0,
                      Vector3f{1.f, 1.f, 1.f},
                      false, // two_sided
@@ -989,19 +1008,14 @@ void test_sample_point_on_light(bool use_gpu) {
 
     Buffer<int> active_pixels(use_gpu, samples.size());
     Buffer<SurfacePoint> shading_points(use_gpu, samples.size());
-    Buffer<Intersection> medium_isects(use_gpu, samples.size());
-    Buffer<Vector3> medium_points(use_gpu, samples.size());
     Buffer<Intersection> light_isects(use_gpu, samples.size());
     Buffer<SurfacePoint> light_points(use_gpu, samples.size());
     Buffer<Ray> shadow_rays(use_gpu, samples.size());
-    for (int i = 0; i < 3; i++) {
-        active_pixels[i] = i;
-        medium_isects[i] = Intersection();
-    }
     sample_point_on_light(scene,
                           active_pixels.view(0, active_pixels.size()),
                           shading_points.view(0, samples.size()),
-                          medium_points.view(0, samples.size()),
+                          BufferView<Ray>(), // incoming_rays
+                          BufferView<Real>(), // medium_distances
                           samples.view(0, samples.size()),
                           light_isects.view(0, light_isects.size()),
                           light_points.view(0, light_points.size()),

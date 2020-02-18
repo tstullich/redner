@@ -6,11 +6,11 @@
 #include "phase_function.h"
 #include "ptr.h"
 #include "ray.h"
+#include "thrust_utils.h"
 #include "vector.h"
 
 // Forward declarations
 struct DScene;
-struct MediumInteraction;
 struct Sampler;
 struct Scene;
 
@@ -22,8 +22,7 @@ struct TMediumSample {
 using MediumSample = TMediumSample<Real>;
 
 enum class MediumType {
-    homogeneous,
-    heterogeneous,
+    homogeneous
 };
 
 // Struct to hold information about the derivatives of a medium
@@ -52,35 +51,35 @@ struct HomogeneousMedium {
     float g;
 };
 
-/**
- * Class to hold information about a heterogeneous medium.
- */
-struct HeterogeneousMedium {
-    HeterogeneousMedium(const Vector3f &sigma_a,
-                        const Vector3f &sigma_s,
-                        float g)
-        : sigma_a(sigma_a), sigma_s(sigma_s), sigma_t(sigma_a + sigma_s), g(g) {}
-
-    Vector3f sigma_a, sigma_s, sigma_t;
-    float g;
-};
-
 struct Medium {
     Medium(const HomogeneousMedium &medium) {
         type = MediumType::homogeneous;
         homogeneous = medium;
     }
 
-    Medium(const HeterogeneousMedium &medium) {
-        type = MediumType::heterogeneous;
-        heterogeneous = medium;
-    }
-
     MediumType type;
     union {
         HomogeneousMedium homogeneous;
-        HeterogeneousMedium heterogeneous;
     };
+};
+
+struct TransmittanceBuffer {
+    TransmittanceBuffer() {}
+
+    TransmittanceBuffer(int num_pixels, bool use_gpu) {
+        active_pixels = Buffer<int>(use_gpu, num_pixels);
+        rays = Buffer<Ray>(use_gpu, num_pixels);
+        surface_isects = Buffer<Intersection>(use_gpu, num_pixels);
+        surface_points = Buffer<SurfacePoint>(use_gpu, num_pixels);
+        medium_ids = Buffer<int>(use_gpu, num_pixels);
+    }
+
+    int num_pixels;
+    Buffer<int> active_pixels;
+    Buffer<Ray> rays;
+    Buffer<Intersection> surface_isects;
+    Buffer<SurfacePoint> surface_points;
+    Buffer<int> medium_ids;
 };
 
 DEVICE
@@ -88,8 +87,6 @@ inline
 PhaseFunction get_phase_function(const Medium &medium) {
     if (medium.type == MediumType::homogeneous) {
         return PhaseFunction(HenyeyGreenstein{medium.homogeneous.g});
-    } else if (medium.type == MediumType::heterogeneous) {
-        return PhaseFunction(HenyeyGreenstein{medium.heterogeneous.g});
     } else {
         return PhaseFunction();
     }
@@ -103,48 +100,30 @@ Real sample_distance(const Medium &medium, const MediumSample &sample);
 void sample_medium(const Scene &scene,
                    const BufferView<int> &active_pixels,
                    const BufferView<Intersection> &surface_isects,
+                   const BufferView<SurfacePoint> &surface_points,
                    const BufferView<Ray> &incoming_rays,
                    const BufferView<MediumSample> &medium_samples,
-                   BufferView<Intersection> medium_isects,
-                   BufferView<Vector3> medium_points,
-                   BufferView<Vector3> throughputs);
-
-void d_sample_medium(const Scene &scene,
-                     const BufferView<int> &active_pixels,
-                     const BufferView<Intersection> &surface_isects,
-                     const BufferView<Ray> &incoming_rays,
-                     const BufferView<MediumSample> &medium_samples,
-                     const BufferView<Vector3> &transmittances,
-                     const BufferView<Vector3> &d_throughputs,
-                     DScene *d_scene,
-                     BufferView<DRay> &d_rays,
-                     BufferView<Vector3> &d_transmittances,
-                     BufferView<Intersection> medium_isects,
-                     BufferView<Vector3> medium_points,
-                     BufferView<Vector3> throughputs);
+                   const BufferView<int> &medium_ids,
+                   BufferView<int> next_medium_ids,
+                   BufferView<Real> medium_distances,
+                   BufferView<Vector3> transmittances);
 
 // Evaluate the transmittance between two points.
 void evaluate_transmittance(const Scene &scene,
                             const BufferView<int> &active_pixels,
-                            const BufferView<Ray> &rays,
-                            const BufferView<Intersection> &medium_isects,
-                            BufferView<Vector3> transmittances);
+                            const BufferView<Ray> &outgoing_rays,
+                            const BufferView<int> &medium_ids,
+                            BufferView<Vector3> transmittances,
+                            TransmittanceBuffer &tr_buffer,
+                            ThrustCachedAllocator &thrust_alloc,
+                            BufferView<OptiXRay> optix_rays,
+                            BufferView<OptiXHit> optix_hits);
 
-// Backpropagate the transmittance between two points.
-void d_evaluate_transmittance(const Scene &scene,
-                              const BufferView<int> &active_pixels,
-                              const BufferView<Ray> &rays,
-                              const BufferView<Intersection> &medium_isects,
-                              const BufferView<Vector3> &d_transmittances,
-                              BufferView<DMedium> d_mediums,
-                              BufferView<DRay> d_rays);
-
-// Calculate the transmittance of a ray segment given a ray
-Vector3 transmittance(const Medium &medium, const Ray &ray);
-
-// Calculate the derivative of the transmittance w.r.t tmax
-void d_transmittance(const Medium &medium,
-                     const Ray &ray,
-                     Vector3 &d_transmittance,
-                     DRay &d_ray,
-                     DMedium &d_medium);
+// // Backpropagate the transmittance between two points.
+// void d_evaluate_transmittance(const Scene &scene,
+//                               const BufferView<int> &active_pixels,
+//                               const BufferView<Ray> &rays,
+//                               const BufferView<Intersection> &medium_isects,
+//                               const BufferView<Vector3> &d_transmittances,
+//                               BufferView<DMedium> d_mediums,
+//                               BufferView<DRay> d_rays);

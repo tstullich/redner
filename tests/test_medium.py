@@ -10,8 +10,9 @@ pyredner.set_use_gpu(False)
 # g is a parameter that pertains to the phase function that is going
 # to be used. Redner currently only supports the Henyey-Greenstein
 # phase function, but it should be possible to add others in the future
+# sigma_a = torch.tensor([0.05, 0.05, 0.05]),
 mediums = [pyredner.HomogeneousMedium(\
-    sigma_a = torch.tensor([0.05, 0.05, 0.05]),
+    sigma_a = torch.tensor([0.0, 0.0, 0.0]),
     sigma_s = torch.tensor([0.00001, 0.00001, 0.00001]),
     g = torch.tensor([0.0]))]
 
@@ -49,7 +50,8 @@ shape_sphere = pyredner.Shape(\
     uvs = sphere[2],
     normals = sphere[3],
     material_id = 0,
-    medium_id = -1)
+    interior_medium_id = -1,
+    exterior_medium_id = 0)
 
 # Manually translating sphere since redner does not seem to support
 # geometric transformations
@@ -68,7 +70,9 @@ shape_light = pyredner.Shape(\
         dtype = torch.int32, device = pyredner.get_device()),
     uvs = None,
     normals = None,
-    material_id = 0)
+    material_id = 0,
+    interior_medium_id = -1,
+    exterior_medium_id = 0)
 
 # Shape describing the floor
 shape_floor = pyredner.Shape(\
@@ -81,7 +85,9 @@ shape_floor = pyredner.Shape(\
         dtype = torch.int32, device = pyredner.get_device()),
     uvs = None,
     normals = None,
-    material_id = 2)
+    material_id = 2,
+    interior_medium_id = -1,
+    exterior_medium_id = 0)
 
 # Shape describing the backplane
 shape_back = pyredner.Shape(\
@@ -94,7 +100,9 @@ shape_back = pyredner.Shape(\
         dtype = torch.int32, device = pyredner.get_device()),
     uvs = None,
     normals = None,
-    material_id = 2)
+    material_id = 2,
+    interior_medium_id = -1,
+    exterior_medium_id = 0)
 
 # Shape describing the left side of the box
 shape_left = pyredner.Shape(\
@@ -107,7 +115,9 @@ shape_left = pyredner.Shape(\
         dtype = torch.int32, device = pyredner.get_device()),
     uvs = None,
     normals = None,
-    material_id = 2)
+    material_id = 2,
+    interior_medium_id = -1,
+    exterior_medium_id = 0)
 
 
 # Shape describing the right side of the box
@@ -121,7 +131,9 @@ shape_right = pyredner.Shape(\
         dtype = torch.int32, device = pyredner.get_device()),
     uvs = None,
     normals = None,
-    material_id = 2)
+    material_id = 2,
+    interior_medium_id = -1,
+    exterior_medium_id = 0)
 
 # The shape list of our scene containing multiple shapes
 # We can remove different parts of the scene to observe the effects the presence
@@ -164,6 +176,7 @@ pyredner.imwrite(img.cpu(), 'results/test_medium/target.png')
 target = pyredner.imread('results/test_medium/target.exr')
 if pyredner.get_use_gpu():
     target = target.cuda(device = pyredner.get_device())
+exit()
 
 # Perturb the medium for the initial guess.
 # Here we set the absorption factor to be optimized.

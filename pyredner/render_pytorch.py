@@ -192,7 +192,8 @@ class RenderFunction(torch.autograd.Function):
             args.append(shape.colors.to(pyredner.get_device()) if shape.colors is not None else None)
             args.append(shape.material_id)
             args.append(shape.light_id)
-            args.append(shape.medium_id)
+            args.append(shape.interior_medium_id)
+            args.append(shape.exterior_medium_id)
         for material in scene.materials:
             serialize_texture(material.diffuse_reflectance, args)
             serialize_texture(material.specular_reflectance, args)
@@ -334,7 +335,9 @@ class RenderFunction(torch.autograd.Function):
             current_index += 1
             light_id = args[current_index]
             current_index += 1
-            medium_id = args[current_index]
+            interior_medium_id = args[current_index]
+            current_index += 1
+            exterior_medium_id = args[current_index]
             current_index += 1
             assert(vertices.is_contiguous())
             assert(indices.is_contiguous())
@@ -360,7 +363,8 @@ class RenderFunction(torch.autograd.Function):
                 int(indices.shape[0]),
                 material_id,
                 light_id,
-                medium_id))
+                interior_medium_id,
+                exterior_medium_id))
         materials = []
         for i in range(num_materials):
             num_levels = args[current_index]
@@ -1093,7 +1097,7 @@ class RenderFunction(torch.autograd.Function):
         ret_list.append(None) # clip near
         ret_list.append(None) # resolution
         ret_list.append(None) # camera_type
-        ret_list.append(None) # medium id
+        ret_list.append(None) # medium_id
 
         num_shapes = len(ctx.shapes)
         for i in range(num_shapes):
@@ -1106,7 +1110,8 @@ class RenderFunction(torch.autograd.Function):
             ret_list.append(buffers.d_colors_list[i])
             ret_list.append(None) # material id
             ret_list.append(None) # light id
-            ret_list.append(None) # medium id
+            ret_list.append(None) # interior_medium_id
+            ret_list.append(None) # exterior_medium_id
 
         num_materials = len(ctx.materials)
         for i in range(num_materials):

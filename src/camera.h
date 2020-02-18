@@ -931,7 +931,7 @@ void sample_primary_rays(const Camera &camera,
                          const BufferView<CameraSample> &samples,
                          BufferView<Ray> rays,
                          BufferView<RayDifferential> ray_differentials,
-                         BufferView<Intersection> isect,
+                         BufferView<int> medium_id,
                          bool use_gpu);
 
 void test_sample_primary_rays(bool use_gpu);

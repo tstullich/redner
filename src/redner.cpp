@@ -91,7 +91,8 @@ PYBIND11_MODULE(redner, m) {
                       int, // num_triangles
                       int, // material_id
                       int, // light_id
-                      int>()) // medium_id
+                      int, // interior_medium_id
+                      int>()) // exterior_medium_id
         .def_readonly("num_vertices", &Shape::num_vertices)
         .def_readonly("num_uv_vertices", &Shape::num_uv_vertices)
         .def_readonly("num_normal_vertices", &Shape::num_normal_vertices)
