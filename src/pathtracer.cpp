@@ -76,16 +76,22 @@ struct PathBuffer {
             2 * channel_info.num_total_dimensions * num_pixels);
         min_roughness = Buffer<Real>(use_gpu, (max_bounces + 1) * num_pixels);
         edge_min_roughness = Buffer<Real>(use_gpu, 4 * num_pixels);
-        transmittances = Buffer<Vector3>(use_gpu, max_bounces * num_pixels);
+        path_transmittances = Buffer<Vector3>(use_gpu, max_bounces * num_pixels);
         nee_transmittances = Buffer<Vector3>(use_gpu, max_bounces * num_pixels);
+        directional_transmittances = Buffer<Vector3>(use_gpu, max_bounces * num_pixels);
         if (has_medium) {
             medium_samples = Buffer<MediumSample>(use_gpu, max_bounces * num_pixels);
             medium_ids = Buffer<int>(use_gpu, (max_bounces + 1) * num_pixels);
             edge_medium_ids = Buffer<int>(use_gpu, 4 * num_pixels);
             medium_distances = Buffer<Real>(use_gpu, (max_bounces + 1) * num_pixels);
             edge_medium_distances = Buffer<Real>(use_gpu, 4 * num_pixels);
-            edge_transmittances = Buffer<Vector3>(use_gpu, 2 * num_pixels);
+            edge_path_transmittances = Buffer<Vector3>(use_gpu, 2 * num_pixels);
             edge_nee_transmittances = Buffer<Vector3>(use_gpu, 2 * num_pixels);
+            edge_directional_transmittances = Buffer<Vector3>(use_gpu, 2 * num_pixels);
+            directional_isects = Buffer<Intersection>(use_gpu, max_bounces * num_pixels);
+            edge_directional_isects = Buffer<Intersection>(use_gpu, 2 * num_pixels);
+            directional_points = Buffer<SurfacePoint>(use_gpu, max_bounces * num_pixels);
+            edge_directional_points = Buffer<SurfacePoint>(use_gpu, 2 * num_pixels);
         }
 
         // OptiX buffers
@@ -139,8 +145,10 @@ struct PathBuffer {
     Buffer<MediumSample> medium_samples;
     Buffer<int> medium_ids, edge_medium_ids;
     Buffer<Real> medium_distances, edge_medium_distances;
-    Buffer<Vector3> transmittances, nee_transmittances;
-    Buffer<Vector3> edge_transmittances, edge_nee_transmittances;
+    Buffer<Vector3> path_transmittances, nee_transmittances, directional_transmittances;
+    Buffer<Vector3> edge_path_transmittances, edge_nee_transmittances, edge_directional_transmittances;
+    Buffer<Intersection> directional_isects, edge_directional_isects;
+    Buffer<SurfacePoint> directional_points, edge_directional_points;
 
     // OptiX related
     Buffer<OptiXRay> optix_rays;
@@ -361,10 +369,22 @@ void render(const Scene &scene,
             auto next_rays = path_buffer.rays.view((depth + 1) * num_pixels, num_pixels);
             auto next_ray_differentials =
                 path_buffer.ray_differentials.view((depth + 1) * num_pixels, num_pixels);
-            auto bsdf_isects =
+            auto next_isects =
                 path_buffer.surface_isects.view((depth + 1) * num_pixels, num_pixels);
-            auto bsdf_points =
+            auto next_points =
                 path_buffer.surface_points.view((depth + 1) * num_pixels, num_pixels);
+            auto directional_isects = next_isects;
+            auto directional_points = next_points;
+            if (scene.mediums.size() > 0) {
+                // In participating media directional isects & points
+                // are not the same as next isects & points
+                // since rays penetrate through index-matched media
+                // when evaluating contribution w.r.t. light sources
+                directional_isects =
+                    path_buffer.directional_isects.view(depth * num_pixels, num_pixels);
+                directional_points =
+                    path_buffer.directional_points.view(depth * num_pixels, num_pixels);
+            }
             auto next_medium_ids = BufferView<int>();
             auto next_medium_distances = BufferView<Real>();
             if (scene.mediums.size() > 0) {
@@ -380,13 +400,16 @@ void render(const Scene &scene,
             auto min_roughness = path_buffer.min_roughness.view(depth * num_pixels, num_pixels);
             auto next_min_roughness =
                 path_buffer.min_roughness.view((depth + 1) * num_pixels, num_pixels);
-            auto transmittances = BufferView<Vector3>();
+            auto path_transmittances = BufferView<Vector3>();
             auto nee_transmittances = BufferView<Vector3>();
+            auto directional_transmittances = BufferView<Vector3>();
             if (scene.mediums.size() > 0) {
-                transmittances =
-                    path_buffer.transmittances.view(depth * num_pixels, num_pixels);
+                path_transmittances =
+                    path_buffer.path_transmittances.view(depth * num_pixels, num_pixels);
                 nee_transmittances =
                     path_buffer.nee_transmittances.view(depth * num_pixels, num_pixels);
+                directional_transmittances =
+                    path_buffer.directional_transmittances.view(depth * num_pixels, num_pixels);
             }
 
             if (scene.mediums.size() > 0) {
@@ -402,7 +425,7 @@ void render(const Scene &scene,
                               medium_ids,
                               next_medium_ids,
                               medium_distances,
-                              transmittances);
+                              path_transmittances);
             }
 
             // Sample points on lights
@@ -417,6 +440,8 @@ void render(const Scene &scene,
                                   light_points,
                                   nee_rays);
             if (scene.mediums.size() > 0) {
+                // Evaluate transmittance between the shading point and
+                // the point on light sources
                 evaluate_transmittance(scene,
                                        active_pixels,
                                        nee_rays,
@@ -449,24 +474,50 @@ void render(const Scene &scene,
                 next_rays,
                 directional_ray_differentials,
                 next_min_roughness);
-            // Intersect with the scene
-            intersect(scene,
-                      active_pixels,
-                      next_rays,
-                      directional_ray_differentials,
-                      bsdf_isects,
-                      bsdf_points,
-                      next_ray_differentials,
-                      optix_rays,
-                      optix_hits);
+            if (scene.mediums.size() > 0) {
+                // For participating media, directional sampling
+                // can hit a light source through indexed matching media.
+                // Therefore we need a intersection loop that continues
+                // until it hits an opaque surface or a light source
+                // We store the first intersections in "next_isects" and "next_points"
+                // We store the last intersections in "directional_isects" and "directional_isects"
+                intersect_and_eval_transmittance(
+                    scene,
+                    active_pixels,
+                    medium_ids,
+                    next_rays,
+                    directional_ray_differentials,
+                    next_isects,
+                    next_points,
+                    next_ray_differentials,
+                    directional_isects,
+                    directional_points,
+                    directional_transmittances,
+                    tr_buffer,
+                    thrust_alloc,
+                    optix_rays,
+                    optix_hits);
+            } else {
+                // Intersect with the scene
+                intersect(scene,
+                          active_pixels,
+                          next_rays,
+                          directional_ray_differentials,
+                          next_isects,
+                          next_points,
+                          next_ray_differentials,
+                          optix_rays,
+                          optix_hits);
+            }
 
             // Compute path contribution & update throughput
             accumulate_path_contribs(
                 scene,
                 active_pixels,
                 throughputs,
-                transmittances,
+                path_transmittances,
                 nee_transmittances,
+                directional_transmittances,
                 incoming_rays,
                 surface_isects,
                 surface_points,
@@ -475,8 +526,8 @@ void render(const Scene &scene,
                 light_isects,
                 light_points,
                 nee_rays,
-                bsdf_isects,
-                bsdf_points,
+                directional_isects,
+                directional_points,
                 next_rays,
                 min_roughness,
                 Real(1) / options.num_samples,
@@ -485,10 +536,10 @@ void render(const Scene &scene,
                 rendered_image.get(),
                 BufferView<Real>());
 
-            // Stream compaction: remove invalid bsdf intersections
+            // Stream compaction: remove invalid intersections
             // active_pixels -> next_active_pixels
             update_active_pixels(active_pixels,
-                                 bsdf_isects,
+                                 next_isects,
                                  next_medium_ids,
                                  next_active_pixels,
                                  scene.use_gpu);
@@ -587,10 +638,12 @@ void render(const Scene &scene,
                     (depth + 1) * num_pixels, num_pixels);
                 auto min_roughness =
                     path_buffer.min_roughness.view(depth * num_pixels, num_pixels);
-                auto transmittances =
-                    path_buffer.transmittances.view(depth * num_pixels, num_pixels);
+                auto path_transmittances =
+                    path_buffer.path_transmittances.view(depth * num_pixels, num_pixels);
                 auto nee_transmittances =
                     path_buffer.nee_transmittances.view(depth * num_pixels, num_pixels);
+                auto directional_transmittances =
+                    path_buffer.directional_transmittances.view(depth * num_pixels, num_pixels);
 
                 auto d_throughputs = path_buffer.d_throughputs.view(0, num_pixels);
                 auto d_rays = path_buffer.d_rays.view(0, num_pixels);
@@ -603,7 +656,7 @@ void render(const Scene &scene,
                     scene,
                     active_pixels,
                     throughputs,
-                    transmittances,
+                    path_transmittances,
                     nee_transmittances,
                     incoming_rays,
                     incoming_ray_differentials,
@@ -765,11 +818,11 @@ void render(const Scene &scene,
                             path_buffer.edge_min_roughness.view(main_buffer_beg, num_edge_samples);
                         auto edge_next_min_roughness =
                             path_buffer.edge_min_roughness.view(next_buffer_beg, num_edge_samples);
-                        auto transmittances = BufferView<Vector3>();
+                        auto path_transmittances = BufferView<Vector3>();
                         auto nee_transmittances = BufferView<Vector3>();
                         if (scene.mediums.size() > 0) {
-                            transmittances =
-                                path_buffer.edge_transmittances.view(0, num_edge_samples);
+                            path_transmittances =
+                                path_buffer.edge_path_transmittances.view(0, num_edge_samples);
                             nee_transmittances =
                                 path_buffer.edge_nee_transmittances.view(0, num_edge_samples);
                         }
@@ -803,7 +856,7 @@ void render(const Scene &scene,
                                           medium_ids,
                                           next_medium_ids,
                                           medium_distances,
-                                          transmittances);
+                                          path_transmittances);
                         }
 
                         // Sample directions based on BRDF
@@ -859,8 +912,9 @@ void render(const Scene &scene,
                             scene,
                             active_pixels,
                             throughputs,
-                            transmittances,
+                            path_transmittances,
                             nee_transmittances,
+                            directional_transmittances,
                             incoming_rays,
                             surface_isects,
                             surface_points,
@@ -1080,11 +1134,13 @@ void render(const Scene &scene,
                         path_buffer.edge_min_roughness.view(main_buffer_beg, 2 * num_pixels);
                     auto edge_next_min_roughness =
                         path_buffer.edge_min_roughness.view(next_buffer_beg, 2 * num_pixels);
-                    auto transmittances = BufferView<Vector3>();
+                    auto path_transmittances = BufferView<Vector3>();
                     auto nee_transmittances = BufferView<Vector3>();
+                    auto directional_transmittances = BufferView<Vector3>();
                     if (scene.mediums.size() > 0) {
-                        path_buffer.edge_transmittances.view(0, 2 * num_pixels);
-                        path_buffer.edge_nee_transmittances.view(0, 2 * num_pixels);
+                        path_transmittances = path_buffer.edge_path_transmittances.view(0, 2 * num_pixels);
+                        nee_transmittances = path_buffer.edge_nee_transmittances.view(0, 2 * num_pixels);
+                        directional_transmittances = path_buffer.edge_directional_transmittances.view(0, 2 * num_pixels);
                     }
 
                     // Sample points on lights
@@ -1138,8 +1194,9 @@ void render(const Scene &scene,
                         scene,
                         active_pixels,
                         throughputs,
-                        transmittances,
+                        path_transmittances,
                         nee_transmittances,
+                        directional_transmittances,
                         incoming_rays,
                         surface_isects,
                         surface_points,

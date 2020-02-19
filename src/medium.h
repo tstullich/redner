@@ -109,6 +109,8 @@ void sample_medium(const Scene &scene,
                    BufferView<Vector3> transmittances);
 
 // Evaluate the transmittance between two points.
+// Skip over all transmissive objects without
+// a refractive boundary
 void evaluate_transmittance(const Scene &scene,
                             const BufferView<int> &active_pixels,
                             const BufferView<Ray> &outgoing_rays,
@@ -118,6 +120,26 @@ void evaluate_transmittance(const Scene &scene,
                             ThrustCachedAllocator &thrust_alloc,
                             BufferView<OptiXRay> optix_rays,
                             BufferView<OptiXHit> optix_hits);
+
+// Given rays, intersect with scene until
+// hitting an opaque object. Return the first
+// and the last intersection. Evaluate transmittance
+// along the way.
+void intersect_and_eval_transmittance(const Scene &scene,
+                                      const BufferView<int> &active_pixels,
+                                      const BufferView<int> &medium_ids,
+                                      const BufferView<Ray> &outgoing_rays,
+                                      const BufferView<RayDifferential> &ray_differentials,
+                                      BufferView<Intersection> first_intersections,
+                                      BufferView<SurfacePoint> first_points,
+                                      BufferView<RayDifferential> new_ray_differentials,
+                                      BufferView<Intersection> last_intersections,
+                                      BufferView<SurfacePoint> last_points,
+                                      BufferView<Vector3> transmittances,
+                                      TransmittanceBuffer &tr_buffer,
+                                      ThrustCachedAllocator &thrust_alloc,
+                                      BufferView<OptiXRay> optix_rays,
+                                      BufferView<OptiXHit> optix_hits);
 
 // // Backpropagate the transmittance between two points.
 // void d_evaluate_transmittance(const Scene &scene,

@@ -390,11 +390,11 @@ struct transmittance_evaluator {
         const auto &medium = mediums[medium_ids[pixel_id]];
         transmittances[pixel_id] *=
             transmittance(medium, transmittance_ray.tmax);
-        // Update medium id
         const auto &isect = surface_isects[pixel_id];
         if (isect.valid()) {
             const auto &p = surface_points[pixel_id];
             const auto &shape = shapes[isect.shape_id];
+            // Update medium id
             if (dot(transmittance_ray.dir, p.geom_normal) < 0) {
                 medium_ids[pixel_id] = shape.exterior_medium_id;
             } else {
@@ -482,13 +482,171 @@ void evaluate_transmittance(const Scene &scene,
                   BufferView<RayDifferential>(),
                   optix_rays,
                   optix_hits);
-        // evaluate transmittance for the segment update medium ids
+        // evaluate transmittance and update intersections
         parallel_for(transmittance_evaluator{
                 scene.shapes.data,
                 scene.mediums.data,
                 active_pixels.begin(),
                 transmittance_points.begin(),
                 transmittance_isects.begin(),
+                transmittance_rays.begin(),
+                transmittance_medium_ids.begin(),
+                transmittances.begin()},
+            transmittance_active_pixels.size(), scene.use_gpu);
+        // Stream compaction: remove paths that didn't hit surfaces 
+        // or hit opaque surfaces
+        update_active_pixels(transmittance_active_pixels,
+                             transmittance_isects,
+                             transmittance_medium_ids,
+                             transmittance_active_pixels,
+                             scene.use_gpu);
+    }
+}
+
+struct emitter_transmittance_evaluator {
+    DEVICE void operator()(int idx) {
+        auto pixel_id = active_pixels[idx];
+        auto &transmittance_ray = transmittance_rays[pixel_id];
+        const auto &medium = mediums[medium_ids[pixel_id]];
+        transmittances[pixel_id] *=
+            transmittance(medium, transmittance_ray.tmax);
+        const auto &isect = surface_isects[pixel_id];
+        if (isect.valid()) {
+            // Update medium id
+            const auto &p = surface_points[pixel_id];
+            const auto &shape = shapes[isect.shape_id];
+            if (dot(transmittance_ray.dir, p.geom_normal) < 0) {
+                medium_ids[pixel_id] = shape.exterior_medium_id;
+            } else {
+                medium_ids[pixel_id] = shape.interior_medium_id;
+            }
+            if (shape.light_id != -1) {
+                // Hit an emitter, record the information
+                emitter_isects[pixel_id] = surface_isects[pixel_id];
+                emitter_points[pixel_id] = surface_points[pixel_id];
+            }
+            if (shape.material_id != -1) {
+                // Hit an opaque object
+                if (shape.light_id == -1) {
+                    // If it is not an emitter, occluded
+                    transmittances[pixel_id] = Vector3{0, 0, 0};
+                }
+                // Invalidate intersection: don't need to trace anymore
+                surface_isects[pixel_id].shape_id = -1;
+                medium_ids[pixel_id] = -1;
+            } else {
+                // Hit a transparent object, advance the transmittance ray
+                transmittance_ray.org = p.position;
+                transmittance_ray.tmax = infinity<Real>();
+            }
+        } else {
+            // Hit nothing.
+            // Invalidate the intersection: don't need to trace anymore
+            surface_isects[pixel_id].shape_id = -1;
+            medium_ids[pixel_id] = -1;
+        }
+    }
+
+    const Shape *shapes;
+    const Medium *mediums;
+    const int *active_pixels;
+    const SurfacePoint *surface_points;
+    Intersection *surface_isects;
+    Intersection *emitter_isects;
+    SurfacePoint *emitter_points;
+    Ray *transmittance_rays;
+    int *medium_ids;
+    Vector3 *transmittances;
+};
+
+void intersect_and_eval_transmittance(const Scene &scene,
+                                      const BufferView<int> &active_pixels,
+                                      const BufferView<int> &medium_ids,
+                                      const BufferView<Ray> &outgoing_rays,
+                                      const BufferView<RayDifferential> &ray_differentials,
+                                      BufferView<Intersection> first_intersections,
+                                      BufferView<SurfacePoint> first_points,
+                                      BufferView<RayDifferential> new_ray_differentials,
+                                      BufferView<Intersection> last_intersections,
+                                      BufferView<SurfacePoint> last_points,
+                                      BufferView<Vector3> transmittances,
+                                      TransmittanceBuffer &tr_buffer,
+                                      ThrustCachedAllocator &thrust_alloc,
+                                      BufferView<OptiXRay> optix_rays,
+                                      BufferView<OptiXHit> optix_hits) {
+    // Go through all surfaces with material_id = -1,
+    // and stop at an opaque surface.
+    auto transmittance_active_pixels = 
+        tr_buffer.active_pixels.view(0, active_pixels.size());
+    auto transmittance_rays =
+        tr_buffer.rays.view(0, outgoing_rays.size());
+    auto transmittance_isects =
+        tr_buffer.surface_isects.view(0, outgoing_rays.size());
+    auto transmittance_points =
+        tr_buffer.surface_points.view(0, outgoing_rays.size());
+    auto transmittance_medium_ids =
+        tr_buffer.medium_ids.view(0, outgoing_rays.size());
+    // Copy the active pixels
+    DISPATCH(scene.use_gpu, thrust::copy,
+        active_pixels.begin(), active_pixels.end(),
+        transmittance_active_pixels.begin());
+    // Copy outgoing rays to transmittance rays
+    DISPATCH(scene.use_gpu, thrust::copy,
+        outgoing_rays.begin(), outgoing_rays.end(),
+        transmittance_rays.begin());
+    // Copy the medium ids
+    DISPATCH(scene.use_gpu, thrust::copy,
+        medium_ids.begin(), medium_ids.end(),
+        transmittance_medium_ids.begin());
+    // Initiailize transmittance
+    DISPATCH(scene.use_gpu, thrust::fill,
+        transmittances.begin(), transmittances.end(), Vector3{1, 1, 1});
+    bool first = true;
+    while (transmittance_active_pixels.size() > 0) {
+        if (first) {
+            intersect(scene,
+                      transmittance_active_pixels,
+                      transmittance_rays,
+                      ray_differentials,
+                      transmittance_isects,
+                      transmittance_points,
+                      new_ray_differentials,
+                      optix_rays,
+                      optix_hits);
+            // Copy the first intersections
+            DISPATCH(scene.use_gpu, thrust::copy,
+                transmittance_isects.begin(), transmittance_isects.end(),
+                first_intersections.begin());
+            DISPATCH(scene.use_gpu, thrust::copy,
+                transmittance_points.begin(), transmittance_points.end(),
+                first_points.begin());
+            // Also initialize last intersections
+            DISPATCH(scene.use_gpu, thrust::copy,
+                transmittance_isects.begin(), transmittance_isects.end(),
+                last_intersections.begin());
+            DISPATCH(scene.use_gpu, thrust::copy,
+                transmittance_points.begin(), transmittance_points.end(),
+                last_points.begin());
+        } else {
+            intersect(scene,
+                      transmittance_active_pixels,
+                      transmittance_rays,
+                      BufferView<RayDifferential>(),
+                      transmittance_isects,
+                      transmittance_points,
+                      BufferView<RayDifferential>(),
+                      optix_rays,
+                      optix_hits);
+        }
+        // evaluate transmittance and update intersections
+        parallel_for(emitter_transmittance_evaluator{
+                scene.shapes.data,
+                scene.mediums.data,
+                active_pixels.begin(),
+                transmittance_points.begin(),
+                transmittance_isects.begin(),
+                last_intersections.begin(),
+                last_points.begin(),
                 transmittance_rays.begin(),
                 transmittance_medium_ids.begin(),
                 transmittances.begin()},

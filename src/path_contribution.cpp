@@ -13,9 +13,9 @@ struct path_contribs_accumulator {
         const auto &light_isect = light_isects[pixel_id];
         const auto &light_point = light_points[pixel_id];
         const auto &light_ray = light_rays[pixel_id];
-        const auto &bsdf_isect = bsdf_isects[pixel_id];
-        const auto &bsdf_point = bsdf_points[pixel_id];
-        const auto &bsdf_ray = bsdf_rays[pixel_id];
+        const auto &directional_isect = directional_isects[pixel_id];
+        const auto &directional_point = directional_points[pixel_id];
+        const auto &directional_ray = directional_rays[pixel_id];
         const auto &min_rough = min_roughness[pixel_id];
         auto &next_throughput = next_throughputs[pixel_id];
 
@@ -96,7 +96,7 @@ struct path_contribs_accumulator {
                     // XXX: For now we don't use ray differentials for envmap
                     //      A proper approach might be to use a filter radius based on sampling density?
                     RayDifferential ray_diff{Vector3{0, 0, 0}, Vector3{0, 0, 0},
-                                            Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+                                             Vector3{0, 0, 0}, Vector3{0, 0, 0}};
                     auto light_contrib = envmap_eval(*scene.envmap, wo, ray_diff);
                     if (eval_phase) {
                         auto phase_val = phase_function_eval(
@@ -126,10 +126,15 @@ struct path_contribs_accumulator {
 
         // BSDF or phase function importance sampling.
         // Also update throughput, transmittance is updated in another kernel.
+        // For handling indexed-matching media, there are two intersections
+        // for this: directional_isect & next_isect (if there is no media these)
+        // two are the same.
+        // next_isect represents the *first* intersection along the BSDF/phase function
+        // importance sampling, while directional_isect represents the last intersection.
         auto scatter_contrib = Vector3{0, 0, 0};
-        if (bsdf_isect.valid()) { // We hit a surface
-            const auto &bsdf_shape = scene.shapes[bsdf_isect.shape_id];
-            auto dir = bsdf_point.position - p;
+        if (directional_isect.valid()) { // We hit a surface
+            const auto &light_shape = scene.shapes[directional_isect.shape_id];
+            auto dir = directional_point.position - p;
             auto dist_sq = length_squared(dir);
             if (dist_sq > 1e-20f) {
                 auto wo = dir / sqrt(dist_sq);
@@ -154,29 +159,32 @@ struct path_contribs_accumulator {
                     }
                 }
                 if (directional_pdf > 1e-20f) {
-                    if (bsdf_shape.light_id >= 0) {
-                        const auto &light = scene.area_lights[bsdf_shape.light_id];
-                        if (light.two_sided || dot(-wo, bsdf_point.shading_frame.n) > 0) {
+                    if (light_shape.light_id >= 0) {
+                        const auto &light = scene.area_lights[light_shape.light_id];
+                        if (light.two_sided || dot(-wo, directional_point.shading_frame.n) > 0) {
                             auto light_contrib = light.intensity;
-                            auto light_pmf = scene.light_pmf[bsdf_shape.light_id];
-                            auto light_area = scene.light_areas[bsdf_shape.light_id];
+                            auto light_pmf = scene.light_pmf[light_shape.light_id];
+                            auto light_area = scene.light_areas[light_shape.light_id];
                             auto inv_area = 1 / light_area;
-                            auto geometry_term = fabs(dot(wo, bsdf_point.geom_normal)) / dist_sq;
+                            auto geometry_term = fabs(dot(wo, light_point.geom_normal)) / dist_sq;
                             auto pdf_nee = (light_pmf * inv_area) / geometry_term;
                             auto mis_weight = Real(1 / (1 + square((double)pdf_nee / (double)directional_pdf)));
                             scatter_contrib = (mis_weight / directional_pdf) * directional_val * light_contrib;
                         }
                     }
+                    if (directional_transmittances != nullptr) {
+                        scatter_contrib *= directional_transmittances[pixel_id];
+                    }
                     // Update throughput
                     next_throughput = throughput * (directional_val / directional_pdf);
-                    if (transmittances != nullptr) {
-                        next_throughput *= transmittances[pixel_id];
+                    if (path_transmittances != nullptr) {
+                        next_throughput *= path_transmittances[pixel_id];
                     }
                 }
             }
         } else {
             // Hit nothing
-            auto wo = bsdf_ray.dir;
+            auto wo = directional_ray.dir;
             // wo can be zero when bsdf_sample failed
             if (length_squared(wo) > 0) {
                 auto directional_val = Vector3{1, 1, 1};
@@ -212,9 +220,12 @@ struct path_contribs_accumulator {
                     auto mis_weight = Real(1 / (1 + square((double)pdf_nee / (double)directional_pdf)));
                     scatter_contrib = (mis_weight / directional_pdf) * directional_val * light_contrib;
                 }
+                if (directional_transmittances != nullptr) {
+                    scatter_contrib *= directional_transmittances[pixel_id];
+                }
                 next_throughput = throughput * (directional_val / directional_pdf);
-                if (transmittances != nullptr) {
-                    next_throughput *= transmittances[pixel_id];
+                if (path_transmittances != nullptr) {
+                    next_throughput *= path_transmittances[pixel_id];
                 }
             }
         }
@@ -222,8 +233,8 @@ struct path_contribs_accumulator {
         assert(isfinite(nee_contrib));
         assert(isfinite(scatter_contrib));
         auto path_contrib = throughput * (nee_contrib + scatter_contrib);
-        if (transmittances != nullptr) {
-            path_contrib *= transmittances[pixel_id];
+        if (path_transmittances != nullptr) {
+            path_contrib *= path_transmittances[pixel_id];
         }
         if (rendered_image != nullptr) {
             auto nd = channel_info.num_total_dimensions;
@@ -240,8 +251,9 @@ struct path_contribs_accumulator {
     const FlattenScene scene;
     const int *active_pixels;
     const Vector3 *throughputs;
-    const Vector3 *transmittances;
+    const Vector3 *path_transmittances;
     const Vector3 *nee_transmittances;
+    const Vector3 *directional_transmittances;
     const Ray *incoming_rays;
     const Intersection *surface_isects;
     const SurfacePoint *surface_points;
@@ -250,9 +262,9 @@ struct path_contribs_accumulator {
     const Intersection *light_isects;
     const SurfacePoint *light_points;
     const Ray *light_rays;
-    const Intersection *bsdf_isects;
-    const SurfacePoint *bsdf_points;
-    const Ray *bsdf_rays;
+    const Intersection *directional_isects;
+    const SurfacePoint *directional_points;
+    const Ray *directional_rays;
     const Real *min_roughness;
     const Real weight;
     const ChannelInfo channel_info;
@@ -931,8 +943,9 @@ struct d_path_contribs_accumulator {
 void accumulate_path_contribs(const Scene &scene,
                               const BufferView<int> &active_pixels,
                               const BufferView<Vector3> &throughputs,
-                              const BufferView<Vector3> &transmittances,
+                              const BufferView<Vector3> &path_transmittances,
                               const BufferView<Vector3> &nee_transmittances,
+                              const BufferView<Vector3> &directional_transmittances,
                               const BufferView<Ray> &incoming_rays,
                               const BufferView<Intersection> &surface_isects,
                               const BufferView<SurfacePoint> &surface_points,
@@ -941,9 +954,9 @@ void accumulate_path_contribs(const Scene &scene,
                               const BufferView<Intersection> &light_isects,
                               const BufferView<SurfacePoint> &light_points,
                               const BufferView<Ray> &light_rays,
-                              const BufferView<Intersection> &bsdf_isects,
-                              const BufferView<SurfacePoint> &bsdf_points,
-                              const BufferView<Ray> &bsdf_rays,
+                              const BufferView<Intersection> &directional_isects,
+                              const BufferView<SurfacePoint> &directional_points,
+                              const BufferView<Ray> &directional_rays,
                               const BufferView<Real> &min_roughness,
                               const Real weight,
                               const ChannelInfo &channel_info,
@@ -954,8 +967,9 @@ void accumulate_path_contribs(const Scene &scene,
         get_flatten_scene(scene),
         active_pixels.begin(),
         throughputs.begin(),
-        transmittances.begin(),
+        path_transmittances.begin(),
         nee_transmittances.begin(),
+        directional_transmittances.begin(),
         incoming_rays.begin(),
         surface_isects.begin(),
         surface_points.begin(),
@@ -964,9 +978,9 @@ void accumulate_path_contribs(const Scene &scene,
         light_isects.begin(),
         light_points.begin(),
         light_rays.begin(),
-        bsdf_isects.begin(),
-        bsdf_points.begin(),
-        bsdf_rays.begin(),
+        directional_isects.begin(),
+        directional_points.begin(),
+        directional_rays.begin(),
         min_roughness.begin(),
         weight,
         channel_info,
