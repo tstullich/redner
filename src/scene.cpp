@@ -645,6 +645,116 @@ void intersect(const Scene &scene,
     }
 }
 
+struct d_intersect_kernel {
+    DEVICE void operator()(int idx) {
+        auto pixel_id = active_pixels[idx];
+        const auto &isect = surface_intersections[pixel_id];
+        const auto &shape = scene.shapes[isect.shape_id];
+        const auto &ray = rays[pixel_id];
+        const auto &ray_diff = ray_differentials[pixel_id];
+        const auto &d_point = d_surface_points[pixel_id];
+        const auto &d_new_ray_diff = d_new_ray_differentials[pixel_id];
+        auto &d_ray = d_rays[pixel_id];
+        auto &d_ray_diff = d_ray_differentials[pixel_id];
+
+        d_ray = DRay{};
+        d_ray_diff = RayDifferential{
+            Vector3{0, 0, 0}, Vector3{0, 0, 0},
+            Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+
+        Vector3 d_v_p[3] = {Vector3{0, 0, 0}, Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+        Vector3 d_v_n[3] = {Vector3{0, 0, 0}, Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+        Vector2 d_v_uv[3] = {Vector2{0, 0}, Vector2{0, 0}};
+        Vector3 d_v_c[3] = {Vector3{0, 0, 0}, Vector3{0, 0, 0}, Vector3{0, 0, 0}};
+        d_intersect_shape(shape,
+                          isect.tri_id,
+                          ray,
+                          ray_diff,
+                          d_point,
+                          d_new_ray_diff,
+                          d_ray,
+                          d_ray_diff,
+                          d_v_p,
+                          d_v_n,
+                          d_v_uv,
+                          d_v_c);
+        // Accumulate derivatives
+        auto tri_index = get_indices(shape, isect.tri_id);
+        atomic_add(&d_shapes[isect.shape_id].vertices[3 * tri_index[0]],
+            d_v_p[0]);
+        atomic_add(&d_shapes[isect.shape_id].vertices[3 * tri_index[1]],
+            d_v_p[1]);
+        atomic_add(&d_shapes[isect.shape_id].vertices[3 * tri_index[2]],
+            d_v_p[2]);
+        if (has_uvs(shape)) {
+            auto uv_tri_ind = tri_index;
+            if (shape.uv_indices != nullptr) {
+                uv_tri_ind = get_uv_indices(shape, isect.tri_id);
+            }
+            atomic_add(&d_shapes[isect.shape_id].uvs[2 * uv_tri_ind[0]],
+                d_v_uv[0]);
+            atomic_add(&d_shapes[isect.shape_id].uvs[2 * uv_tri_ind[1]],
+                d_v_uv[1]);
+            atomic_add(&d_shapes[isect.shape_id].uvs[2 * uv_tri_ind[2]],
+                d_v_uv[2]);
+        }
+        if (has_shading_normals(shape)) {
+            auto normal_tri_ind = tri_index;
+            if (shape.normal_indices != nullptr) {
+                normal_tri_ind = get_normal_indices(shape, isect.tri_id);
+            }
+            atomic_add(&d_shapes[isect.shape_id].normals[3 * normal_tri_ind[0]],
+                d_v_n[0]);
+            atomic_add(&d_shapes[isect.shape_id].normals[3 * normal_tri_ind[1]],
+                d_v_n[1]);
+            atomic_add(&d_shapes[isect.shape_id].normals[3 * normal_tri_ind[2]],
+                d_v_n[2]);
+        }
+        if (has_colors(shape)) {
+            atomic_add(&d_shapes[isect.shape_id].colors[3 * tri_index[0]],
+                d_v_c[0]);
+            atomic_add(&d_shapes[isect.shape_id].colors[3 * tri_index[1]],
+                d_v_c[1]);
+            atomic_add(&d_shapes[isect.shape_id].colors[3 * tri_index[2]],
+                d_v_c[2]);
+        }
+    }
+
+    const FlattenScene scene;
+    const int *active_pixels;
+    const Ray *rays;
+    const RayDifferential *ray_differentials;
+    const Intersection *surface_intersections;
+    const SurfacePoint *d_surface_points;
+    const RayDifferential *d_new_ray_differentials;
+    DShape *d_shapes;
+    DRay *d_rays;
+    RayDifferential *d_ray_differentials;
+};
+
+void d_intersect(const Scene &scene,
+                 const BufferView<int> &active_pixels,
+                 const BufferView<Ray> &rays,
+                 const BufferView<RayDifferential> &ray_differentials,
+                 const BufferView<Intersection> &surface_intersections,
+                 const BufferView<SurfacePoint> &d_surface_points,
+                 const BufferView<RayDifferential> &d_new_ray_differentials,
+                 DScene *d_scene,
+                 BufferView<DRay> &d_rays,
+                 BufferView<RayDifferential> &d_ray_differentials) {
+    parallel_for(d_intersect_kernel{
+        get_flatten_scene(scene),
+        active_pixels.begin(),
+        rays.begin(),
+        ray_differentials.begin(),
+        surface_intersections.begin(),
+        d_surface_points.begin(),
+        d_new_ray_differentials.begin(),
+        d_scene->shapes.data,
+        d_rays.begin(),
+        d_ray_differentials.begin()}, active_pixels.size(), scene.use_gpu);
+}
+
 #ifdef __NVCC__
 __global__ void update_occluded_rays_kernel(int N,
                                             const int *active_pixels,

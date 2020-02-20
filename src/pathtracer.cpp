@@ -103,6 +103,7 @@ struct PathBuffer {
         d_next_rays = Buffer<DRay>(use_gpu, num_pixels);
         d_next_ray_differentials = Buffer<RayDifferential>(use_gpu, num_pixels);
         d_next_points = Buffer<SurfacePoint>(use_gpu, num_pixels);
+        d_directional_ray_differentials = Buffer<RayDifferential>(use_gpu, num_pixels);
         d_throughputs = Buffer<Vector3>(use_gpu, num_pixels);
         d_rays = Buffer<DRay>(use_gpu, num_pixels);
         d_ray_differentials = Buffer<RayDifferential>(use_gpu, num_pixels);
@@ -161,6 +162,7 @@ struct PathBuffer {
     Buffer<DRay> d_next_rays;
     Buffer<RayDifferential> d_next_ray_differentials;
     Buffer<SurfacePoint> d_next_points;
+    Buffer<RayDifferential> d_directional_ray_differentials;
     Buffer<Vector3> d_throughputs;
     Buffer<DRay> d_rays;
     Buffer<RayDifferential> d_ray_differentials;
@@ -636,10 +638,22 @@ void render(const Scene &scene,
                     path_buffer.light_isects.view(depth * num_pixels, num_pixels);
                 auto light_points =
                     path_buffer.light_points.view(depth * num_pixels, num_pixels);
-                auto bsdf_isects = path_buffer.surface_isects.view(
+                auto next_isects = path_buffer.surface_isects.view(
                     (depth + 1) * num_pixels, num_pixels);
-                auto bsdf_points = path_buffer.surface_points.view(
+                auto next_points = path_buffer.surface_points.view(
                     (depth + 1) * num_pixels, num_pixels);
+                auto directional_isects = next_isects;
+                auto directional_points = next_points;
+                if (scene.mediums.size() > 0) {
+                    // In participating media directional isects & points
+                    // are not the same as next isects & points
+                    // since rays penetrate through index-matched media
+                    // when evaluating contribution w.r.t. light sources
+                    directional_isects =
+                        path_buffer.directional_isects.view(depth * num_pixels, num_pixels);
+                    directional_points =
+                        path_buffer.directional_points.view(depth * num_pixels, num_pixels);
+                }
                 auto min_roughness =
                     path_buffer.min_roughness.view(depth * num_pixels, num_pixels);
                 auto path_transmittances = BufferView<Vector3>();
@@ -656,7 +670,9 @@ void render(const Scene &scene,
 
                 auto d_throughputs = path_buffer.d_throughputs.view(0, num_pixels);
                 auto d_rays = path_buffer.d_rays.view(0, num_pixels);
-                auto d_ray_differentials = path_buffer.d_ray_differentials.view(0, num_pixels);
+                // auto d_ray_differentials = path_buffer.d_ray_differentials.view(0, num_pixels);
+                auto d_directional_ray_differentials =
+                    path_buffer.d_directional_ray_differentials.view(0, num_pixels);
                 auto d_points = path_buffer.d_points.view(0, num_pixels);
                 auto d_path_transmittances = BufferView<Vector3>();
                 auto d_nee_transmittances = BufferView<Vector3>();
@@ -676,12 +692,11 @@ void render(const Scene &scene,
                     nee_transmittances,
                     directional_transmittances,
                     incoming_rays,
-                    incoming_ray_differentials,
                     light_samples, directional_samples,
                     surface_isects, surface_points,
                     medium_ids, medium_distances,
                     light_isects, light_points, nee_rays,
-                    bsdf_isects, bsdf_points, next_rays,
+                    directional_isects, directional_points, next_rays,
                     min_roughness,
                     Real(1) / options.num_samples, // weight
                     channel_info,
@@ -695,8 +710,46 @@ void render(const Scene &scene,
                     d_nee_transmittances,
                     d_directional_transmittances,
                     d_rays,
-                    d_ray_differentials,
                     d_points);
+
+                if (scene.mediums.size() > 0) {
+                    // d_intersect_and_eval_transmittance(
+                    //     scene,
+                    //     active_pixels,
+                    //     medium_ids,
+                    //     next_rays,
+                    //     directional_ray_differentials,
+                    //     next_isects,
+                    //     next_points,
+                    //     next_ray_differentials,
+                    //     directional_isects,
+                    //     directional_points,
+                    //     directional_transmittances,
+                    //     tr_buffer,
+                    //     thrust_alloc,
+                    //     optix_rays,
+                    //     optix_hits);
+                } else {
+                    // intersect(scene,
+                    //           active_pixels,
+                    //           next_rays,
+                    //           directional_ray_differentials,
+                    //           next_isects,
+                    //           next_points,
+                    //           next_ray_differentials,
+                    //           optix_rays,
+                    //           optix_hits)
+                    d_intersect(scene,
+                                active_pixels,
+                                next_rays,
+                                directional_ray_differentials,
+                                next_isects,
+                                d_next_points,
+                                d_next_ray_differentials,
+                                d_scene.get(),
+                                d_next_rays,
+                                d_directional_ray_differentials);
+                }
 
                 if (scene.use_secondary_edge_sampling) {
                     ////////////////////////////////////////////////////////////////////////////////

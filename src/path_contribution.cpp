@@ -281,7 +281,6 @@ struct d_path_contribs_accumulator {
 
         auto &d_throughput = d_throughputs[pixel_id];
         auto &d_incoming_ray = d_incoming_rays[pixel_id];
-        auto &d_incoming_ray_differential = d_incoming_ray_differentials[pixel_id];
         auto &d_shading_point = d_shading_points[pixel_id];
         auto &d_next_ray = d_next_rays[pixel_id];
 
@@ -324,9 +323,6 @@ struct d_path_contribs_accumulator {
         // Initialize derivatives
         d_throughput = Vector3{0, 0, 0};
         d_incoming_ray = DRay{};
-        d_incoming_ray_differential = RayDifferential{
-            Vector3{0, 0, 0}, Vector3{0, 0, 0},
-            Vector3{0, 0, 0}, Vector3{0, 0, 0}};
         d_shading_point = SurfacePoint::zero();
         if (d_path_transmittances != nullptr) {
             d_path_transmittances[pixel_id] = Vector3{0, 0, 0};
@@ -862,7 +858,6 @@ struct d_path_contribs_accumulator {
     const Vector3 *nee_transmittances;
     const Vector3 *directional_transmittances;
     const Ray *incoming_rays;
-    const RayDifferential *incoming_ray_differentials;
     const LightSample *light_samples;
     const DirectionalSample *directional_samples;
     const Intersection *surface_isects;
@@ -892,7 +887,6 @@ struct d_path_contribs_accumulator {
     Vector3 *d_nee_transmittances;
     Vector3 *d_directional_transmittances;
     DRay *d_incoming_rays;
-    RayDifferential *d_incoming_ray_differentials;
     SurfacePoint *d_shading_points;
 };
 
@@ -952,7 +946,6 @@ void d_accumulate_path_contribs(const Scene &scene,
                                 const BufferView<Vector3> &nee_transmittances,
                                 const BufferView<Vector3> &directional_transmittances,
                                 const BufferView<Ray> &incoming_rays,
-                                const BufferView<RayDifferential> &ray_differentials,
                                 const BufferView<LightSample> &light_samples,
                                 const BufferView<DirectionalSample> &directional_samples,
                                 const BufferView<Intersection> &surface_isects,
@@ -978,7 +971,6 @@ void d_accumulate_path_contribs(const Scene &scene,
                                 BufferView<Vector3> d_nee_transmittances,
                                 BufferView<Vector3> d_directional_transmittances,
                                 BufferView<DRay> d_incoming_rays,
-                                BufferView<RayDifferential> d_incoming_ray_differentials,
                                 BufferView<SurfacePoint> d_shading_points) {
     parallel_for(d_path_contribs_accumulator{
         get_flatten_scene(scene),
@@ -988,7 +980,6 @@ void d_accumulate_path_contribs(const Scene &scene,
         nee_transmittances.begin(),
         directional_transmittances.begin(),
         incoming_rays.begin(),
-        ray_differentials.begin(),
         light_samples.begin(),
         directional_samples.begin(),
         surface_isects.begin(),
@@ -1018,7 +1009,6 @@ void d_accumulate_path_contribs(const Scene &scene,
         d_nee_transmittances.begin(),
         d_directional_transmittances.begin(),
         d_incoming_rays.begin(),
-        d_incoming_ray_differentials.begin(),
         d_shading_points.begin()},
         active_pixels.size(), scene.use_gpu);
 }
