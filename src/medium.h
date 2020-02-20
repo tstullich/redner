@@ -1,8 +1,9 @@
 #pragma once
 
 #include "redner.h"
-#include "intersection.h"
+#include "atomic.h"
 #include "buffer.h"
+#include "intersection.h"
 #include "phase_function.h"
 #include "ptr.h"
 #include "ray.h"
@@ -89,6 +90,18 @@ PhaseFunction get_phase_function(const Medium &medium) {
         return PhaseFunction(HenyeyGreenstein{medium.homogeneous.g});
     } else {
         return PhaseFunction();
+    }
+}
+
+DEVICE
+inline
+void d_get_phase_function(const Medium &medium,
+                          const DPhaseFunction &d_phase_function,
+                          DMedium &d_medium) {
+    if (medium.type == MediumType::homogeneous) {
+        atomic_add(d_medium.g, d_phase_function.hg.g);
+    } else {
+        return;
     }
 }
 

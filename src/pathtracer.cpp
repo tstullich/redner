@@ -107,7 +107,9 @@ struct PathBuffer {
         d_rays = Buffer<DRay>(use_gpu, num_pixels);
         d_ray_differentials = Buffer<RayDifferential>(use_gpu, num_pixels);
         d_points = Buffer<SurfacePoint>(use_gpu, num_pixels);
-        d_transmittances = Buffer<Vector3>(use_gpu, num_pixels);
+        d_path_transmittances = Buffer<Vector3>(use_gpu, num_pixels);
+        d_nee_transmittances = Buffer<Vector3>(use_gpu, num_pixels);
+        d_directional_transmittances = Buffer<Vector3>(use_gpu, num_pixels);
 
         primary_edge_samples = Buffer<PrimaryEdgeSample>(use_gpu, num_pixels);
         secondary_edge_samples = Buffer<SecondaryEdgeSample>(use_gpu, num_pixels);
@@ -163,7 +165,9 @@ struct PathBuffer {
     Buffer<DRay> d_rays;
     Buffer<RayDifferential> d_ray_differentials;
     Buffer<SurfacePoint> d_points;
-    Buffer<Vector3> d_transmittances;
+    Buffer<Vector3> d_path_transmittances;
+    Buffer<Vector3> d_nee_transmittances;
+    Buffer<Vector3> d_directional_transmittances;
 
     // Edge sampling related
     Buffer<PrimaryEdgeSample> primary_edge_samples;
@@ -477,7 +481,7 @@ void render(const Scene &scene,
             if (scene.mediums.size() > 0) {
                 // For participating media, directional sampling
                 // can hit a light source through indexed matching media.
-                // Therefore we need a intersection loop that continues
+                // Therefore we need an intersection loop that continues
                 // until it hits an opaque surface or a light source
                 // We store the first intersections in "next_isects" and "next_points"
                 // We store the last intersections in "directional_isects" and "directional_isects"
@@ -638,18 +642,30 @@ void render(const Scene &scene,
                     (depth + 1) * num_pixels, num_pixels);
                 auto min_roughness =
                     path_buffer.min_roughness.view(depth * num_pixels, num_pixels);
-                auto path_transmittances =
-                    path_buffer.path_transmittances.view(depth * num_pixels, num_pixels);
-                auto nee_transmittances =
-                    path_buffer.nee_transmittances.view(depth * num_pixels, num_pixels);
-                auto directional_transmittances =
-                    path_buffer.directional_transmittances.view(depth * num_pixels, num_pixels);
+                auto path_transmittances = BufferView<Vector3>();
+                auto nee_transmittances = BufferView<Vector3>();
+                auto directional_transmittances = BufferView<Vector3>();
+                if (scene.mediums.size() > 0) {
+                    path_transmittances = 
+                        path_buffer.path_transmittances.view(depth * num_pixels, num_pixels);
+                    nee_transmittances =
+                        path_buffer.nee_transmittances.view(depth * num_pixels, num_pixels);
+                    directional_transmittances =
+                        path_buffer.directional_transmittances.view(depth * num_pixels, num_pixels);
+                }
 
                 auto d_throughputs = path_buffer.d_throughputs.view(0, num_pixels);
                 auto d_rays = path_buffer.d_rays.view(0, num_pixels);
                 auto d_ray_differentials = path_buffer.d_ray_differentials.view(0, num_pixels);
                 auto d_points = path_buffer.d_points.view(0, num_pixels);
-                auto d_transmittances = path_buffer.d_transmittances.view(0, num_pixels);
+                auto d_path_transmittances = BufferView<Vector3>();
+                auto d_nee_transmittances = BufferView<Vector3>();
+                auto d_directional_transmittances = BufferView<Vector3>();
+                if (scene.mediums.size() > 0) {
+                    d_path_transmittances = path_buffer.d_path_transmittances.view(0, num_pixels);
+                    d_nee_transmittances = path_buffer.d_nee_transmittances.view(0, num_pixels);
+                    d_directional_transmittances = path_buffer.d_directional_transmittances.view(0, num_pixels);
+                }
 
                 // Backpropagate path contribution
                 d_accumulate_path_contribs(
@@ -658,23 +674,26 @@ void render(const Scene &scene,
                     throughputs,
                     path_transmittances,
                     nee_transmittances,
+                    directional_transmittances,
                     incoming_rays,
                     incoming_ray_differentials,
                     light_samples, directional_samples,
                     surface_isects, surface_points,
                     medium_ids, medium_distances,
                     light_isects, light_points, nee_rays,
-                    bsdf_isects, bsdf_points, next_rays, directional_ray_differentials,
+                    bsdf_isects, bsdf_points, next_rays,
                     min_roughness,
                     Real(1) / options.num_samples, // weight
                     channel_info,
                     d_rendered_image.get(),
                     d_next_throughputs,
                     d_next_rays,
-                    d_next_ray_differentials,
                     d_next_points,
                     d_scene.get(),
                     d_throughputs,
+                    d_path_transmittances,
+                    d_nee_transmittances,
+                    d_directional_transmittances,
                     d_rays,
                     d_ray_differentials,
                     d_points);
