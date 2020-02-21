@@ -64,25 +64,6 @@ struct Medium {
     };
 };
 
-struct TransmittanceBuffer {
-    TransmittanceBuffer() {}
-
-    TransmittanceBuffer(int num_pixels, bool use_gpu) {
-        active_pixels = Buffer<int>(use_gpu, num_pixels);
-        rays = Buffer<Ray>(use_gpu, num_pixels);
-        surface_isects = Buffer<Intersection>(use_gpu, num_pixels);
-        surface_points = Buffer<SurfacePoint>(use_gpu, num_pixels);
-        medium_ids = Buffer<int>(use_gpu, num_pixels);
-    }
-
-    int num_pixels;
-    Buffer<int> active_pixels;
-    Buffer<Ray> rays;
-    Buffer<Intersection> surface_isects;
-    Buffer<SurfacePoint> surface_points;
-    Buffer<int> medium_ids;
-};
-
 DEVICE
 inline
 PhaseFunction get_phase_function(const Medium &medium) {
@@ -169,61 +150,42 @@ void sample_medium(const Scene &scene,
 // Instead we skip at most *one* boundary with IOR=1.
 // The arguments with "int_" are the intermediate information
 // we store when skipping through the boundary.
-void trace_transmittance_rays(const Scene &scene,
-                              const BufferView<int> &active_pixels,
-                              const BufferView<Ray> &outgoing_rays,
-                              const BufferView<int> &medium_ids,
-                              const BufferView<Intersection> &light_isects,
-                              const BufferView<SurfacePoint> &light_points,
-                              BufferView<Ray> int_rays,
-                              BufferView<Intersection> int_isects,
-                              BufferView<SurfacePoint> int_points,
-                              BufferView<int> int_medium_ids,
-                              ThrustCachedAllocator &thrust_alloc,
-                              BufferView<OptiXRay> optix_rays,
-                              BufferView<OptiXHit> optix_hits);
+void trace_nee_transmittance_rays(const Scene &scene,
+                                  const BufferView<int> &active_pixels,
+                                  const BufferView<Ray> &outgoing_rays,
+                                  const BufferView<int> &medium_ids,
+                                  const BufferView<Intersection> &light_isects,
+                                  const BufferView<SurfacePoint> &light_points,
+                                  BufferView<Ray> int_rays,
+                                  BufferView<Intersection> int_isects,
+                                  BufferView<SurfacePoint> int_points,
+                                  BufferView<int> int_medium_ids,
+                                  ThrustCachedAllocator &thrust_alloc,
+                                  BufferView<OptiXRay> optix_rays,
+                                  BufferView<OptiXHit> optix_hits);
 
-// Given rays, intersect with scene until
-// hitting an opaque object. Return the first
-// and the last intersection. Evaluate transmittance
-// along the way.
-void intersect_and_eval_transmittance(const Scene &scene,
+// Given outgoing rays, intersect with at most two surfaces and return them.
+// This is for transmittance evaluation: for sampling efficiency,
+// we want to skip through all participating media boundaries between
+// the two points with IOR = 1.
+// However this creates thread divergences and unbounded memory requirement.
+// Instead we skip at most *one* boundary with IOR=1.
+// The arguments with "int_" are the intermediate information
+// we store when skipping through the boundary.
+// light_isects & light_points store the second surface.
+// If there is only one surface, int_ and light_ store the same surface.
+void trace_scatter_transmittance_rays(const Scene &scene,
                                       const BufferView<int> &active_pixels,
-                                      const BufferView<int> &medium_ids,
                                       const BufferView<Ray> &outgoing_rays,
                                       const BufferView<RayDifferential> &ray_differentials,
-                                      BufferView<Intersection> first_intersections,
-                                      BufferView<SurfacePoint> first_points,
+                                      const BufferView<int> &medium_ids,
+                                      BufferView<Intersection> light_isects,
+                                      BufferView<SurfacePoint> light_points,
+                                      BufferView<Ray> int_rays,
                                       BufferView<RayDifferential> new_ray_differentials,
-                                      BufferView<Intersection> last_intersections,
-                                      BufferView<SurfacePoint> last_points,
-                                      BufferView<Vector3> transmittances,
-                                      TransmittanceBuffer &tr_buffer,
+                                      BufferView<Intersection> int_isects,
+                                      BufferView<SurfacePoint> int_points,
+                                      BufferView<int> int_medium_ids,
                                       ThrustCachedAllocator &thrust_alloc,
                                       BufferView<OptiXRay> optix_rays,
                                       BufferView<OptiXHit> optix_hits);
-
-void d_intersect_and_eval_transmittance(const Scene &scene,
-                                        const BufferView<int> &active_pixels,
-                                        const BufferView<int> &medium_ids,
-                                        const BufferView<Ray> &outgoing_rays,
-                                        const BufferView<RayDifferential> &ray_differentials,
-                                        BufferView<Intersection> first_intersections,
-                                        BufferView<SurfacePoint> first_points,
-                                        BufferView<RayDifferential> new_ray_differentials,
-                                        BufferView<Intersection> last_intersections,
-                                        BufferView<SurfacePoint> last_points,
-                                        BufferView<Vector3> transmittances,
-                                        TransmittanceBuffer &tr_buffer,
-                                        ThrustCachedAllocator &thrust_alloc,
-                                        BufferView<OptiXRay> optix_rays,
-                                        BufferView<OptiXHit> optix_hits);
-
-// // Backpropagate the transmittance between two points.
-// void d_evaluate_transmittance(const Scene &scene,
-//                               const BufferView<int> &active_pixels,
-//                               const BufferView<Ray> &rays,
-//                               const BufferView<Intersection> &medium_isects,
-//                               const BufferView<Vector3> &d_transmittances,
-//                               BufferView<DMedium> d_mediums,
-//                               BufferView<DRay> d_rays);

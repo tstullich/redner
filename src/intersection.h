@@ -16,6 +16,11 @@ struct Intersection {
     bool valid() const {
         return shape_id >= 0 && tri_id >= 0;
     }
+
+    DEVICE
+    bool operator==(const Intersection &it) const {
+        return shape_id == it.shape_id && tri_id == it.tri_id;
+    }
 };
 
 template <typename T>

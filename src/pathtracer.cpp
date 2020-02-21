@@ -55,7 +55,7 @@ struct PathBuffer {
         nee_rays = Buffer<Ray>(use_gpu, max_bounces * num_pixels);
         primary_ray_differentials = Buffer<RayDifferential>(use_gpu, num_pixels);
         ray_differentials = Buffer<RayDifferential>(use_gpu, (max_bounces + 1) * num_pixels);
-        directional_ray_differentials = Buffer<RayDifferential>(use_gpu, max_bounces * num_pixels);
+        scatter_ray_differentials = Buffer<RayDifferential>(use_gpu, max_bounces * num_pixels);
         edge_rays = Buffer<Ray>(use_gpu, 4 * num_pixels);
         edge_nee_rays = Buffer<Ray>(use_gpu, 2 * num_pixels);
         edge_ray_differentials = Buffer<RayDifferential>(use_gpu, 2 * num_pixels);
@@ -77,7 +77,6 @@ struct PathBuffer {
         min_roughness = Buffer<Real>(use_gpu, (max_bounces + 1) * num_pixels);
         edge_min_roughness = Buffer<Real>(use_gpu, 4 * num_pixels);
         path_transmittances = Buffer<Vector3>(use_gpu, max_bounces * num_pixels);
-        directional_transmittances = Buffer<Vector3>(use_gpu, max_bounces * num_pixels);
         if (has_medium) {
             medium_samples = Buffer<MediumSample>(use_gpu, max_bounces * num_pixels);
             medium_ids = Buffer<int>(use_gpu, (max_bounces + 1) * num_pixels);
@@ -85,11 +84,10 @@ struct PathBuffer {
             medium_distances = Buffer<Real>(use_gpu, (max_bounces + 1) * num_pixels);
             edge_medium_distances = Buffer<Real>(use_gpu, 4 * num_pixels);
             edge_path_transmittances = Buffer<Vector3>(use_gpu, 2 * num_pixels);
-            edge_directional_transmittances = Buffer<Vector3>(use_gpu, 2 * num_pixels);
-            directional_isects = Buffer<Intersection>(use_gpu, max_bounces * num_pixels);
-            edge_directional_isects = Buffer<Intersection>(use_gpu, 2 * num_pixels);
-            directional_points = Buffer<SurfacePoint>(use_gpu, max_bounces * num_pixels);
-            edge_directional_points = Buffer<SurfacePoint>(use_gpu, 2 * num_pixels);
+            scatter_isects = Buffer<Intersection>(use_gpu, max_bounces * num_pixels);
+            edge_scatter_isects = Buffer<Intersection>(use_gpu, 2 * num_pixels);
+            scatter_points = Buffer<SurfacePoint>(use_gpu, max_bounces * num_pixels);
+            edge_scatter_points = Buffer<SurfacePoint>(use_gpu, 2 * num_pixels);
 
             nee_int_rays = Buffer<Ray>(use_gpu, max_bounces * num_pixels);
             nee_int_isects = Buffer<Intersection>(use_gpu, max_bounces * num_pixels);
@@ -99,6 +97,10 @@ struct PathBuffer {
             edge_nee_int_isects = Buffer<Intersection>(use_gpu, 2 * num_pixels);
             edge_nee_int_points = Buffer<SurfacePoint>(use_gpu, 2 * num_pixels);
             edge_nee_int_medium_ids = Buffer<int>(use_gpu, 2 * num_pixels);
+            scatter_int_rays = Buffer<Ray>(use_gpu, max_bounces * num_pixels);
+            edge_scatter_int_rays = Buffer<Ray>(use_gpu, max_bounces * num_pixels);
+            scatter_int_medium_ids = Buffer<int>(use_gpu, max_bounces * num_pixels);
+            edge_scatter_int_medium_ids = Buffer<int>(use_gpu, max_bounces * num_pixels);
         }
 
         // OptiX buffers
@@ -110,13 +112,12 @@ struct PathBuffer {
         d_next_rays = Buffer<DRay>(use_gpu, num_pixels);
         d_next_ray_differentials = Buffer<RayDifferential>(use_gpu, num_pixels);
         d_next_points = Buffer<SurfacePoint>(use_gpu, num_pixels);
-        d_directional_ray_differentials = Buffer<RayDifferential>(use_gpu, num_pixels);
+        d_scatter_ray_differentials = Buffer<RayDifferential>(use_gpu, num_pixels);
         d_throughputs = Buffer<Vector3>(use_gpu, num_pixels);
         d_rays = Buffer<DRay>(use_gpu, num_pixels);
         d_ray_differentials = Buffer<RayDifferential>(use_gpu, num_pixels);
         d_points = Buffer<SurfacePoint>(use_gpu, num_pixels);
         d_path_transmittances = Buffer<Vector3>(use_gpu, num_pixels);
-        d_directional_transmittances = Buffer<Vector3>(use_gpu, num_pixels);
 
         primary_edge_samples = Buffer<PrimaryEdgeSample>(use_gpu, num_pixels);
         secondary_edge_samples = Buffer<SecondaryEdgeSample>(use_gpu, num_pixels);
@@ -139,7 +140,7 @@ struct PathBuffer {
     Buffer<Ray> rays, nee_rays;
     Buffer<Ray> edge_rays, edge_nee_rays;
     Buffer<RayDifferential> primary_ray_differentials;
-    Buffer<RayDifferential> ray_differentials, directional_ray_differentials;
+    Buffer<RayDifferential> ray_differentials, scatter_ray_differentials;
     Buffer<RayDifferential> edge_ray_differentials;
     Buffer<int> primary_active_pixels, active_pixels, edge_active_pixels;
     Buffer<Intersection> surface_isects, edge_surface_isects;
@@ -154,14 +155,16 @@ struct PathBuffer {
     Buffer<MediumSample> medium_samples;
     Buffer<int> medium_ids, edge_medium_ids;
     Buffer<Real> medium_distances, edge_medium_distances;
-    Buffer<Vector3> path_transmittances, directional_transmittances;
-    Buffer<Vector3> edge_path_transmittances, edge_directional_transmittances;
-    Buffer<Intersection> directional_isects, edge_directional_isects;
-    Buffer<SurfacePoint> directional_points, edge_directional_points;
+    Buffer<Vector3> path_transmittances;
+    Buffer<Vector3> edge_path_transmittances;
+    Buffer<Intersection> scatter_isects, edge_scatter_isects;
+    Buffer<SurfacePoint> scatter_points, edge_scatter_points;
     Buffer<Ray> nee_int_rays, edge_nee_int_rays;
     Buffer<Intersection> nee_int_isects, edge_nee_int_isects;
     Buffer<SurfacePoint> nee_int_points, edge_nee_int_points;
     Buffer<int> nee_int_medium_ids, edge_nee_int_medium_ids;
+    Buffer<Ray> scatter_int_rays, edge_scatter_int_rays;
+    Buffer<int> scatter_int_medium_ids, edge_scatter_int_medium_ids;
 
     // OptiX related
     Buffer<OptiXRay> optix_rays;
@@ -172,13 +175,12 @@ struct PathBuffer {
     Buffer<DRay> d_next_rays;
     Buffer<RayDifferential> d_next_ray_differentials;
     Buffer<SurfacePoint> d_next_points;
-    Buffer<RayDifferential> d_directional_ray_differentials;
+    Buffer<RayDifferential> d_scatter_ray_differentials;
     Buffer<Vector3> d_throughputs;
     Buffer<DRay> d_rays;
     Buffer<RayDifferential> d_ray_differentials;
     Buffer<SurfacePoint> d_points;
     Buffer<Vector3> d_path_transmittances;
-    Buffer<Vector3> d_directional_transmittances;
 
     // Edge sampling related
     Buffer<PrimaryEdgeSample> primary_edge_samples;
@@ -256,10 +258,6 @@ void render(const Scene &scene,
                            scene.mediums.size() > 0,
                            scene.use_gpu,
                            channel_info);
-    TransmittanceBuffer tr_buffer;
-    if (scene.mediums.size() > 0) {
-        tr_buffer = TransmittanceBuffer(num_pixels, scene.use_gpu);
-    }
 
     auto num_active_pixels = std::vector<int>((max_bounces + 1) * num_pixels, 0);
     std::unique_ptr<Sampler> sampler, edge_sampler;
@@ -372,8 +370,8 @@ void render(const Scene &scene,
             auto incoming_rays = path_buffer.rays.view(depth * num_pixels, num_pixels);
             auto incoming_ray_differentials =
                 path_buffer.ray_differentials.view(depth * num_pixels, num_pixels);
-            auto directional_ray_differentials =
-                path_buffer.directional_ray_differentials.view(depth * num_pixels, num_pixels);
+            auto scatter_ray_differentials =
+                path_buffer.scatter_ray_differentials.view(depth * num_pixels, num_pixels);
             auto nee_rays = path_buffer.nee_rays.view(depth * num_pixels, num_pixels);
             auto next_rays = path_buffer.rays.view((depth + 1) * num_pixels, num_pixels);
             auto next_ray_differentials =
@@ -394,37 +392,38 @@ void render(const Scene &scene,
             // Buffers for participating media rendering.
             auto medium_ids = BufferView<int>();
             auto medium_distances = BufferView<Real>();
-            auto directional_isects = next_isects;
-            auto directional_points = next_points;
+            auto scatter_isects = next_isects;
+            auto scatter_points = next_points;
             auto next_medium_ids = BufferView<int>();
             auto next_medium_distances = BufferView<Real>();
             auto path_transmittances = BufferView<Vector3>();
-            auto directional_transmittances = BufferView<Vector3>();
             auto nee_int_rays = BufferView<Ray>();
             auto nee_int_isects = BufferView<Intersection>();
             auto nee_int_points = BufferView<SurfacePoint>();
             auto nee_int_medium_ids = BufferView<int>();
+            auto scatter_int_rays = BufferView<Ray>();
+            auto scatter_int_medium_ids = BufferView<int>();
             if (scene.mediums.size() > 0) {
                 medium_ids = path_buffer.medium_ids.view(depth * num_pixels, num_pixels);
                 medium_distances = path_buffer.medium_distances.view(depth * num_pixels, num_pixels);
-                // In participating media directional isects & points
+                // In participating media scatter isects & points
                 // are not the same as next isects & points
                 // since rays penetrate through index-matched media
                 // when evaluating contribution w.r.t. light sources
-                directional_isects =
-                    path_buffer.directional_isects.view(depth * num_pixels, num_pixels);
-                directional_points =
-                    path_buffer.directional_points.view(depth * num_pixels, num_pixels);
+                scatter_isects =
+                    path_buffer.scatter_isects.view(depth * num_pixels, num_pixels);
+                scatter_points =
+                    path_buffer.scatter_points.view(depth * num_pixels, num_pixels);
                 next_medium_ids = path_buffer.medium_ids.view((depth + 1) * num_pixels, num_pixels);
                 next_medium_distances = path_buffer.medium_distances.view((depth + 1) * num_pixels, num_pixels);
                 path_transmittances =
                     path_buffer.path_transmittances.view(depth * num_pixels, num_pixels);
-                directional_transmittances =
-                    path_buffer.directional_transmittances.view(depth * num_pixels, num_pixels);
                 nee_int_rays = path_buffer.nee_int_rays.view(depth * num_pixels, num_pixels);
                 nee_int_isects = path_buffer.nee_int_isects.view(depth * num_pixels, num_pixels);
                 nee_int_points = path_buffer.nee_int_points.view(depth * num_pixels, num_pixels);
                 nee_int_medium_ids = path_buffer.nee_int_medium_ids.view(depth * num_pixels, num_pixels);
+                scatter_int_rays = path_buffer.scatter_int_rays.view(depth * num_pixels, num_pixels);
+                scatter_int_medium_ids = path_buffer.scatter_int_medium_ids.view(depth * num_pixels, num_pixels);
             }
 
             if (scene.mediums.size() > 0) {
@@ -457,21 +456,21 @@ void render(const Scene &scene,
             if (scene.mediums.size() > 0) {
                 // Evaluate transmittance between the shading point and
                 // the point on light sources
-                trace_transmittance_rays(scene,
-                                         active_pixels,
-                                         nee_rays,
-                                         medium_ids,
-                                         light_isects,
-                                         light_points,
-                                         nee_int_rays,
-                                         nee_int_isects,
-                                         nee_int_points,
-                                         nee_int_medium_ids,
-                                         thrust_alloc,
-                                         optix_rays,
-                                         optix_hits);
+                trace_nee_transmittance_rays(scene,
+                                             active_pixels,
+                                             nee_rays,
+                                             medium_ids,
+                                             light_isects,
+                                             light_points,
+                                             nee_int_rays,
+                                             nee_int_isects,
+                                             nee_int_points,
+                                             nee_int_medium_ids,
+                                             thrust_alloc,
+                                             optix_rays,
+                                             optix_hits);
             } else {
-                // evaluate_transmittance is expensive,
+                // trace_nee_transmittance_rays is expensive,
                 // perform shadow ray occlusion if there is no
                 // medium in the scene
                 occluded(scene, active_pixels, nee_rays, optix_rays, optix_hits);
@@ -491,28 +490,28 @@ void render(const Scene &scene,
                 directional_samples,
                 min_roughness,
                 next_rays,
-                directional_ray_differentials,
+                scatter_ray_differentials,
                 next_min_roughness);
             if (scene.mediums.size() > 0) {
-                // For participating media, directional sampling
+                // For participating media, scatter sampling
                 // can hit a light source through indexed matching media.
                 // Therefore we need an intersection loop that continues
                 // until it hits an opaque surface or a light source
                 // We store the first intersections in "next_isects" and "next_points"
-                // We store the last intersections in "directional_isects" and "directional_isects"
-                intersect_and_eval_transmittance(
+                // We store the last intersections in "scatter_isects" and "scatter_isects"
+                trace_scatter_transmittance_rays(
                     scene,
                     active_pixels,
-                    medium_ids,
                     next_rays,
-                    directional_ray_differentials,
+                    scatter_ray_differentials,
+                    medium_ids,
+                    scatter_isects,
+                    scatter_points,
+                    scatter_int_rays,
+                    next_ray_differentials,
                     next_isects,
                     next_points,
-                    next_ray_differentials,
-                    directional_isects,
-                    directional_points,
-                    directional_transmittances,
-                    tr_buffer,
+                    scatter_int_medium_ids,
                     thrust_alloc,
                     optix_rays,
                     optix_hits);
@@ -521,7 +520,7 @@ void render(const Scene &scene,
                 intersect(scene,
                           active_pixels,
                           next_rays,
-                          directional_ray_differentials,
+                          scatter_ray_differentials,
                           next_isects,
                           next_points,
                           next_ray_differentials,
@@ -535,7 +534,6 @@ void render(const Scene &scene,
                 active_pixels,
                 throughputs,
                 path_transmittances,
-                directional_transmittances,
                 // Information of the shading point
                 incoming_rays,
                 surface_isects,
@@ -551,9 +549,14 @@ void render(const Scene &scene,
                 nee_int_rays,
                 nee_int_medium_ids,
                 // Information of scattering
-                directional_isects,
-                directional_points,
+                scatter_isects,
+                scatter_points,
                 next_rays,
+                next_isects,
+                next_points,
+                scatter_int_rays,
+                scatter_int_medium_ids,
+                // Misc
                 min_roughness,
                 Real(1) / options.num_samples,
                 channel_info,
@@ -630,8 +633,8 @@ void render(const Scene &scene,
                 auto incoming_ray_differentials =
                     path_buffer.ray_differentials.view(depth * num_pixels, num_pixels);
                 auto next_rays = path_buffer.rays.view((depth + 1) * num_pixels, num_pixels);
-                auto directional_ray_differentials =
-                    path_buffer.directional_ray_differentials.view(depth * num_pixels, num_pixels);
+                auto scatter_ray_differentials =
+                    path_buffer.scatter_ray_differentials.view(depth * num_pixels, num_pixels);
                 auto nee_rays = path_buffer.nee_rays.view(depth * num_pixels, num_pixels);
                 auto light_samples = path_buffer.light_samples.view(
                     depth * num_pixels, num_pixels);
@@ -661,40 +664,35 @@ void render(const Scene &scene,
                     (depth + 1) * num_pixels, num_pixels);
                 auto next_points = path_buffer.surface_points.view(
                     (depth + 1) * num_pixels, num_pixels);
-                auto directional_isects = next_isects;
-                auto directional_points = next_points;
+                auto scatter_isects = next_isects;
+                auto scatter_points = next_points;
                 if (scene.mediums.size() > 0) {
-                    // In participating media directional isects & points
+                    // In participating media scatter isects & points
                     // are not the same as next isects & points
                     // since rays penetrate through index-matched media
                     // when evaluating contribution w.r.t. light sources
-                    directional_isects =
-                        path_buffer.directional_isects.view(depth * num_pixels, num_pixels);
-                    directional_points =
-                        path_buffer.directional_points.view(depth * num_pixels, num_pixels);
+                    scatter_isects =
+                        path_buffer.scatter_isects.view(depth * num_pixels, num_pixels);
+                    scatter_points =
+                        path_buffer.scatter_points.view(depth * num_pixels, num_pixels);
                 }
                 auto min_roughness =
                     path_buffer.min_roughness.view(depth * num_pixels, num_pixels);
                 auto path_transmittances = BufferView<Vector3>();
-                auto directional_transmittances = BufferView<Vector3>();
                 if (scene.mediums.size() > 0) {
                     path_transmittances = 
                         path_buffer.path_transmittances.view(depth * num_pixels, num_pixels);
-                    directional_transmittances =
-                        path_buffer.directional_transmittances.view(depth * num_pixels, num_pixels);
                 }
 
                 auto d_throughputs = path_buffer.d_throughputs.view(0, num_pixels);
                 auto d_rays = path_buffer.d_rays.view(0, num_pixels);
                 // auto d_ray_differentials = path_buffer.d_ray_differentials.view(0, num_pixels);
-                auto d_directional_ray_differentials =
-                    path_buffer.d_directional_ray_differentials.view(0, num_pixels);
+                auto d_scatter_ray_differentials =
+                    path_buffer.d_scatter_ray_differentials.view(0, num_pixels);
                 auto d_points = path_buffer.d_points.view(0, num_pixels);
                 auto d_path_transmittances = BufferView<Vector3>();
-                auto d_directional_transmittances = BufferView<Vector3>();
                 if (scene.mediums.size() > 0) {
                     d_path_transmittances = path_buffer.d_path_transmittances.view(0, num_pixels);
-                    d_directional_transmittances = path_buffer.d_directional_transmittances.view(0, num_pixels);
                 }
 
                 // Backpropagate path contribution
@@ -703,13 +701,12 @@ void render(const Scene &scene,
                     active_pixels,
                     throughputs,
                     path_transmittances,
-                    directional_transmittances,
                     incoming_rays,
                     light_samples, directional_samples,
                     surface_isects, surface_points,
                     medium_ids, medium_distances,
                     light_isects, light_points, nee_rays,
-                    directional_isects, directional_points, next_rays,
+                    scatter_isects, scatter_points, next_rays,
                     min_roughness,
                     Real(1) / options.num_samples, // weight
                     channel_info,
@@ -720,7 +717,6 @@ void render(const Scene &scene,
                     d_scene.get(),
                     d_throughputs,
                     d_path_transmittances,
-                    d_directional_transmittances,
                     d_rays,
                     d_points);
 
@@ -754,13 +750,13 @@ void render(const Scene &scene,
                     d_intersect(scene,
                                 active_pixels,
                                 next_rays,
-                                directional_ray_differentials,
+                                scatter_ray_differentials,
                                 next_isects,
                                 d_next_points,
                                 d_next_ray_differentials,
                                 d_scene.get(),
                                 d_next_rays,
-                                d_directional_ray_differentials);
+                                d_scatter_ray_differentials);
                 }
 
                 if (scene.use_secondary_edge_sampling) {
@@ -888,9 +884,9 @@ void render(const Scene &scene,
                             path_buffer.edge_ray_differentials.view(0, num_edge_samples);
                         auto nee_rays = path_buffer.edge_nee_rays.view(0, num_edge_samples);
                         auto next_rays = path_buffer.edge_rays.view(next_buffer_beg, num_edge_samples);
-                        auto bsdf_isects = path_buffer.edge_surface_isects.view(
+                        auto next_isects = path_buffer.edge_surface_isects.view(
                             next_buffer_beg, num_edge_samples);
-                        auto bsdf_points = path_buffer.edge_surface_points.view(
+                        auto next_points = path_buffer.edge_surface_points.view(
                             next_buffer_beg, num_edge_samples);
                         const auto throughputs = path_buffer.edge_throughputs.view(
                             main_buffer_beg, num_edge_samples);
@@ -907,11 +903,19 @@ void render(const Scene &scene,
                             path_transmittances =
                                 path_buffer.edge_path_transmittances.view(0, num_edge_samples);
                         }
+                        auto scatter_isects = next_isects;
+                        auto scatter_points = next_points;
                         auto nee_int_rays = BufferView<Ray>();
                         auto nee_int_isects = BufferView<Intersection>();
                         auto nee_int_points = BufferView<SurfacePoint>();
                         auto nee_int_medium_ids = BufferView<int>();
+                        auto scatter_int_rays = BufferView<Ray>();
+                        auto scatter_int_medium_ids = BufferView<int>();
                         if (scene.mediums.size() > 0) {
+                            scatter_isects =
+                                path_buffer.edge_scatter_isects.view(0, num_edge_samples);
+                            scatter_points =
+                                path_buffer.edge_scatter_points.view(0, num_edge_samples);
                             nee_int_rays =
                                 path_buffer.edge_nee_int_rays.view(0, num_edge_samples);
                             nee_int_isects =
@@ -920,6 +924,10 @@ void render(const Scene &scene,
                                 path_buffer.edge_nee_int_points.view(0, num_edge_samples);
                             nee_int_medium_ids =
                                 path_buffer.edge_nee_int_medium_ids.view(0, num_edge_samples);
+                            scatter_int_rays =
+                                path_buffer.edge_scatter_int_rays.view(0, num_edge_samples);
+                            scatter_int_medium_ids =
+                                path_buffer.edge_scatter_int_medium_ids.view(0, num_edge_samples);
                         }
 
                         // Sample points on lights
@@ -1006,8 +1014,8 @@ void render(const Scene &scene,
                                   active_pixels,
                                   next_rays,
                                   ray_differentials,
-                                  bsdf_isects,
-                                  bsdf_points,
+                                  next_isects,
+                                  next_points,
                                   ray_differentials,
                                   optix_rays,
                                   optix_hits);
@@ -1018,7 +1026,6 @@ void render(const Scene &scene,
                             active_pixels,
                             throughputs,
                             path_transmittances,
-                            directional_transmittances,
                             // Shading point information
                             incoming_rays,
                             surface_isects,
@@ -1034,9 +1041,13 @@ void render(const Scene &scene,
                             nee_int_rays,
                             nee_int_medium_ids,
                             // Scattering information
-                            bsdf_isects,
-                            bsdf_points,
+                            scatter_isects,
+                            scatter_points,
                             next_rays,
+                            next_isects,
+                            next_points,
+                            scatter_int_rays,
+                            scatter_int_medium_ids,
                             // Miscs
                             edge_min_roughness,
                             Real(1) / options.num_samples,
@@ -1049,7 +1060,7 @@ void render(const Scene &scene,
                         // Stream compaction: remove invalid bsdf intersections
                         // active_pixels -> next_active_pixels
                         update_active_pixels(active_pixels,
-                                             bsdf_isects,
+                                             next_isects,
                                              medium_ids,
                                              next_active_pixels,
                                              scene.use_gpu);
@@ -1146,20 +1157,6 @@ void render(const Scene &scene,
                 auto active_pixels = path_buffer.edge_active_pixels.view(0, 2 * num_pixels);
                 auto edge_contribs = path_buffer.edge_contribs.view(0, 2 * num_pixels);
                 auto edge_min_roughness = path_buffer.edge_min_roughness.view(0, 2 * num_pixels);
-                auto nee_int_rays = BufferView<Ray>();
-                auto nee_int_isects = BufferView<Intersection>();
-                auto nee_int_points = BufferView<SurfacePoint>();
-                auto nee_int_medium_ids = BufferView<int>();
-                if (scene.mediums.size() > 0) {
-                    nee_int_rays =
-                        path_buffer.edge_nee_int_rays.view(0, 2 * num_pixels);
-                    nee_int_isects =
-                        path_buffer.edge_nee_int_isects.view(0, 2 * num_pixels);
-                    nee_int_points =
-                        path_buffer.edge_nee_int_points.view(0, 2 * num_pixels);
-                    nee_int_medium_ids =
-                        path_buffer.edge_nee_int_medium_ids.view(0, 2 * num_pixels);
-                }
 
                 // Initialize edge contribution
                 DISPATCH(scene.use_gpu, thrust::fill,
@@ -1240,9 +1237,9 @@ void render(const Scene &scene,
                     auto ray_differentials =
                         path_buffer.edge_ray_differentials.view(0, 2 * num_pixels);
                     auto next_rays = path_buffer.edge_rays.view(next_buffer_beg, 2 * num_pixels);
-                    auto bsdf_isects = path_buffer.edge_surface_isects.view(
+                    auto next_isects = path_buffer.edge_surface_isects.view(
                         next_buffer_beg, 2 * num_pixels);
-                    auto bsdf_points = path_buffer.edge_surface_points.view(
+                    auto next_points = path_buffer.edge_surface_points.view(
                         next_buffer_beg, 2 * num_pixels);
                     auto next_medium_ids = BufferView<int>();
                     auto next_medium_distances = BufferView<Real>();
@@ -1263,10 +1260,34 @@ void render(const Scene &scene,
                     auto edge_next_min_roughness =
                         path_buffer.edge_min_roughness.view(next_buffer_beg, 2 * num_pixels);
                     auto path_transmittances = BufferView<Vector3>();
-                    auto directional_transmittances = BufferView<Vector3>();
                     if (scene.mediums.size() > 0) {
                         path_transmittances = path_buffer.edge_path_transmittances.view(0, 2 * num_pixels);
-                        directional_transmittances = path_buffer.edge_directional_transmittances.view(0, 2 * num_pixels);
+                    }
+                    auto scatter_isects = next_isects;
+                    auto scatter_points = next_points;
+                    auto nee_int_rays = BufferView<Ray>();
+                    auto nee_int_isects = BufferView<Intersection>();
+                    auto nee_int_points = BufferView<SurfacePoint>();
+                    auto nee_int_medium_ids = BufferView<int>();
+                    auto scatter_int_rays = BufferView<Ray>();
+                    auto scatter_int_medium_ids = BufferView<int>();
+                    if (scene.mediums.size() > 0) {
+                        scatter_isects =
+                            path_buffer.edge_scatter_isects.view(0, 2 * num_pixels);
+                        scatter_points =
+                            path_buffer.edge_scatter_points.view(0, 2 * num_pixels);
+                        nee_int_rays =
+                            path_buffer.edge_nee_int_rays.view(0, 2 * num_pixels);
+                        nee_int_isects =
+                            path_buffer.edge_nee_int_isects.view(0, 2 * num_pixels);
+                        nee_int_points =
+                            path_buffer.edge_nee_int_points.view(0, 2 * num_pixels);
+                        nee_int_medium_ids =
+                            path_buffer.edge_nee_int_medium_ids.view(0, 2 * num_pixels);
+                        scatter_int_rays =
+                            path_buffer.edge_scatter_int_rays.view(0, 2 * num_pixels);
+                        scatter_int_medium_ids =
+                            path_buffer.edge_scatter_int_medium_ids.view(0, 2 * num_pixels);
                     }
 
                     // Sample points on lights
@@ -1310,8 +1331,8 @@ void render(const Scene &scene,
                               active_pixels,
                               next_rays,
                               ray_differentials,
-                              bsdf_isects,
-                              bsdf_points,
+                              next_isects,
+                              next_points,
                               ray_differentials,
                               optix_rays,
                               optix_hits);
@@ -1321,12 +1342,13 @@ void render(const Scene &scene,
                         active_pixels,
                         throughputs,
                         path_transmittances,
-                        directional_transmittances,
+                        // Shading point info
                         incoming_rays,
                         surface_isects,
                         surface_points,
                         medium_ids,
                         medium_distances,
+                        // NEE info
                         light_isects,
                         light_points,
                         nee_rays,
@@ -1334,9 +1356,15 @@ void render(const Scene &scene,
                         nee_int_points,
                         nee_int_rays,
                         nee_int_medium_ids,
-                        bsdf_isects,
-                        bsdf_points,
+                        // Scattering info
+                        scatter_isects,
+                        scatter_points,
                         next_rays,
+                        next_isects,
+                        next_points,
+                        scatter_int_rays,
+                        scatter_int_medium_ids,
+                        // Misc
                         edge_min_roughness,
                         Real(1) / options.num_samples,
                         channel_info,
@@ -1347,7 +1375,7 @@ void render(const Scene &scene,
                     // Stream compaction: remove invalid bsdf intersections
                     // active_pixels -> next_active_pixels
                     update_active_pixels(active_pixels,
-                                         bsdf_isects,
+                                         next_isects,
                                          next_medium_ids,
                                          next_active_pixels,
                                          scene.use_gpu);
