@@ -122,14 +122,24 @@ void sample_medium(const Scene &scene,
                    BufferView<Vector3> transmittances);
 
 // Evaluate the transmittance between two points.
-// Skip over all transmissive objects without
-// a refractive boundary
+// For sampling efficiency, we want to skip through
+// all participating media boundaries between
+// the two points with IOR = 1.
+// However this creates thread divergences and unbounded memory requirement.
+// Instead we skip at most *one* boundary with IOR=1.
+// The arguments with "int_" are the intermediate information
+// we store when skipping through the boundary.
 void evaluate_transmittance(const Scene &scene,
                             const BufferView<int> &active_pixels,
                             const BufferView<Ray> &outgoing_rays,
                             const BufferView<int> &medium_ids,
+                            const BufferView<Intersection> &light_isects,
+                            const BufferView<SurfacePoint> &light_points,
+                            BufferView<Ray> int_rays,
+                            BufferView<Intersection> int_isects,
+                            BufferView<SurfacePoint> int_points,
+                            BufferView<int> int_medium_ids,
                             BufferView<Vector3> transmittances,
-                            TransmittanceBuffer &tr_buffer,
                             ThrustCachedAllocator &thrust_alloc,
                             BufferView<OptiXRay> optix_rays,
                             BufferView<OptiXHit> optix_hits);
@@ -153,6 +163,22 @@ void intersect_and_eval_transmittance(const Scene &scene,
                                       ThrustCachedAllocator &thrust_alloc,
                                       BufferView<OptiXRay> optix_rays,
                                       BufferView<OptiXHit> optix_hits);
+
+void d_intersect_and_eval_transmittance(const Scene &scene,
+                                        const BufferView<int> &active_pixels,
+                                        const BufferView<int> &medium_ids,
+                                        const BufferView<Ray> &outgoing_rays,
+                                        const BufferView<RayDifferential> &ray_differentials,
+                                        BufferView<Intersection> first_intersections,
+                                        BufferView<SurfacePoint> first_points,
+                                        BufferView<RayDifferential> new_ray_differentials,
+                                        BufferView<Intersection> last_intersections,
+                                        BufferView<SurfacePoint> last_points,
+                                        BufferView<Vector3> transmittances,
+                                        TransmittanceBuffer &tr_buffer,
+                                        ThrustCachedAllocator &thrust_alloc,
+                                        BufferView<OptiXRay> optix_rays,
+                                        BufferView<OptiXHit> optix_hits);
 
 // // Backpropagate the transmittance between two points.
 // void d_evaluate_transmittance(const Scene &scene,

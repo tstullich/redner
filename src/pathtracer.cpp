@@ -92,6 +92,15 @@ struct PathBuffer {
             edge_directional_isects = Buffer<Intersection>(use_gpu, 2 * num_pixels);
             directional_points = Buffer<SurfacePoint>(use_gpu, max_bounces * num_pixels);
             edge_directional_points = Buffer<SurfacePoint>(use_gpu, 2 * num_pixels);
+
+            nee_int_rays = Buffer<Ray>(use_gpu, max_bounces * num_pixels);
+            nee_int_isects = Buffer<Intersection>(use_gpu, max_bounces * num_pixels);
+            nee_int_points = Buffer<SurfacePoint>(use_gpu, max_bounces * num_pixels);
+            nee_int_medium_ids = Buffer<int>(use_gpu, max_bounces * num_pixels);
+            edge_nee_int_rays = Buffer<Ray>(use_gpu, 2 * num_pixels);
+            edge_nee_int_isects = Buffer<Intersection>(use_gpu, 2 * num_pixels);
+            edge_nee_int_points = Buffer<SurfacePoint>(use_gpu, 2 * num_pixels);
+            edge_nee_int_medium_ids = Buffer<int>(use_gpu, 2 * num_pixels);
         }
 
         // OptiX buffers
@@ -152,6 +161,10 @@ struct PathBuffer {
     Buffer<Vector3> edge_path_transmittances, edge_nee_transmittances, edge_directional_transmittances;
     Buffer<Intersection> directional_isects, edge_directional_isects;
     Buffer<SurfacePoint> directional_points, edge_directional_points;
+    Buffer<Ray> nee_int_rays, edge_nee_int_rays;
+    Buffer<Intersection> nee_int_isects, edge_nee_int_isects;
+    Buffer<SurfacePoint> nee_int_points, edge_nee_int_points;
+    Buffer<int> nee_int_medium_ids, edge_nee_int_medium_ids;
 
     // OptiX related
     Buffer<OptiXRay> optix_rays;
@@ -448,12 +461,21 @@ void render(const Scene &scene,
             if (scene.mediums.size() > 0) {
                 // Evaluate transmittance between the shading point and
                 // the point on light sources
+                auto nee_int_rays = path_buffer.nee_int_rays.view(depth * num_pixels, num_pixels);
+                auto nee_int_isects = path_buffer.nee_int_isects.view(depth * num_pixels, num_pixels);
+                auto nee_int_points = path_buffer.nee_int_points.view(depth * num_pixels, num_pixels);
+                auto nee_int_medium_ids = path_buffer.nee_int_medium_ids.view(depth * num_pixels, num_pixels);
                 evaluate_transmittance(scene,
                                        active_pixels,
                                        nee_rays,
                                        medium_ids,
+                                       light_isects,
+                                       light_points,
+                                       nee_int_rays,
+                                       nee_int_isects,
+                                       nee_int_points,
+                                       nee_int_medium_ids,
                                        nee_transmittances,
-                                       tr_buffer,
                                        thrust_alloc,
                                        optix_rays,
                                        optix_hits);
@@ -938,14 +960,28 @@ void render(const Scene &scene,
                             tmp_directional_samples.begin(), directional_samples.begin()},
                             tmp_directional_samples.size(), scene.use_gpu);
 
-                        // Transmittance is set to 0 if occluded
                         if (scene.mediums.size() > 0) {
+                            // Evaluate transmittance between the shading point and
+                            // the point on light sources
+                            auto nee_int_rays =
+                                path_buffer.edge_nee_int_rays.view(0, num_edge_samples);
+                            auto nee_int_isects =
+                                path_buffer.edge_nee_int_isects.view(0, num_edge_samples);
+                            auto nee_int_points =
+                                path_buffer.edge_nee_int_points.view(0, num_edge_samples);
+                            auto nee_int_medium_ids =
+                                path_buffer.edge_nee_int_medium_ids.view(0, num_edge_samples);
                             evaluate_transmittance(scene,
                                                    active_pixels,
                                                    nee_rays,
                                                    medium_ids,
+                                                   light_isects,
+                                                   light_points,
+                                                   nee_int_rays,
+                                                   nee_int_isects,
+                                                   nee_int_points,
+                                                   nee_int_medium_ids,
                                                    nee_transmittances,
-                                                   tr_buffer,
                                                    thrust_alloc,
                                                    optix_rays,
                                                    optix_hits);

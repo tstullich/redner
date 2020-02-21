@@ -383,124 +383,179 @@ void d_transmittance(const Medium &medium,
     }
 }
 
+struct transmittance_shadow_ray_spawner {
+    DEVICE void operator()(int idx) {
+        auto pixel_id = active_pixels[idx];
+        const auto &int_isect = int_isects[pixel_id];
+        if (int_isect.valid()) {
+            const auto &shape = shapes[int_isect.shape_id];
+            if (shape.material_id != -1) {
+                // Hit an opaque object
+                // Spawn an invalid ray
+                shadow_rays[pixel_id] = Ray{
+                    Vector3{0, 0, 0}, Vector3{0, 0, 0},
+                };
+                int_medium_ids[pixel_id] = -1;
+            } else {
+                // Hit a transparent object, advance the transmittance ray
+                auto p0 = int_points[pixel_id].position;
+                auto p1 = light_points[pixel_id].position;
+                shadow_rays[pixel_id] = Ray{
+                    p0, // org
+                    normalize(p1 - p0), // dir
+                    Real(1e-3), // tmin
+                    (1 - 1e-3f) * distance(p0, p1), // tmax
+                };
+                // Update medium id
+                const auto &p = int_points[pixel_id];
+                const auto &shape = shapes[int_isect.shape_id];
+                if (dot(shadow_rays[pixel_id].dir, p.geom_normal) < 0) {
+                    int_medium_ids[pixel_id] = shape.exterior_medium_id;
+                } else {
+                    int_medium_ids[pixel_id] = shape.interior_medium_id;
+                }
+            }
+        } else {
+            // Hit nothing -- don't need to trace shadow ray
+            shadow_rays[pixel_id] = Ray{
+                Vector3{0, 0, 0}, Vector3{0, 0, 0},
+            };
+            int_medium_ids[pixel_id] = -1;
+        }
+    }
+
+    const Shape *shapes;
+    const int *active_pixels;
+    const Intersection *int_isects;
+    const SurfacePoint *int_points;
+    const SurfacePoint *light_points;
+    int *int_medium_ids;
+    Ray *shadow_rays;
+};
+
 struct transmittance_evaluator {
     DEVICE void operator()(int idx) {
         auto pixel_id = active_pixels[idx];
-        auto &transmittance_ray = transmittance_rays[pixel_id];
-        const auto &medium = mediums[medium_ids[pixel_id]];
-        transmittances[pixel_id] *=
-            transmittance(medium, transmittance_ray.tmax);
-        const auto &isect = surface_isects[pixel_id];
-        if (isect.valid()) {
-            const auto &p = surface_points[pixel_id];
-            const auto &shape = shapes[isect.shape_id];
-            // Update medium id
-            if (dot(transmittance_ray.dir, p.geom_normal) < 0) {
-                medium_ids[pixel_id] = shape.exterior_medium_id;
-            } else {
-                medium_ids[pixel_id] = shape.interior_medium_id;
-            }
+        auto &tr = transmittances[pixel_id];
+        const auto &int_isect = int_isects[pixel_id];
+        if (int_isect.valid()) {
+            const auto &shape = shapes[int_isect.shape_id];
             if (shape.material_id != -1) {
-                // Hit an opaque object, occluded
-                transmittances[pixel_id] = Vector3{0, 0, 0};
-                // Invalidate intersection: don't need to trace anymore
-                surface_isects[pixel_id].shape_id = -1;
-                medium_ids[pixel_id] = -1;
+                // Hit opaque object, transmittance = 0
+                tr = Vector3{0, 0, 0};
             } else {
-                // Hit a transparent object, advance the transmittance ray
-                auto target = transmittance_ray.org +
-                              transmittance_ray.dir * transmittance_ray.tmax;
-                transmittance_ray.org = p.position;
-                transmittance_ray.tmax = distance(target, p.position);
+                // Hit media bounary
+                if (int_rays[pixel_id].tmax > 0) {
+                    auto tr0 = Vector3{1, 1, 1};
+                    auto tr1 = Vector3{1, 1, 1};
+                    if (medium_ids[pixel_id] != -1) {
+                        const auto &medium = mediums[medium_ids[pixel_id]];
+                        auto dist = distance(outgoing_rays[pixel_id].org,
+                                             int_points[pixel_id].position);
+                        tr0 = transmittance(medium, dist);
+                    }
+                    if (int_medium_ids[pixel_id] != -1) {
+                        const auto &medium = mediums[int_medium_ids[pixel_id]];
+                        auto dist = distance(int_points[pixel_id].position,
+                                             light_points[pixel_id].position);
+                        tr1 = transmittance(medium, dist);
+                    }
+                    tr = tr0 * tr1;
+                } else {
+                    // Block by something
+                    tr = Vector3{0, 0, 0};
+                }
             }
         } else {
-            // Hit nothing, we've safely reached the target
-            // Invalidate the intersection: don't need to trace anymore
-            surface_isects[pixel_id].shape_id = -1;
-            medium_ids[pixel_id] = -1;
+            if (medium_ids[pixel_id] != -1) {
+                const auto &medium = mediums[medium_ids[pixel_id]];
+                auto dist = distance(outgoing_rays[pixel_id].org,
+                                     light_points[pixel_id].position);
+                tr = transmittance(medium, dist);
+            } else {
+                // vaccum
+                tr = Vector3{1, 1, 1};
+            }
         }
     }
 
     const Shape *shapes;
     const Medium *mediums;
     const int *active_pixels;
-    const SurfacePoint *surface_points;
-    Intersection *surface_isects;
-    Ray *transmittance_rays;
-    int *medium_ids;
+    const Ray *outgoing_rays;
+    const Ray *int_rays;
+    const Intersection *int_isects;
+    const SurfacePoint *int_points;
+    const Intersection *light_isects;
+    const SurfacePoint *light_points;
+    const int *medium_ids;
+    const int *int_medium_ids;
     Vector3 *transmittances;
 };
 
+// Evaluate the transmittance between two points.
+// For sampling efficiency, we want to skip through
+// all participating media boundaries between
+// the two points with IOR = 1.
+// However this creates thread divergences and unbounded memory requirement.
+// Instead we skip at most *one* boundary with IOR=1.
+// The arguments with "int_" are the intermediate information
+// we store when skipping through the boundary.
 void evaluate_transmittance(const Scene &scene,
                             const BufferView<int> &active_pixels,
                             const BufferView<Ray> &outgoing_rays,
                             const BufferView<int> &medium_ids,
+                            const BufferView<Intersection> &light_isects,
+                            const BufferView<SurfacePoint> &light_points,
+                            BufferView<Ray> int_rays,
+                            BufferView<Intersection> int_isects,
+                            BufferView<SurfacePoint> int_points,
+                            BufferView<int> int_medium_ids,
                             BufferView<Vector3> transmittances,
-                            TransmittanceBuffer &tr_buffer,
                             ThrustCachedAllocator &thrust_alloc,
                             BufferView<OptiXRay> optix_rays,
                             BufferView<OptiXHit> optix_hits) {
-    // Evaluate the transmittance between two points
-    // To do this we need to find all the participating media boundaries between
-    // the two points with IOR = 1. 
-    // This means that we want to go through all surfaces with material_id = -1,
-    // and stop at an opaque surface.
-
-    auto transmittance_active_pixels = 
-        tr_buffer.active_pixels.view(0, active_pixels.size());
-    auto transmittance_rays =
-        tr_buffer.rays.view(0, outgoing_rays.size());
-    auto transmittance_isects =
-        tr_buffer.surface_isects.view(0, outgoing_rays.size());
-    auto transmittance_points =
-        tr_buffer.surface_points.view(0, outgoing_rays.size());
-    auto transmittance_medium_ids =
-        tr_buffer.medium_ids.view(0, outgoing_rays.size());
-    // Copy the active pixels
-    DISPATCH(scene.use_gpu, thrust::copy,
-        active_pixels.begin(), active_pixels.end(),
-        transmittance_active_pixels.begin());
-    // Copy outgoing rays to transmittance rays
+    // Copy outgoing rays to intermediate rays
     DISPATCH(scene.use_gpu, thrust::copy,
         outgoing_rays.begin(), outgoing_rays.end(),
-        transmittance_rays.begin());
-    // Copy the medium ids
-    DISPATCH(scene.use_gpu, thrust::copy,
-        medium_ids.begin(), medium_ids.end(),
-        transmittance_medium_ids.begin());
-    // Initiailize transmittance
-    DISPATCH(scene.use_gpu, thrust::fill,
-        transmittances.begin(), transmittances.end(), Vector3{1, 1, 1});
-    while (transmittance_active_pixels.size() > 0) {
-        // Intersect with the scene
-        intersect(scene,
-                  transmittance_active_pixels,
-                  transmittance_rays,
-                  BufferView<RayDifferential>(),
-                  transmittance_isects,
-                  transmittance_points,
-                  BufferView<RayDifferential>(),
-                  optix_rays,
-                  optix_hits);
-        // evaluate transmittance and update intersections
-        parallel_for(transmittance_evaluator{
-                scene.shapes.data,
-                scene.mediums.data,
-                active_pixels.begin(),
-                transmittance_points.begin(),
-                transmittance_isects.begin(),
-                transmittance_rays.begin(),
-                transmittance_medium_ids.begin(),
-                transmittances.begin()},
-            transmittance_active_pixels.size(), scene.use_gpu);
-        // Stream compaction: remove paths that didn't hit surfaces 
-        // or hit opaque surfaces
-        update_active_pixels(transmittance_active_pixels,
-                             transmittance_isects,
-                             transmittance_medium_ids,
-                             transmittance_active_pixels,
-                             scene.use_gpu);
-    }
+        int_rays.begin());
+    // Intersect with the scene
+    intersect(scene,
+              active_pixels,
+              int_rays,
+              BufferView<RayDifferential>(),
+              int_isects,
+              int_points,
+              BufferView<RayDifferential>(),
+              optix_rays,
+              optix_hits);
+    // Update medium ids and spawn transmittance shadow ray
+    parallel_for(transmittance_shadow_ray_spawner{
+            scene.shapes.data,
+            active_pixels.begin(),
+            int_isects.begin(),
+            int_points.begin(),
+            light_points.begin(),
+            int_medium_ids.begin(),
+            int_rays.begin()
+        }, active_pixels.size(), scene.use_gpu);
+    // Shadow ray
+    occluded(scene, active_pixels, int_rays, optix_rays, optix_hits);
+    // evaluate transmittances
+    parallel_for(transmittance_evaluator{
+            scene.shapes.data,
+            scene.mediums.data,
+            active_pixels.begin(),
+            outgoing_rays.begin(),
+            int_rays.begin(),
+            int_isects.begin(),
+            int_points.begin(),
+            light_isects.begin(),
+            light_points.begin(),
+            medium_ids.begin(),
+            int_medium_ids.begin(),
+            transmittances.begin()},
+        active_pixels.size(), scene.use_gpu);
 }
 
 struct emitter_transmittance_evaluator {
