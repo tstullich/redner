@@ -3,6 +3,63 @@
 #include "parallel.h"
 #include "scene.h"
 
+// Evaluate transmittance between two points, with potentially an
+// intermediate surface between them.
+DEVICE
+inline
+Vector3 eval_transmittance(const FlattenScene &scene,
+                           const Intersection &int_isect,
+                           const Ray &org_ray,
+                           const Ray &int_ray,
+                           const int medium_id,
+                           const int int_medium_id,
+                           const SurfacePoint &int_point,
+                           const Intersection &tgt_isect,
+                           const SurfacePoint &tgt_point) {
+    if (!tgt_isect.valid()) {
+        return Vector3{0, 0, 0};
+    }
+    if (int_isect.valid()) {
+        const auto &shape = scene.shapes[int_isect.shape_id];
+        if (shape.material_id != -1) {
+            // Hit opaque object, transmittance = 0
+            return Vector3{0, 0, 0};
+        } else {
+            // Hit media bounary
+            // tmax <= 0 means the ray is blocked
+            if (int_ray.tmax > 0) {
+                auto tr0 = Vector3{1, 1, 1};
+                auto tr1 = Vector3{1, 1, 1};
+                if (medium_id != -1) {
+                    const auto &medium = scene.mediums[medium_id];
+                    auto dist = distance(org_ray.org, int_point.position);
+                    tr0 = transmittance(medium, dist);
+                }
+                if (int_medium_id != -1) {
+                    const auto &medium = scene.mediums[int_medium_id];
+                    auto dist = distance(int_point.position,
+                                         tgt_point.position);
+                    tr1 = transmittance(medium, dist);
+                }
+                return tr0 * tr1;
+            } else {
+                // Block by something
+                return Vector3{0, 0, 0};
+            }
+        }
+    } else {
+        if (medium_id != -1) {
+            const auto &medium = scene.mediums[medium_id];
+            auto dist = distance(org_ray.org,
+                                 tgt_point.position);
+            return transmittance(medium, dist);
+        } else {
+            // vaccum
+            return Vector3{1, 1, 1};
+        }
+    }
+}
+
 struct path_contribs_accumulator {
     DEVICE void operator()(int idx) {
         auto pixel_id = active_pixels[idx];
@@ -82,9 +139,6 @@ struct path_contribs_accumulator {
                                     (mis_weight * geometry_term / pdf_nee) * bsdf_val * light_contrib;
                             }
                         }
-                        if (nee_transmittances != nullptr) {
-                            nee_contrib *= nee_transmittances[pixel_id];
-                        }
                     }
                 }
             } else if (scene.envmap != nullptr) {
@@ -118,10 +172,19 @@ struct path_contribs_accumulator {
                             nee_contrib = (mis_weight / pdf_nee) * bsdf_val * light_contrib;
                         }
                     }
-                    if (nee_transmittances != nullptr) {
-                        nee_contrib *= nee_transmittances[pixel_id];
-                    }
                 }
+            }
+            // Transmittance
+            if (medium_ids != nullptr) {
+                nee_contrib *= eval_transmittance(scene,
+                                                  light_int_isects[pixel_id],
+                                                  light_ray,
+                                                  light_int_rays[pixel_id],
+                                                  medium_ids[pixel_id],
+                                                  light_medium_ids[pixel_id],
+                                                  light_int_points[pixel_id],
+                                                  light_isect,
+                                                  light_point);
             }
         }
 
@@ -244,22 +307,30 @@ struct path_contribs_accumulator {
     const int *active_pixels;
     const Vector3 *throughputs;
     const Vector3 *path_transmittances;
-    const Vector3 *nee_transmittances;
     const Vector3 *directional_transmittances;
+    // Information of the shading point
     const Ray *incoming_rays;
     const Intersection *surface_isects;
     const SurfacePoint *surface_points;
     const int *medium_ids;
     const Real *medium_distances;
+    // Information of next event estimation
     const Intersection *light_isects;
     const SurfacePoint *light_points;
     const Ray *light_rays;
+    const Intersection *light_int_isects;
+    const SurfacePoint *light_int_points;
+    const Ray *light_int_rays;
+    const int *light_medium_ids;
+    // Information of scattering
     const Intersection *directional_isects;
     const SurfacePoint *directional_points;
     const Ray *directional_rays;
+    // Misc
     const Real *min_roughness;
     const Real weight;
     const ChannelInfo channel_info;
+    // Output
     Vector3 *next_throughputs;
     float *rendered_image;
     Real *edge_contribs;
@@ -326,7 +397,6 @@ struct d_path_contribs_accumulator {
         d_shading_point = SurfacePoint::zero();
         if (d_path_transmittances != nullptr) {
             d_path_transmittances[pixel_id] = Vector3{0, 0, 0};
-            d_nee_transmittances[pixel_id] = Vector3{0, 0, 0};
             d_directional_transmittances[pixel_id] = Vector3{0, 0, 0};
         }
 
@@ -369,10 +439,9 @@ struct d_path_contribs_accumulator {
                             auto pdf_phase = phase_function_pdf(
                                 phase_function, wi, wo) * geometry_term;
                             auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
-                            const auto &nee_transmittance = nee_transmittances[pixel_id];
                             auto nee_contrib =
                                 (mis_weight * geometry_term / pdf_nee) *
-                                light_contrib * phase_val * nee_transmittance;
+                                light_contrib * phase_val;
 
                             // path_contrib = path_transmittance * throughput * (nee_contrib + scatter_contrib)
                             auto d_nee_contrib = d_path_contrib * throughput * path_transmittance;
@@ -383,19 +452,16 @@ struct d_path_contribs_accumulator {
 
                             auto weight = mis_weight / pdf_nee;
                             // nee_contrib = (weight * geometry_term) *
-                            //                nee_transmittance * phase_val * light_contrib
+                            //                phase_val * light_contrib
                             // Ignore derivatives of MIS & PMF
                             auto d_geometry_term =
-                                weight * phase_val * sum(d_nee_contrib * nee_transmittance * light_contrib);
-                            assert(d_nee_transmittances != nullptr);
-                            d_nee_transmittances[pixel_id] += 
-                                weight * d_nee_contrib * phase_val * geometry_term * light_contrib;
+                                weight * phase_val * sum(d_nee_contrib * light_contrib);
                             auto d_light_contrib =
-                                weight * d_nee_contrib * phase_val * geometry_term * nee_transmittance;
+                                weight * d_nee_contrib * phase_val * geometry_term;
                             auto d_weight = geometry_term * phase_val *
-                                sum(d_nee_contrib * nee_transmittance * light_contrib);
-                            auto d_phase_val = (weight * geometry_term) * sum(
-                                d_nee_contrib * nee_transmittance);
+                                sum(d_nee_contrib * light_contrib);
+                            auto d_phase_val = (weight * geometry_term * phase_val) *
+                                sum(d_nee_contrib * light_contrib);
 
                             // phase_val = phase_function_eval(phase_function, wi, wo)
                             auto d_phase_function = DPhaseFunction(phase_function);
@@ -463,12 +529,8 @@ struct d_path_contribs_accumulator {
                             auto pdf_bsdf =
                                 bsdf_pdf(material, surface_point, wi, wo, min_rough) * geometry_term;
                             auto mis_weight = Real(1 / (1 + square((double)pdf_bsdf / (double)pdf_nee)));
-                            auto nee_transmittance = Vector3{1, 1, 1};
-                            if (nee_transmittances != nullptr) {
-                                nee_transmittance = nee_transmittances[pixel_id];
-                            }
                             auto nee_contrib = (mis_weight * geometry_term / pdf_nee) *
-                                               bsdf_val * light_contrib * nee_transmittance;
+                                               bsdf_val * light_contrib;
 
                             // path_contrib = path_transmittance * throughput * (nee_contrib + scatter_contrib)
                             auto d_nee_contrib = d_path_contrib * throughput * path_transmittance;
@@ -478,21 +540,17 @@ struct d_path_contribs_accumulator {
                             }
 
                             auto weight = mis_weight / pdf_nee;
-                            // nee_contrib = (weight * geometry_term) * nee_transmittance
+                            // nee_contrib = (weight * geometry_term)
                             //                bsdf_val * light_contrib
                             // Ignore derivatives of MIS weight & PMF
                             auto d_weight = geometry_term *
-                                sum(d_nee_contrib * bsdf_val * light_contrib * nee_transmittance);
+                                sum(d_nee_contrib * bsdf_val * light_contrib);
                             auto d_geometry_term =
-                                weight * sum(d_nee_contrib * bsdf_val * light_contrib * nee_transmittance);
+                                weight * sum(d_nee_contrib * bsdf_val * light_contrib);
                             auto d_bsdf_val =
-                                weight * d_nee_contrib * geometry_term * light_contrib * nee_transmittance;
+                                weight * d_nee_contrib * geometry_term * light_contrib;
                             auto d_light_contrib =
-                                weight * d_nee_contrib * geometry_term * bsdf_val * nee_transmittance;
-                            if (d_nee_transmittances != nullptr) {
-                                d_nee_transmittances[pixel_id] += (weight * geometry_term) *
-                                    nee_transmittance * bsdf_val * light_contrib;
-                            }
+                                weight * d_nee_contrib * geometry_term * bsdf_val;
 
                             // bsdf_val = bsdf(material, surface_point, wi, wo, min_rough)
                             auto d_wo = Vector3{0, 0, 0};
@@ -563,9 +621,8 @@ struct d_path_contribs_accumulator {
                             get_phase_function(scene.mediums[medium_ids[pixel_id]]);
                         auto phase_val = phase_function_eval(phase_function, wi, wo);
                         auto pdf_phase = phase_function_pdf(phase_function, wi, wo);
-                        const auto &nee_transmittance = nee_transmittances[pixel_id];
                         auto mis_weight = Real(1 / (1 + square((double)pdf_phase / (double)pdf_nee)));
-                        auto nee_contrib = (mis_weight / pdf_nee) * light_contrib * phase_val * nee_transmittance;
+                        auto nee_contrib = (mis_weight / pdf_nee) * light_contrib * phase_val;
 
                         // path_contrib = path_transmittance * throughput * (nee_contrib + scatter_contrib)
                         auto d_nee_contrib = d_path_contrib * throughput * path_transmittance;
@@ -576,10 +633,9 @@ struct d_path_contribs_accumulator {
 
                         auto weight = mis_weight / pdf_nee;
 
-                        // nee_contrib = weight * light_contrib * phase_val * nee_transmittance
-                        auto d_light_contrib = weight * d_nee_contrib * phase_val * nee_transmittance;
-                        d_nee_transmittances[pixel_id] += weight * d_nee_contrib * phase_val * light_contrib;
-                        auto d_phase_val = weight * sum(d_nee_contrib * nee_transmittance);
+                        // nee_contrib = weight * light_contrib * phase_val
+                        auto d_light_contrib = weight * d_nee_contrib * phase_val;
+                        auto d_phase_val = weight * sum(d_nee_contrib);
 
                         // phase_val = phase_function_eval(phase_function, wi, wo)
                         auto d_phase_function = DPhaseFunction(phase_function);
@@ -609,11 +665,7 @@ struct d_path_contribs_accumulator {
                         auto bsdf_val = bsdf(material, surface_point, wi, wo, min_rough);
                         auto pdf_bsdf = bsdf_pdf(material, surface_point, wi, wo, min_rough);
                         auto mis_weight = Real(1 / (1 + square((double)pdf_bsdf / (double)pdf_nee)));
-                        auto nee_transmittance = Vector3{1, 1, 1};
-                        if (nee_transmittances != nullptr) {
-                            nee_transmittance = nee_transmittances[pixel_id];
-                        }
-                        auto nee_contrib = (mis_weight / pdf_nee) * bsdf_val * light_contrib * nee_transmittance;
+                        auto nee_contrib = (mis_weight / pdf_nee) * bsdf_val * light_contrib;
 
                         // path_contrib = path_transmittance * throughput * (nee_contrib + scatter_contrib)
                         auto d_nee_contrib = d_path_contrib * throughput * path_transmittance;
@@ -623,12 +675,12 @@ struct d_path_contribs_accumulator {
                         }
 
                         auto weight = mis_weight / pdf_nee;
-                        // nee_contrib = weight * bsdf_val * light_contrib * nee_transmittance
+                        // nee_contrib = weight * bsdf_val * light_contribe
                         // Ignore derivatives of MIS weight & pdf
-                        auto d_bsdf_val = weight * d_nee_contrib * light_contrib * nee_transmittance;
-                        auto d_light_contrib = weight * d_nee_contrib * bsdf_val * nee_transmittance;
+                        auto d_bsdf_val = weight * d_nee_contrib * light_contrib;
+                        auto d_light_contrib = weight * d_nee_contrib * bsdf_val;
                         // d_phase_val is not used since it is a constant (we assume perfect importance sampling)
-                        // auto d_phase_val = weight * sum(d_nee_contrib * nee_transmittance);
+                        // auto d_phase_val = weight * sum(d_nee_contrib);
 
                         auto d_wi = Vector3{0, 0, 0};
                         auto d_wo = Vector3{0, 0, 0};
@@ -855,7 +907,6 @@ struct d_path_contribs_accumulator {
     const int *active_pixels;
     const Vector3 *throughputs;
     const Vector3 *path_transmittances;
-    const Vector3 *nee_transmittances;
     const Vector3 *directional_transmittances;
     const Ray *incoming_rays;
     const LightSample *light_samples;
@@ -884,7 +935,6 @@ struct d_path_contribs_accumulator {
     DMedium *d_mediums;
     Vector3 *d_throughputs;
     Vector3 *d_path_transmittances;
-    Vector3 *d_nee_transmittances;
     Vector3 *d_directional_transmittances;
     DRay *d_incoming_rays;
     SurfacePoint *d_shading_points;
@@ -894,22 +944,30 @@ void accumulate_path_contribs(const Scene &scene,
                               const BufferView<int> &active_pixels,
                               const BufferView<Vector3> &throughputs,
                               const BufferView<Vector3> &path_transmittances,
-                              const BufferView<Vector3> &nee_transmittances,
                               const BufferView<Vector3> &directional_transmittances,
+                              // Information of the shading point
                               const BufferView<Ray> &incoming_rays,
                               const BufferView<Intersection> &surface_isects,
                               const BufferView<SurfacePoint> &surface_points,
                               const BufferView<int> &medium_ids,
                               const BufferView<Real> &medium_distances,
+                              // Information of next event estimation
                               const BufferView<Intersection> &light_isects,
                               const BufferView<SurfacePoint> &light_points,
                               const BufferView<Ray> &light_rays,
+                              const BufferView<Intersection> &light_int_isects,
+                              const BufferView<SurfacePoint> &light_int_points,
+                              const BufferView<Ray> &light_int_rays,
+                              const BufferView<int> &light_medium_ids,
+                              // Information of scattering
                               const BufferView<Intersection> &directional_isects,
                               const BufferView<SurfacePoint> &directional_points,
                               const BufferView<Ray> &directional_rays,
+                              // Miscs
                               const BufferView<Real> &min_roughness,
                               const Real weight,
                               const ChannelInfo &channel_info,
+                              // Output
                               BufferView<Vector3> next_throughputs,
                               float *rendered_image,
                               BufferView<Real> edge_contribs) {
@@ -918,7 +976,6 @@ void accumulate_path_contribs(const Scene &scene,
         active_pixels.begin(),
         throughputs.begin(),
         path_transmittances.begin(),
-        nee_transmittances.begin(),
         directional_transmittances.begin(),
         incoming_rays.begin(),
         surface_isects.begin(),
@@ -928,6 +985,10 @@ void accumulate_path_contribs(const Scene &scene,
         light_isects.begin(),
         light_points.begin(),
         light_rays.begin(),
+        light_int_isects.begin(),
+        light_int_points.begin(),
+        light_int_rays.begin(),
+        light_medium_ids.begin(),
         directional_isects.begin(),
         directional_points.begin(),
         directional_rays.begin(),
@@ -943,7 +1004,6 @@ void d_accumulate_path_contribs(const Scene &scene,
                                 const BufferView<int> &active_pixels,
                                 const BufferView<Vector3> &throughputs,
                                 const BufferView<Vector3> &path_transmittances,
-                                const BufferView<Vector3> &nee_transmittances,
                                 const BufferView<Vector3> &directional_transmittances,
                                 const BufferView<Ray> &incoming_rays,
                                 const BufferView<LightSample> &light_samples,
@@ -968,7 +1028,6 @@ void d_accumulate_path_contribs(const Scene &scene,
                                 DScene *d_scene,
                                 BufferView<Vector3> d_throughputs,
                                 BufferView<Vector3> d_path_transmittances,
-                                BufferView<Vector3> d_nee_transmittances,
                                 BufferView<Vector3> d_directional_transmittances,
                                 BufferView<DRay> d_incoming_rays,
                                 BufferView<SurfacePoint> d_shading_points) {
@@ -977,7 +1036,6 @@ void d_accumulate_path_contribs(const Scene &scene,
         active_pixels.begin(),
         throughputs.begin(),
         path_transmittances.begin(),
-        nee_transmittances.begin(),
         directional_transmittances.begin(),
         incoming_rays.begin(),
         light_samples.begin(),
@@ -1006,7 +1064,6 @@ void d_accumulate_path_contribs(const Scene &scene,
         d_scene->mediums.data,
         d_throughputs.begin(),
         d_path_transmittances.begin(),
-        d_nee_transmittances.begin(),
         d_directional_transmittances.begin(),
         d_incoming_rays.begin(),
         d_shading_points.begin()},

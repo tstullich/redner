@@ -105,6 +105,44 @@ void d_get_phase_function(const Medium &medium,
     }
 }
 
+/// Calculate the transmittance of a ray segment given a ray
+DEVICE
+inline
+Vector3 transmittance(const Medium &medium, Real distance) {
+    if (medium.type == MediumType::homogeneous) {
+        // Use Beer's Law to calculate transmittance
+        return exp(-medium.homogeneous.sigma_t * min(distance, MaxFloat));
+    } else {
+        return Vector3{0, 0, 0};
+    }
+}
+
+DEVICE
+inline
+void d_transmittance(const Medium &medium,
+                     float distance,
+                     const Vector3 &d_output,
+                     DMedium &d_medium,
+                     float &d_distance) {
+    if (medium.type == MediumType::homogeneous) {
+        // output = exp(-medium.homogeneous.sigma_t * min(distance, MaxFloat));
+        if (distance < MaxFloat) {
+            auto output = exp(medium.homogeneous.sigma_t * distance);
+            auto d_sigma_t = -d_output * output * distance;
+            d_distance += (-sum(d_output * output * medium.homogeneous.sigma_t));
+            // sigma_t = sigma_a + sigma_s
+            atomic_add(&d_medium.sigma_a[0], d_sigma_t[0]);
+            atomic_add(&d_medium.sigma_a[1], d_sigma_t[1]);
+            atomic_add(&d_medium.sigma_a[2], d_sigma_t[2]);
+            atomic_add(&d_medium.sigma_s[0], d_sigma_t[0]);
+            atomic_add(&d_medium.sigma_s[1], d_sigma_t[1]);
+            atomic_add(&d_medium.sigma_s[2], d_sigma_t[2]);
+        }
+    } else {
+        return;
+    }
+}
+
 // Function to sample a distance within a medium
 Real sample_distance(const Medium &medium, const MediumSample &sample);
 
@@ -121,28 +159,29 @@ void sample_medium(const Scene &scene,
                    BufferView<Real> medium_distances,
                    BufferView<Vector3> transmittances);
 
-// Evaluate the transmittance between two points.
-// For sampling efficiency, we want to skip through
-// all participating media boundaries between
+// Return the intermediate surface int between two points,
+// also check whether two two points are blocked by surfaces other than
+// the one returned.
+// This is for transmittance evaluation: for sampling efficiency,
+// we want to skip through all participating media boundaries between
 // the two points with IOR = 1.
 // However this creates thread divergences and unbounded memory requirement.
 // Instead we skip at most *one* boundary with IOR=1.
 // The arguments with "int_" are the intermediate information
 // we store when skipping through the boundary.
-void evaluate_transmittance(const Scene &scene,
-                            const BufferView<int> &active_pixels,
-                            const BufferView<Ray> &outgoing_rays,
-                            const BufferView<int> &medium_ids,
-                            const BufferView<Intersection> &light_isects,
-                            const BufferView<SurfacePoint> &light_points,
-                            BufferView<Ray> int_rays,
-                            BufferView<Intersection> int_isects,
-                            BufferView<SurfacePoint> int_points,
-                            BufferView<int> int_medium_ids,
-                            BufferView<Vector3> transmittances,
-                            ThrustCachedAllocator &thrust_alloc,
-                            BufferView<OptiXRay> optix_rays,
-                            BufferView<OptiXHit> optix_hits);
+void trace_transmittance_rays(const Scene &scene,
+                              const BufferView<int> &active_pixels,
+                              const BufferView<Ray> &outgoing_rays,
+                              const BufferView<int> &medium_ids,
+                              const BufferView<Intersection> &light_isects,
+                              const BufferView<SurfacePoint> &light_points,
+                              BufferView<Ray> int_rays,
+                              BufferView<Intersection> int_isects,
+                              BufferView<SurfacePoint> int_points,
+                              BufferView<int> int_medium_ids,
+                              ThrustCachedAllocator &thrust_alloc,
+                              BufferView<OptiXRay> optix_rays,
+                              BufferView<OptiXHit> optix_hits);
 
 // Given rays, intersect with scene until
 // hitting an opaque object. Return the first
