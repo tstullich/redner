@@ -111,12 +111,12 @@ void PCGSampler::next_light_samples(BufferView<TLightSample<double>> samples) {
         (double*)samples.begin()}, samples.size(), use_gpu);
 }
 
-void PCGSampler::next_directional_samples(BufferView<TDirectionalSample<float>> samples) {
+void PCGSampler::next_scatter_samples(BufferView<TScatterSample<float>> samples) {
     parallel_for(pcg_sampler_float<3>{rng_states.begin(),
         (float*)samples.begin()}, samples.size(), use_gpu);
 }
 
-void PCGSampler::next_directional_samples(BufferView<TDirectionalSample<double>> samples) {
+void PCGSampler::next_scatter_samples(BufferView<TScatterSample<double>> samples) {
     parallel_for(pcg_sampler_double<3>{rng_states.begin(),
         (double*)samples.begin()}, samples.size(), use_gpu);
 }

@@ -1,8 +1,8 @@
 #pragma once
 
 #include "redner.h"
+#include "scatter_sample.h"
 #include "vector.h"
-#include "directional_sample.h"
 
 enum class PhaseFunctionType {
     HenyeyGreenstein
@@ -144,7 +144,7 @@ DEVICE
 inline
 Vector3 sample_phase_function(const PhaseFunction &phase_function,
                               const Vector3 &wi,
-                              const DirectionalSample &sample) {
+                              const ScatterSample &sample) {
     if (phase_function.type == PhaseFunctionType::HenyeyGreenstein) {
         auto hg = phase_function.hg;
         auto g = hg.g;

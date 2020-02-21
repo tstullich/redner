@@ -15,8 +15,8 @@ struct PCGSampler : public Sampler {
     void next_camera_samples(BufferView<TCameraSample<double>> samples, bool sample_pixel_center) override;
     void next_light_samples(BufferView<TLightSample<float>> samples) override;
     void next_light_samples(BufferView<TLightSample<double>> samples) override;
-    void next_directional_samples(BufferView<TDirectionalSample<float>> samples) override;
-    void next_directional_samples(BufferView<TDirectionalSample<double>> samples) override;
+    void next_scatter_samples(BufferView<TScatterSample<float>> samples) override;
+    void next_scatter_samples(BufferView<TScatterSample<double>> samples) override;
     void next_primary_edge_samples(BufferView<TPrimaryEdgeSample<float>> samples) override;
     void next_primary_edge_samples(BufferView<TPrimaryEdgeSample<double>> samples) override;
     void next_secondary_edge_samples(BufferView<TSecondaryEdgeSample<float>> samples) override;

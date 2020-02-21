@@ -27,7 +27,7 @@ struct bsdf_or_phase_sampler {
                 sample_phase_function(
                     get_phase_function(scene.mediums[medium_ids[pixel_id]]),
                     -incoming_ray.dir,
-                    directional_samples[pixel_id])};
+                    scatter_samples[pixel_id])};
             // Update ray differentials: currently we treat it like diffuse surface
             // TODO: figure out better way to propagate ray differentials,
             // ideally covariance tracing.
@@ -49,7 +49,7 @@ struct bsdf_or_phase_sampler {
                         material,
                         surface_point,
                         -incoming_ray.dir,
-                        directional_samples[pixel_id],
+                        scatter_samples[pixel_id],
                         min_roughness[pixel_id],
                         incoming_ray_differentials[pixel_id],
                         next_ray_differentials[pixel_id],
@@ -74,7 +74,7 @@ struct bsdf_or_phase_sampler {
     const SurfacePoint *surface_points;
     const int *medium_ids;
     const Real *medium_distances;
-    const DirectionalSample *directional_samples;
+    const ScatterSample *scatter_samples;
     const Real *min_roughness;
     Ray *next_rays;
     RayDifferential *next_ray_differentials;
@@ -89,7 +89,7 @@ void bsdf_or_phase_sample(const Scene &scene,
                           const BufferView<SurfacePoint> &surface_points,
                           const BufferView<int> &medium_ids,
                           const BufferView<Real> &medium_distances,
-                          const BufferView<DirectionalSample> &directional_samples,
+                          const BufferView<ScatterSample> &scatter_samples,
                           const BufferView<Real> &min_roughness,
                           BufferView<Ray> next_rays,
                           BufferView<RayDifferential> next_ray_differentials,
@@ -103,7 +103,7 @@ void bsdf_or_phase_sample(const Scene &scene,
                               surface_points.begin(),
                               medium_ids.begin(),
                               medium_distances.begin(),
-                              directional_samples.begin(),
+                              scatter_samples.begin(),
                               min_roughness.begin(),
                               next_rays.begin(),
                               next_ray_differentials.begin(),

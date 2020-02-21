@@ -49,8 +49,8 @@ struct PathBuffer {
         camera_samples = Buffer<CameraSample>(use_gpu, num_pixels);
         light_samples = Buffer<LightSample>(use_gpu, max_bounces * num_pixels);
         edge_light_samples = Buffer<LightSample>(use_gpu, 2 * num_pixels);
-        directional_samples = Buffer<DirectionalSample>(use_gpu, max_bounces * num_pixels);
-        edge_directional_samples = Buffer<DirectionalSample>(use_gpu, 2 * num_pixels);
+        scatter_samples = Buffer<ScatterSample>(use_gpu, max_bounces * num_pixels);
+        edge_scatter_samples = Buffer<ScatterSample>(use_gpu, 2 * num_pixels);
         rays = Buffer<Ray>(use_gpu, (max_bounces + 1) * num_pixels);
         nee_rays = Buffer<Ray>(use_gpu, max_bounces * num_pixels);
         primary_ray_differentials = Buffer<RayDifferential>(use_gpu, num_pixels);
@@ -127,7 +127,7 @@ struct PathBuffer {
         edge_hit_points = Buffer<Vector3>(use_gpu, 2 * num_pixels);
 
         tmp_light_samples = Buffer<LightSample>(use_gpu, num_pixels);
-        tmp_directional_samples = Buffer<DirectionalSample>(use_gpu, num_pixels);
+        tmp_scatter_samples = Buffer<ScatterSample>(use_gpu, num_pixels);
 
         generic_texture_buffer = Buffer<Real>(use_gpu,
             channel_info.max_generic_texture_dimension * num_pixels);
@@ -136,7 +136,7 @@ struct PathBuffer {
     int num_pixels;
     Buffer<CameraSample> camera_samples;
     Buffer<LightSample> light_samples, edge_light_samples;
-    Buffer<DirectionalSample> directional_samples, edge_directional_samples;
+    Buffer<ScatterSample> scatter_samples, edge_scatter_samples;
     Buffer<Ray> rays, nee_rays;
     Buffer<Ray> edge_rays, edge_nee_rays;
     Buffer<RayDifferential> primary_ray_differentials;
@@ -191,7 +191,7 @@ struct PathBuffer {
     Buffer<Vector3> edge_hit_points;
     // For sharing RNG between pixels
     Buffer<LightSample> tmp_light_samples;
-    Buffer<DirectionalSample> tmp_directional_samples;
+    Buffer<ScatterSample> tmp_scatter_samples;
 
     // For temporary storing generic texture values per thread
     Buffer<Real> generic_texture_buffer;
@@ -366,7 +366,7 @@ void render(const Scene &scene,
                 depth * num_pixels, num_pixels);
             auto light_isects = path_buffer.light_isects.view(depth * num_pixels, num_pixels);
             auto light_points = path_buffer.light_points.view(depth * num_pixels, num_pixels);
-            auto directional_samples = path_buffer.directional_samples.view(depth * num_pixels, num_pixels);
+            auto scatter_samples = path_buffer.scatter_samples.view(depth * num_pixels, num_pixels);
             auto incoming_rays = path_buffer.rays.view(depth * num_pixels, num_pixels);
             auto incoming_ray_differentials =
                 path_buffer.ray_differentials.view(depth * num_pixels, num_pixels);
@@ -477,7 +477,7 @@ void render(const Scene &scene,
             }
 
             // Sample directions based on BRDF or phase functions.
-            sampler->next_directional_samples(directional_samples);
+            sampler->next_scatter_samples(scatter_samples);
             bsdf_or_phase_sample(
                 scene,
                 active_pixels,
@@ -487,7 +487,7 @@ void render(const Scene &scene,
                 surface_points,
                 medium_ids,
                 medium_distances,
-                directional_samples,
+                scatter_samples,
                 min_roughness,
                 next_rays,
                 scatter_ray_differentials,
@@ -638,7 +638,7 @@ void render(const Scene &scene,
                 auto nee_rays = path_buffer.nee_rays.view(depth * num_pixels, num_pixels);
                 auto light_samples = path_buffer.light_samples.view(
                     depth * num_pixels, num_pixels);
-                auto directional_samples = path_buffer.directional_samples.view(depth * num_pixels, num_pixels);
+                auto scatter_samples = path_buffer.scatter_samples.view(depth * num_pixels, num_pixels);
                 auto surface_isects = path_buffer.surface_isects.view(
                     depth * num_pixels, num_pixels);
                 auto surface_points = path_buffer.surface_points.view(
@@ -702,7 +702,7 @@ void render(const Scene &scene,
                     throughputs,
                     path_transmittances,
                     incoming_rays,
-                    light_samples, directional_samples,
+                    light_samples, scatter_samples,
                     surface_isects, surface_points,
                     medium_ids, medium_distances,
                     light_isects, light_points, nee_rays,
@@ -726,13 +726,13 @@ void render(const Scene &scene,
                     //     active_pixels,
                     //     medium_ids,
                     //     next_rays,
-                    //     directional_ray_differentials,
+                    //     scatter_ray_differentials,
                     //     next_isects,
                     //     next_points,
                     //     next_ray_differentials,
-                    //     directional_isects,
-                    //     directional_points,
-                    //     directional_transmittances,
+                    //     scatter_isects,
+                    //     scatter_points,
+                    //     scatter_transmittances,
                     //     tr_buffer,
                     //     thrust_alloc,
                     //     optix_rays,
@@ -741,7 +741,7 @@ void render(const Scene &scene,
                     // intersect(scene,
                     //           active_pixels,
                     //           next_rays,
-                    //           directional_ray_differentials,
+                    //           scatter_ray_differentials,
                     //           next_isects,
                     //           next_points,
                     //           next_ray_differentials,
@@ -863,9 +863,9 @@ void render(const Scene &scene,
                         const auto active_pixels = path_buffer.edge_active_pixels.view(
                             main_buffer_beg, num_active_edge_samples);
                         auto light_samples = path_buffer.edge_light_samples.view(0, num_edge_samples);
-                        auto directional_samples = path_buffer.edge_directional_samples.view(0, num_edge_samples);
+                        auto scatter_samples = path_buffer.edge_scatter_samples.view(0, num_edge_samples);
                         auto tmp_light_samples = path_buffer.tmp_light_samples.view(0, num_actives);
-                        auto tmp_directional_samples = path_buffer.tmp_directional_samples.view(0, num_actives);
+                        auto tmp_scatter_samples = path_buffer.tmp_scatter_samples.view(0, num_actives);
                         auto surface_isects =
                             path_buffer.edge_surface_isects.view(main_buffer_beg, num_edge_samples);
                         auto surface_points =
@@ -962,11 +962,11 @@ void render(const Scene &scene,
                         }
 
                         // Sample directions based on BRDF
-                        edge_sampler->next_directional_samples(tmp_directional_samples);
+                        edge_sampler->next_scatter_samples(tmp_scatter_samples);
                         // Copy the samples
-                        parallel_for(copy_interleave<DirectionalSample>{
-                            tmp_directional_samples.begin(), directional_samples.begin()},
-                            tmp_directional_samples.size(), scene.use_gpu);
+                        parallel_for(copy_interleave<ScatterSample>{
+                            tmp_scatter_samples.begin(), scatter_samples.begin()},
+                            tmp_scatter_samples.size(), scene.use_gpu);
 
                         if (scene.mediums.size() > 0) {
                             // Evaluate transmittance between the shading point and
@@ -1004,7 +1004,7 @@ void render(const Scene &scene,
                                              surface_points,
                                              medium_ids,
                                              medium_distances,
-                                             directional_samples,
+                                             scatter_samples,
                                              edge_min_roughness,
                                              next_rays,
                                              ray_differentials,
@@ -1222,9 +1222,9 @@ void render(const Scene &scene,
                     const auto active_pixels =
                         path_buffer.edge_active_pixels.view(main_buffer_beg, active_pixels_size);
                     auto light_samples = path_buffer.edge_light_samples.view(0, 2 * num_pixels);
-                    auto directional_samples = path_buffer.edge_directional_samples.view(0, 2 * num_pixels);
+                    auto scatter_samples = path_buffer.edge_scatter_samples.view(0, 2 * num_pixels);
                     auto tmp_light_samples = path_buffer.tmp_light_samples.view(0, num_pixels);
-                    auto tmp_directional_samples = path_buffer.tmp_directional_samples.view(0, num_pixels);
+                    auto tmp_scatter_samples = path_buffer.tmp_scatter_samples.view(0, num_pixels);
                     auto surface_isects =
                         path_buffer.edge_surface_isects.view(main_buffer_beg, 2 * num_pixels);
                     auto surface_points =
@@ -1308,11 +1308,11 @@ void render(const Scene &scene,
                     occluded(scene, active_pixels, nee_rays, optix_rays, optix_hits);
 
                     // Sample directions based on BRDF
-                    edge_sampler->next_directional_samples(tmp_directional_samples);
+                    edge_sampler->next_scatter_samples(tmp_scatter_samples);
                     // Copy the samples
-                    parallel_for(copy_interleave<DirectionalSample>{
-                        tmp_directional_samples.begin(), directional_samples.begin()},
-                        tmp_directional_samples.size(), scene.use_gpu);
+                    parallel_for(copy_interleave<ScatterSample>{
+                        tmp_scatter_samples.begin(), scatter_samples.begin()},
+                        tmp_scatter_samples.size(), scene.use_gpu);
                     bsdf_or_phase_sample(scene,
                                          active_pixels,
                                          incoming_rays,
@@ -1321,7 +1321,7 @@ void render(const Scene &scene,
                                          surface_points,
                                          medium_ids,
                                          medium_distances,
-                                         directional_samples,
+                                         scatter_samples,
                                          edge_min_roughness,
                                          next_rays,
                                          ray_differentials,

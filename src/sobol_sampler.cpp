@@ -149,7 +149,7 @@ void SobolSampler::next_light_samples(BufferView<TLightSample<double>> samples) 
     current_dimension += 4;
 }
 
-void SobolSampler::next_directional_samples(BufferView<TDirectionalSample<float>> samples) {
+void SobolSampler::next_scatter_samples(BufferView<TScatterSample<float>> samples) {
     parallel_for(sobol_sampler<3, float>{
         current_sample_id,
         current_dimension,
@@ -159,7 +159,7 @@ void SobolSampler::next_directional_samples(BufferView<TDirectionalSample<float>
     current_dimension += 3;
 }
 
-void SobolSampler::next_directional_samples(BufferView<TDirectionalSample<double>> samples) {
+void SobolSampler::next_scatter_samples(BufferView<TScatterSample<double>> samples) {
     parallel_for(sobol_sampler<3, double>{
         current_sample_id,
         current_dimension,

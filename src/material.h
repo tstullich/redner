@@ -2,9 +2,9 @@
 
 #include "redner.h"
 #include "buffer.h"
-#include "directional_sample.h"
 #include "intersection.h"
 #include "ptr.h"
+#include "scatter_sample.h"
 #include "texture.h"
 #include "vector.h"
 
@@ -692,7 +692,7 @@ inline
 Vector3 bsdf_sample(const Material &material,
                     const SurfacePoint &shading_point,
                     const Vector3 &wi,
-                    const DirectionalSample &bsdf_sample,
+                    const ScatterSample &bsdf_sample,
                     const Real min_roughness,
                     const RayDifferential &wi_differential,
                     RayDifferential &wo_differential,
@@ -803,7 +803,7 @@ inline
 void d_bsdf_sample(const Material &material,
                    const SurfacePoint &shading_point,
                    const Vector3 &wi,
-                   const DirectionalSample &bsdf_sample,
+                   const ScatterSample &bsdf_sample,
                    const Real min_roughness,
                    const RayDifferential &wi_differential,
                    const Vector3 &d_wo,

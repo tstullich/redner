@@ -366,9 +366,9 @@ struct d_path_contribs_accumulator {
         const auto &surface_point = surface_points[pixel_id];
         const auto &light_isect = light_isects[pixel_id];
         const auto &light_ray = light_rays[pixel_id];
-        const auto &directional_ray = directional_rays[pixel_id];
+        const auto &scatter_ray = scatter_rays[pixel_id];
         const auto &min_rough = min_roughness[pixel_id];
-        const auto &directional_point = directional_points[pixel_id];
+        const auto &scatter_point = scatter_points[pixel_id];
         const auto &d_next_throughput = d_next_throughputs[pixel_id];
 
         auto &d_throughput = d_throughputs[pixel_id];
@@ -723,54 +723,54 @@ struct d_path_contribs_accumulator {
         }
 
         // BSDF or phase importance sampling
-        const auto &directional_isect = directional_isects[pixel_id];
-        if (directional_isect.valid()) {
+        const auto &scatter_isect = scatter_isects[pixel_id];
+        if (scatter_isect.valid()) {
             // We hit a surface
-            const auto &light_shape = scene.shapes[directional_isect.shape_id];
+            const auto &light_shape = scene.shapes[scatter_isect.shape_id];
 
-            if (distance_squared(directional_point.position, p) > 1e-20f) {
-                auto wo = directional_ray.dir;
-                auto directional_val = Vector3{1, 1, 1};
-                auto directional_pdf = Real(1);
+            if (distance_squared(scatter_point.position, p) > 1e-20f) {
+                auto wo = scatter_ray.dir;
+                auto scatter_val = Vector3{1, 1, 1};
+                auto scatter_pdf = Real(1);
                 if (eval_phase) {
                     // Inside a medium
                     auto phase_function =
                         get_phase_function(scene.mediums[medium_ids[pixel_id]]);
-                    directional_pdf = phase_function_pdf(phase_function, wi, wo);
+                    scatter_pdf = phase_function_pdf(phase_function, wi, wo);
                     auto phase_eval = phase_function_eval(phase_function, wi, wo);
                     // Perfect importance sampling
-                    directional_val = Vector3{phase_eval, phase_eval, phase_eval};
+                    scatter_val = Vector3{phase_eval, phase_eval, phase_eval};
                 } else {
                     // On a surface
                     const auto &surface_shape = scene.shapes[surface_isect.shape_id];
                     if (surface_shape.material_id >= 0) {
                         const auto &material = scene.materials[surface_shape.material_id];
-                        directional_pdf = bsdf_pdf(material, surface_point, wi, wo, min_rough);
-                        directional_val = bsdf(material, surface_point, wi, wo, min_rough);
+                        scatter_pdf = bsdf_pdf(material, surface_point, wi, wo, min_rough);
+                        scatter_val = bsdf(material, surface_point, wi, wo, min_rough);
                     }
                 }
-                if (directional_pdf > 1e-20f) {
-                    // next_throughput = path_transmittance * throughput * (directional_val / directional_pdf)
+                if (scatter_pdf > 1e-20f) {
+                    // next_throughput = path_transmittance * throughput * (scatter_val / scatter_pdf)
                     if (d_path_transmittances != nullptr) {
                         d_path_transmittances[pixel_id] +=
-                            d_next_throughput * throughput * (directional_val / directional_pdf);
+                            d_next_throughput * throughput * (scatter_val / scatter_pdf);
                     }
-                    d_throughput += d_next_throughput * path_transmittance * (directional_val / directional_pdf);
-                    auto d_directional_val = d_next_throughput * path_transmittance / directional_pdf;
+                    d_throughput += d_next_throughput * path_transmittance * (scatter_val / scatter_pdf);
+                    auto d_scatter_val = d_next_throughput * path_transmittance / scatter_pdf;
 
                     if (light_shape.light_id >= 0) {
                         const auto &light = scene.area_lights[light_shape.light_id];
-                        if (light.two_sided || dot(-wo, directional_point.shading_frame.n) > 0) {
+                        if (light.two_sided || dot(-wo, scatter_point.shading_frame.n) > 0) {
                             auto light_contrib = light.intensity;
                             auto light_pmf = scene.light_pmf[light_shape.light_id];
                             auto light_area = scene.light_areas[light_shape.light_id];
                             auto inv_area = 1 / light_area;
-                            auto geometry_term = fabs(dot(wo, directional_point.geom_normal)) /
-                                distance_squared(directional_point.position, p);
+                            auto geometry_term = fabs(dot(wo, scatter_point.geom_normal)) /
+                                distance_squared(scatter_point.position, p);
                             auto pdf_nee = (light_pmf * inv_area) / geometry_term;
-                            auto mis_weight = Real(1 / (1 + square((double)pdf_nee / (double)directional_pdf)));
-                            auto scatter_contrib = (mis_weight / directional_pdf) *
-                                directional_val * light_contrib;
+                            auto mis_weight = Real(1 / (1 + square((double)pdf_nee / (double)scatter_pdf)));
+                            auto scatter_contrib = (mis_weight / scatter_pdf) *
+                                scatter_val * light_contrib;
 
                             // path_contrib = path_transmittance * throughput * (nee_contrib + scatter_contrib)
                             auto d_scatter_contrib = d_path_contrib * throughput * path_transmittance;
@@ -779,13 +779,13 @@ struct d_path_contribs_accumulator {
                                 d_path_transmittances[pixel_id] += d_path_contrib * throughput * scatter_contrib;
                             }
 
-                            // scatter_contrib = (mis_weight / directional_pdf) *
-                            //     directional_val * light_contrib
-                            auto weight = mis_weight / directional_pdf;
-                            d_directional_val += weight * d_scatter_contrib * directional_val *
+                            // scatter_contrib = (mis_weight / scatter_pdf) *
+                            //     scatter_val * light_contrib
+                            auto weight = mis_weight / scatter_pdf;
+                            d_scatter_val += weight * d_scatter_contrib * scatter_val *
                                 light_contrib;
                             auto d_light_contrib = weight * d_scatter_contrib *
-                                directional_val;
+                                scatter_val;
 
                             // light_contrib = light.intensity
                             atomic_add(d_area_lights[light_shape.light_id].intensity, d_light_contrib);
@@ -794,15 +794,15 @@ struct d_path_contribs_accumulator {
                     auto d_wi = Vector3{0, 0, 0};
                     auto d_wo = d_next_ray.dir; // propagated from the next intersection
                     if (eval_phase) {
-                        // We assume directional_val / directional_pdf == constant
+                        // We assume scatter_val / scatter_pdf == constant
                         // due to perfect importance sampling of phase function.
                         // So we do nothing here.
                     } else {
                         const auto &surface_shape = scene.shapes[surface_isect.shape_id];
                         if (surface_shape.material_id >= 0) {
                             const auto &material = scene.materials[surface_shape.material_id];
-                            // directional_val = bsdf(material, surface_point, wi, wo, min_rough)
-                            d_bsdf(material, surface_point, wi, wo, min_rough, d_directional_val,
+                            // scatter_val = bsdf(material, surface_point, wi, wo, min_rough)
+                            d_bsdf(material, surface_point, wi, wo, min_rough, d_scatter_val,
                                    d_material, d_shading_point, d_wi, d_wo);
                             // XXX: Ignore derivative w.r.t. pdf_bsdf since it causes high variance
                             // when propagating back from many bounces
@@ -819,28 +819,28 @@ struct d_path_contribs_accumulator {
             }
         } else if (scene.envmap != nullptr) {
             // Hit environment map
-            auto wo = directional_ray.dir;
-            auto directional_pdf = Real(1);
-            auto directional_val = Vector3{1, 1, 1};
+            auto wo = scatter_ray.dir;
+            auto scatter_pdf = Real(1);
+            auto scatter_val = Vector3{1, 1, 1};
             if (eval_phase) {
                 // Intersection with medium was made. Get PDF of phase function
-                directional_pdf = phase_function_pdf(
+                scatter_pdf = phase_function_pdf(
                     get_phase_function(scene.mediums[medium_ids[pixel_id]]),
                     wo, wi);
-                directional_val = Vector3{directional_pdf, directional_pdf, directional_pdf};
+                scatter_val = Vector3{scatter_pdf, scatter_pdf, scatter_pdf};
             } else {
                 // Intersection with surface was made. Get BSDF PDF
                 const auto &surface_shape = scene.shapes[surface_isect.shape_id];
                 const auto &material = scene.materials[surface_shape.material_id];
-                directional_pdf = bsdf_pdf(material, surface_point, wi, wo, min_rough);
+                scatter_pdf = bsdf_pdf(material, surface_point, wi, wo, min_rough);
 
-                if (directional_pdf > 1e-20f) {
-                    directional_val = bsdf(material, surface_point, wi, wo, min_rough);
+                if (scatter_pdf > 1e-20f) {
+                    scatter_val = bsdf(material, surface_point, wi, wo, min_rough);
                 }
             }
 
             // wo can be zero if sampling of the BSDF or phase function fails
-            if (length_squared(wo) > 0 && directional_pdf > 1e-20f) {
+            if (length_squared(wo) > 0 && scatter_pdf > 1e-20f) {
                 auto ray_diff = RayDifferential{
                     Vector3{0, 0, 0}, Vector3{0, 0, 0},
                     Vector3{0, 0, 0}, Vector3{0, 0, 0}};
@@ -848,17 +848,17 @@ struct d_path_contribs_accumulator {
                 auto envmap_id = scene.num_lights - 1;
                 auto light_pmf = scene.light_pmf[envmap_id];
                 auto pdf_nee = envmap_pdf(*scene.envmap, wo) * light_pmf;
-                auto mis_weight = Real(1 / (1 + square((double)pdf_nee / (double)directional_pdf)));
-                auto scatter_contrib = (mis_weight / directional_pdf) *
-                    directional_val * light_contrib;
+                auto mis_weight = Real(1 / (1 + square((double)pdf_nee / (double)scatter_pdf)));
+                auto scatter_contrib = (mis_weight / scatter_pdf) *
+                    scatter_val * light_contrib;
 
-                // next_throughput = path_transmittance * throughput * (directional_val / directional_pdf)
+                // next_throughput = path_transmittance * throughput * (scatter_val / scatter_pdf)
                 if (d_path_transmittances != nullptr) {
                     d_path_transmittances[pixel_id] +=
-                        d_next_throughput * throughput * (directional_val / directional_pdf);
+                        d_next_throughput * throughput * (scatter_val / scatter_pdf);
                 }
-                d_throughput += d_next_throughput * path_transmittance * (directional_val / directional_pdf);
-                auto d_directional_val = d_next_throughput * path_transmittance / directional_pdf;
+                d_throughput += d_next_throughput * path_transmittance * (scatter_val / scatter_pdf);
+                auto d_scatter_val = d_next_throughput * path_transmittance / scatter_pdf;
 
                 // path_contrib = path_transmittance * throughput * (nee_contrib + scatter_contrib)
                 auto d_scatter_contrib = d_path_contrib * throughput * path_transmittance;
@@ -867,13 +867,13 @@ struct d_path_contribs_accumulator {
                     d_path_transmittances[pixel_id] += d_path_contrib * throughput * scatter_contrib;
                 }
 
-                // scatter_contrib = (mis_weight / directional_pdf) *
-                //     directional_val * light_contrib
-                auto weight = mis_weight / directional_pdf;
-                d_directional_val += weight * d_scatter_contrib * directional_val *
+                // scatter_contrib = (mis_weight / scatter_pdf) *
+                //     scatter_val * light_contrib
+                auto weight = mis_weight / scatter_pdf;
+                d_scatter_val += weight * d_scatter_contrib * scatter_val *
                     light_contrib;
                 auto d_light_contrib = weight * d_scatter_contrib *
-                    directional_val;
+                    scatter_val;
 
                 auto d_wo = Vector3{0, 0, 0};
                 auto d_ray_diff = RayDifferential{
@@ -886,12 +886,12 @@ struct d_path_contribs_accumulator {
                 // bsdf_val = bsdf(material, shading_point, wi, wo)
 
                 if (eval_phase) {
-                    // We assume directional_val / directional_pdf == constant
+                    // We assume scatter_val / scatter_pdf == constant
                     // due to perfect importance sampling of phase function.
                     // So we do nothing here.
                 } else {
                     // Do not compute d_bsdf if we had a medium interaction
-                    d_bsdf(material, surface_point, wi, wo, min_rough, d_directional_val,
+                    d_bsdf(material, surface_point, wi, wo, min_rough, d_scatter_val,
                            d_material, d_shading_point, d_wi, d_wo);
                     // XXX: Ignore derivative w.r.t. pdf_bsdf since it causes high variance
                     // when propagating back from many bounces
@@ -913,7 +913,7 @@ struct d_path_contribs_accumulator {
     const Vector3 *path_transmittances;
     const Ray *incoming_rays;
     const LightSample *light_samples;
-    const DirectionalSample *directional_samples;
+    const ScatterSample *scatter_samples;
     const Intersection *surface_isects;
     const SurfacePoint *surface_points;
     const int *medium_ids;
@@ -921,9 +921,9 @@ struct d_path_contribs_accumulator {
     const Intersection *light_isects;
     const SurfacePoint *light_points;
     const Ray *light_rays;
-    const Intersection *directional_isects;
-    const SurfacePoint *directional_points;
-    const Ray *directional_rays;
+    const Intersection *scatter_isects;
+    const SurfacePoint *scatter_points;
+    const Ray *scatter_rays;
     const Real *min_roughness;
     const Real weight;
     const ChannelInfo channel_info;
@@ -1014,7 +1014,7 @@ void d_accumulate_path_contribs(const Scene &scene,
                                 const BufferView<Vector3> &path_transmittances,
                                 const BufferView<Ray> &incoming_rays,
                                 const BufferView<LightSample> &light_samples,
-                                const BufferView<DirectionalSample> &directional_samples,
+                                const BufferView<ScatterSample> &scatter_samples,
                                 const BufferView<Intersection> &surface_isects,
                                 const BufferView<SurfacePoint> &surface_points,
                                 const BufferView<int> &medium_ids,
@@ -1022,9 +1022,9 @@ void d_accumulate_path_contribs(const Scene &scene,
                                 const BufferView<Intersection> &light_isects,
                                 const BufferView<SurfacePoint> &light_points,
                                 const BufferView<Ray> &light_rays,
-                                const BufferView<Intersection> &directional_isects,
-                                const BufferView<SurfacePoint> &directional_points,
-                                const BufferView<Ray> &directional_rays,
+                                const BufferView<Intersection> &scatter_isects,
+                                const BufferView<SurfacePoint> &scatter_points,
+                                const BufferView<Ray> &scatter_rays,
                                 const BufferView<Real> &min_roughness,
                                 const Real weight,
                                 const ChannelInfo &channel_info,
@@ -1044,7 +1044,7 @@ void d_accumulate_path_contribs(const Scene &scene,
         path_transmittances.begin(),
         incoming_rays.begin(),
         light_samples.begin(),
-        directional_samples.begin(),
+        scatter_samples.begin(),
         surface_isects.begin(),
         surface_points.begin(),
         medium_ids.begin(),
@@ -1052,9 +1052,9 @@ void d_accumulate_path_contribs(const Scene &scene,
         light_isects.begin(),
         light_points.begin(),
         light_rays.begin(),
-        directional_isects.begin(),
-        directional_points.begin(),
-        directional_rays.begin(),
+        scatter_isects.begin(),
+        scatter_points.begin(),
+        scatter_rays.begin(),
         min_roughness.begin(),
         weight,
         channel_info,

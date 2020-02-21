@@ -2,11 +2,9 @@
 
 #include "redner.h"
 #include "buffer.h"
-#include "directional_sample.h"
 #include "intersection.h"
 #include "material.h"
 #include "phase_function.h"
-#include "ray.h"
 
 struct Scene;
 
@@ -24,7 +22,7 @@ void bsdf_or_phase_sample(
         const BufferView<SurfacePoint> &surface_points,
         const BufferView<int> &medium_ids,
         const BufferView<Real> &medium_distances,
-        const BufferView<DirectionalSample> &directional_samples,
+        const BufferView<ScatterSample> &scatter_samples,
         const BufferView<Real> &min_roughness,
         BufferView<Ray> next_rays,
         BufferView<RayDifferential> next_ray_differentials,

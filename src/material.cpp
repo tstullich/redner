@@ -192,8 +192,8 @@ void test_d_bsdf_sample() {
     for (int j = 0; j < 2; j++) {
         // Test for both specular and diffuse path
         auto sample = j == 0 ?
-            DirectionalSample{Vector2{0.5, 0.5}, 0.0} :
-            DirectionalSample{Vector2{0.5, 0.5}, 0.99};
+            ScatterSample{Vector2{0.5, 0.5}, 0.0} :
+            ScatterSample{Vector2{0.5, 0.5}, 0.99};
         auto d_wo_differential = RayDifferential{
             Vector3{1, 1, 1}, Vector3{1, 1, 1},
             Vector3{1, 1, 1}, Vector3{1, 1, 1}};

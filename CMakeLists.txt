@@ -60,7 +60,6 @@ set(SRCS src/aabb.h
          src/atomic_msvc.h
          src/automatic_uv_map.h
          src/bsdf_or_phase_sample.h
-         src/directional_sample.h
          src/buffer.h
          src/camera.h
          src/channels.h

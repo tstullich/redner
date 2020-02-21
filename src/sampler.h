@@ -3,7 +3,6 @@
 #include "buffer.h"
 #include "area_light.h"
 #include "camera.h"
-#include "directional_sample.h"
 #include "edge.h"
 #include "material.h"
 #include "medium.h"
@@ -17,8 +16,8 @@ struct Sampler {
     virtual void next_camera_samples(BufferView<TCameraSample<double>> samples, bool sample_pixel_center) = 0;
     virtual void next_light_samples(BufferView<TLightSample<float>> samples) = 0;
     virtual void next_light_samples(BufferView<TLightSample<double>> samples) = 0;
-    virtual void next_directional_samples(BufferView<TDirectionalSample<float>> samples) = 0;
-    virtual void next_directional_samples(BufferView<TDirectionalSample<double>> samples) = 0;
+    virtual void next_scatter_samples(BufferView<TScatterSample<float>> samples) = 0;
+    virtual void next_scatter_samples(BufferView<TScatterSample<double>> samples) = 0;
     virtual void next_primary_edge_samples(BufferView<TPrimaryEdgeSample<float>> samples) = 0;
     virtual void next_primary_edge_samples(BufferView<TPrimaryEdgeSample<double>> samples) = 0;
     virtual void next_secondary_edge_samples(BufferView<TSecondaryEdgeSample<float>> samples) = 0;

@@ -4,9 +4,9 @@
 #include "vector.h"
 
 template <typename T>
-struct TDirectionalSample {
+struct TScatterSample {
     TVector2<T> uv;
     T w;
 };
 
-using DirectionalSample = TDirectionalSample<Real>;
+using ScatterSample = TScatterSample<Real>;
