@@ -225,9 +225,9 @@ class RenderFunction(torch.autograd.Function):
         for medium in scene.mediums:
             if isinstance(medium, pyredner.HomogeneousMedium):
                 args.append(redner.medium_type.homogeneous)
-                args.append(medium.sigma_a)
-                args.append(medium.sigma_s)
-                args.append(medium.g)
+                args.append(medium.sigma_a.cpu())
+                args.append(medium.sigma_s.cpu())
+                args.append(medium.g.cpu())
             else:
                 assert(False)
 
@@ -570,9 +570,6 @@ class RenderFunction(torch.autograd.Function):
                 current_index += 1
                 g = args[current_index]
                 current_index += 1
-                sigma_a = sigma_a.cpu()
-                sigma_s = sigma_s.cpu()
-                g = g.cpu()
                 mediums.append(redner.Medium(redner.HomogeneousMedium(\
                     redner.Vector3f(sigma_a[0], sigma_a[1], sigma_a[2]),
                     redner.Vector3f(sigma_s[0], sigma_s[1], sigma_s[2]),

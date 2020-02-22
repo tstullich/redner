@@ -6,6 +6,7 @@
 #include "ray.h"
 
 struct Intersection {
+    DEVICE
     Intersection(int shape_id = -1, int tri_id = -1)
         : shape_id(shape_id), tri_id(tri_id) {}
 

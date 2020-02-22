@@ -482,15 +482,18 @@ struct path_contribs_accumulator {
                     need_eval_transmittance = true;
                 }
             }
-            scatter_contrib *= eval_transmittance(scene,
-                                                  next_isect,
-                                                  scatter_ray,
-                                                  scatter_int_rays[pixel_id],
-                                                  medium_ids[pixel_id],
-                                                  scatter_medium_ids[pixel_id],
-                                                  next_points[pixel_id],
-                                                  scatter_isect,
-                                                  scatter_point);
+            if (need_eval_transmittance) {
+                scatter_contrib *= eval_transmittance(
+                        scene,
+                        next_isect,
+                        scatter_ray,
+                        scatter_int_rays[pixel_id],
+                        medium_ids[pixel_id],
+                        scatter_medium_ids[pixel_id],
+                        next_points[pixel_id],
+                        scatter_isect,
+                        scatter_point);
+            }
         }
 
         assert(isfinite(nee_contrib));

@@ -1,5 +1,5 @@
 import numpy as np
-import OpenEXR
+#import OpenEXR
 import Imath
 import skimage
 import skimage.io

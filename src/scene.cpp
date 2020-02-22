@@ -462,7 +462,7 @@ __global__ void intersect_shape_kernel(
         const Shape *shapes,
         const int *active_pixels,
         const OptiXHit *hits,
-        const Ray *rays,
+        Ray *rays,
         const RayDifferential *ray_differentials,
         Intersection *out_isects,
         SurfacePoint *out_points,
@@ -510,7 +510,7 @@ __global__ void intersect_shape_kernel(
 void intersect_shape(const Shape *shapes,
                      const BufferView<int> &active_pixels,
                      const BufferView<OptiXHit> &optix_hits,
-                     const BufferView<Ray> &rays,
+                     BufferView<Ray> rays,
                      const BufferView<RayDifferential> &ray_differentials,
                      BufferView<Intersection> isects,
                      BufferView<SurfacePoint> points,
@@ -768,20 +768,20 @@ __global__ void update_occluded_rays_kernel(int N,
     if (optix_hits[idx].t >= 0.f) {
         // Set maxt to negative if occluded.
         auto pixel_id = active_pixels[idx];
-        rays[pixel_id].maxt = -1;
+        rays[pixel_id].tmax = -1;
     }
 }
 
 void update_occluded_rays(const BufferView<int> &active_pixels,
                           const BufferView<OptiXHit> &optix_hits,
-                          BufferView<Vector3> transmittances) {
+                          BufferView<Ray> rays) {
     auto block_size = 256;
     auto block_count = idiv_ceil(active_pixels.size(), block_size);
     update_occluded_rays_kernel<<<block_count, block_size>>>(
         active_pixels.size(),
         active_pixels.begin(),
         optix_hits.begin(),
-        transmittances.begin());
+        rays.begin());
 }
 #endif
 
