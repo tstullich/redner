@@ -2,8 +2,8 @@ import pyredner
 import torch
 import redner
 
-pyredner.set_use_gpu(False)
-#pyredner.set_use_gpu(torch.cuda.is_available())
+#pyredner.set_use_gpu(False)
+pyredner.set_use_gpu(torch.cuda.is_available())
 
 # Intitialize information about the medium. We can set the
 # absorption as well as scattering factors for the medium.
@@ -169,9 +169,9 @@ scene_args = pyredner.RenderFunction.serialize_scene(\
     use_secondary_edge_sampling = False)
 
 render = pyredner.RenderFunction.apply
-img = render(0, *scene_args)
-pyredner.imwrite(img.cpu(), 'results/test_medium/target.exr')
-pyredner.imwrite(img.cpu(), 'results/test_medium/target.png')
+target = render(0, *scene_args)
+pyredner.imwrite(target.cpu(), 'results/test_medium/target.exr')
+pyredner.imwrite(target.cpu(), 'results/test_medium/target.png')
 target = pyredner.imread('results/test_medium/target.exr')
 if pyredner.get_use_gpu():
     target = target.cuda(device = pyredner.get_device())
@@ -232,8 +232,10 @@ for t in range(200):
 
     # Take a gradient descent step
     optimizer.step()
+    # Clamp sigma_a to a valid value
+    mediums[0].sigma_a.data.clamp_(0.00001)
     # Print the current absorption factor values
-    print('grad:', mediums[0].sigma_a.grad)
+    print('sigma_a:', mediums[0].sigma_a)
 
 # Render final result
 scene_args = pyredner.RenderFunction.serialize_scene(\
