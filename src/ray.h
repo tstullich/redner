@@ -25,6 +25,13 @@ struct TRay {
     TRay(const TVector3<T2> &org, const TVector3<T2> &dir, T2 tmin, T2 tmax)
         : org(org), tmin(tmin), dir(dir), tmax(tmax) {}
 
+    DEVICE static TRay<T> zero() {
+        return TRay<T>{
+            TVector3<T>{0, 0, 0}, TVector3<T>{0, 0, 0},
+            Real(0), Real(0)
+        };
+    }
+
     // When T == float, this exactly matches Optix prime's ray format
     TVector3<T> org;
     T tmin;
@@ -36,6 +43,13 @@ template <typename T>
 struct TRayDifferential {
     TVector3<T> org_dx, org_dy;
     TVector3<T> dir_dx, dir_dy;
+
+    DEVICE static TRayDifferential<T> zero() {
+        return TRayDifferential<T>{
+            TVector3<T>{0, 0, 0}, TVector3<T>{0, 0, 0},
+            TVector3<T>{0, 0, 0}, TVector3<T>{0, 0, 0}
+        };
+    }
 };
 
 template <typename T>

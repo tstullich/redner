@@ -7,10 +7,10 @@
 #include "phase_function.h"
 #include "ptr.h"
 #include "ray.h"
+#include "shape.h"
 #include "thrust_utils.h"
 #include "vector.h"
 
-// Forward declarations
 struct DScene;
 struct Sampler;
 struct Scene;
@@ -89,10 +89,14 @@ void d_get_phase_function(const Medium &medium,
 /// Calculate the transmittance of a ray segment given a ray
 DEVICE
 inline
-Vector3 transmittance(const Medium &medium, Real distance) {
+Vector3 transmittance(const Medium &medium, const Ray &ray) {
     if (medium.type == MediumType::homogeneous) {
         // Use Beer's Law to calculate transmittance
-        return exp(-medium.homogeneous.sigma_t * min(distance, MaxFloat));
+        if (ray.tmax >= MaxFloat) {
+            return Vector3{0, 0, 0};
+        } else {
+            return exp(-medium.homogeneous.sigma_t * ray.tmax);
+        }
     } else {
         return Vector3{0, 0, 0};
     }
@@ -101,16 +105,16 @@ Vector3 transmittance(const Medium &medium, Real distance) {
 DEVICE
 inline
 void d_transmittance(const Medium &medium,
-                     float distance,
+                     const Ray &ray,
                      const Vector3 &d_output,
                      DMedium &d_medium,
-                     float &d_distance) {
+                     Ray &d_ray) {
     if (medium.type == MediumType::homogeneous) {
         // output = exp(-medium.homogeneous.sigma_t * min(distance, MaxFloat));
-        if (distance < MaxFloat) {
-            auto output = exp(medium.homogeneous.sigma_t * distance);
-            auto d_sigma_t = -d_output * output * distance;
-            d_distance += (-sum(d_output * output * medium.homogeneous.sigma_t));
+        if (ray.tmax < MaxFloat) {
+            auto output = exp(medium.homogeneous.sigma_t * ray.tmax);
+            auto d_sigma_t = -d_output * output * ray.tmax;
+            d_ray.tmax += -sum(d_output * output * medium.homogeneous.sigma_t);
             // sigma_t = sigma_a + sigma_s
             atomic_add(&d_medium.sigma_a[0], d_sigma_t[0]);
             atomic_add(&d_medium.sigma_a[1], d_sigma_t[1]);
@@ -124,8 +128,145 @@ void d_transmittance(const Medium &medium,
     }
 }
 
-// Function to sample a distance within a medium
-Real sample_distance(const Medium &medium, const MediumSample &sample);
+/**
+ * Sample the given medium to see if the ray is affected by it. 
+ * Returns the transmittance divided by pdf.
+ */
+DEVICE
+inline
+Vector3 sample_medium(const Medium *mediums,
+                      const Shape *shapes,
+                      int medium_id,
+                      const Ray &ray,
+                      const Intersection &surface_isect,
+                      const SurfacePoint &surface_point,
+                      const MediumSample &sample,
+                      int *next_medium_id,
+                      Real *medium_distance) {
+    const auto &medium = mediums[medium_id];
+    if (medium.type == MediumType::homogeneous) {
+        auto h = medium.homogeneous;
+        // Sample a distance point along the ray and compare it
+        // to tmax to see if we are inside of a medium or not
+        auto channel = min(int(sample.uv[0] * 3), 2);
+        auto dist = Real(-log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel]);
+        auto t = min(dist, ray.tmax);
+        auto inside_medium = t < ray.tmax;
+
+        // Compute the transmittance and sampling density
+        auto tr = exp(-h.sigma_t * min(t, MaxFloat));
+
+        // Return the weighting factor for scattering inside of a homogeneous medium
+        auto density = inside_medium ? (h.sigma_t * tr) : tr;
+        auto pdf = sum(density) / 3;
+        // Update intersection data
+        *medium_distance = t;
+        if (!inside_medium) {
+            // shape_id shouldn't be <0
+            // (since inside_medium being false indicates ray.tmax = inf)
+            // but just to be safe
+            if (surface_isect.shape_id >= 0) {
+                const auto &shape = shapes[surface_isect.shape_id];
+                if (dot(ray.dir, surface_point.geom_normal) < 0) {
+                    *next_medium_id = shape.exterior_medium_id;
+                } else {
+                    *next_medium_id = shape.interior_medium_id;
+                }
+            } else {
+                *next_medium_id = -1;
+            }
+        } else {
+            *next_medium_id = medium_id;
+        }
+        return inside_medium ? (tr * h.sigma_s / pdf) : (tr / pdf);
+    } else {
+        return Vector3{0, 0, 0};
+    }
+}
+
+DEVICE
+inline
+void d_sample_medium(const Medium &medium,
+                     const Ray &ray,
+                     const Intersection &surface_isect,
+                     const MediumSample &sample,
+                     const Vector3 &d_output,
+                     const Real d_distance,
+                     DMedium &d_medium,
+                     Real &d_tmax) {
+    if (medium.type == MediumType::homogeneous) {
+        auto h = medium.homogeneous;
+        // Sample a distance within the medium and compare it
+        // to tmax to see if we are inside of a medium or not
+        auto channel = min(int(sample.uv[0] * 3), 2);
+        if (h.sigma_t[channel] <= 0) {
+            return;
+        }
+        auto dist = Real(-log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel]);
+        auto t = min(dist, ray.tmax);
+        if (t >= MaxFloat) {
+            // Output is 0
+            return;
+        }
+        auto inside_medium = t < ray.tmax;
+
+        // Compute the transmittance and sampling density
+        auto tr = exp(-h.sigma_t * min(t, MaxFloat));
+
+        // Return the weighting factor for scattering inside of a homogeneous medium
+        // and its derivatives
+        auto density = inside_medium ? (h.sigma_t * tr) : tr;
+        auto pdf = sum(density) / 3;
+        if (pdf <= 0) {
+            // Shouldn't happen but just to be safe
+            return;
+        }
+        // *medium_distance = t;
+        // return inside_medium ? (tr * h.sigma_s / pdf) : (tr / pdf)
+        auto d_tr = Vector3{0, 0, 0};
+        auto d_pdf = Real(0);
+        if (inside_medium) {
+            d_tr += d_output * h.sigma_s / pdf;
+            auto d_sigma_s = d_output * tr / pdf;
+            d_pdf += (-sum(d_output * tr * h.sigma_s) / square(pdf));
+            atomic_add(&d_medium.sigma_s[0], d_sigma_s[0]);
+            atomic_add(&d_medium.sigma_s[1], d_sigma_s[1]);
+            atomic_add(&d_medium.sigma_s[2], d_sigma_s[2]);
+        } else {
+            d_tr += d_output / pdf;
+            d_pdf += (-sum(d_output * tr) / square(pdf));
+        }
+        // pdf = sum(density) / 3
+        auto d_density = Vector3{d_pdf, d_pdf, d_pdf} / 3;
+        auto d_sigma_t = Vector3{0, 0, 0};
+        // density = inside_medium ? (h.sigma_t * tr) : tr
+        if (inside_medium) {
+            d_sigma_t += d_density * tr;
+            d_tr += d_density * h.sigma_t;
+        } else {
+            d_tr += d_density;
+        }
+        // tr = exp(-h.sigma_t * min(t, MaxFloat))
+        auto d_sigma_t_times_t = d_tr * tr;
+        d_sigma_t += (-d_sigma_t_times_t * t); // t < MaxFloat at this point
+        auto d_t = -sum(d_sigma_t_times_t * h.sigma_t);
+        auto d_dist = d_distance;
+        // t = min(dist, ray.tmax)
+        if (t < ray.tmax) {
+            d_dist += d_t;
+        } else {
+            d_tmax += d_t;
+        }
+        // dist = Real(-log(max(1 - sample.uv[1], Real(1e-20))) / h.sigma_t[channel])
+        d_sigma_t += (-dist / h.sigma_t[channel]);
+        atomic_add(&d_medium.sigma_s[0], d_sigma_t[0]);
+        atomic_add(&d_medium.sigma_s[1], d_sigma_t[1]);
+        atomic_add(&d_medium.sigma_s[2], d_sigma_t[2]);
+        atomic_add(&d_medium.sigma_a[0], d_sigma_t[0]);
+        atomic_add(&d_medium.sigma_a[1], d_sigma_t[1]);
+        atomic_add(&d_medium.sigma_a[2], d_sigma_t[2]);
+    }
+}
 
 // Sample a distance inside the medium and compute the transmittance.
 // Update intersection data as well.
@@ -174,9 +315,11 @@ void trace_nee_transmittance_rays(const Scene &scene,
 // we store when skipping through the boundary.
 // light_isects & light_points store the second surface.
 // If there is only one surface, int_ and light_ store the same surface.
+// Also store the distance to light_point in outgoing_rays.tmax
+// for edge sampling
 void trace_scatter_transmittance_rays(const Scene &scene,
                                       const BufferView<int> &active_pixels,
-                                      const BufferView<Ray> &outgoing_rays,
+                                      BufferView<Ray> outgoing_rays,
                                       const BufferView<RayDifferential> &ray_differentials,
                                       const BufferView<int> &medium_ids,
                                       BufferView<Intersection> light_isects,

@@ -101,7 +101,7 @@ inline
 void d_phase_function_eval(const PhaseFunction &phase_function,
                            const Vector3 &wi,
                            const Vector3 &wo,
-                           Real d_output,
+                           const Real d_output,
                            DPhaseFunction &d_phase_function,
                            Vector3 &d_wi,
                            Vector3 &d_wo) {

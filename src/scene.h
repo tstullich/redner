@@ -128,16 +128,6 @@ void intersect(const Scene &scene,
                BufferView<RayDifferential> new_ray_differentials,
                BufferView<OptiXRay> optix_rays,
                BufferView<OptiXHit> optix_hits);
-void d_intersect(const Scene &scene,
-                 const BufferView<int> &active_pixels,
-                 const BufferView<Ray> &rays,
-                 const BufferView<RayDifferential> &ray_differentials,
-                 const BufferView<Intersection> &surface_intersections,
-                 const BufferView<SurfacePoint> &d_surface_points,
-                 const BufferView<RayDifferential> &d_new_ray_differentials,
-                 DScene *d_scene,
-                 BufferView<DRay> &d_rays,
-                 BufferView<RayDifferential> &d_ray_differentials);
 // ray.maxt is set to < 0 if occluded
 void occluded(const Scene &scene,
               const BufferView<int> &active_pixels,
