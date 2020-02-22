@@ -175,7 +175,6 @@ pyredner.imwrite(img.cpu(), 'results/test_medium/target.png')
 target = pyredner.imread('results/test_medium/target.exr')
 if pyredner.get_use_gpu():
     target = target.cuda(device = pyredner.get_device())
-exit()
 
 # Perturb the medium for the initial guess.
 # Here we set the absorption factor to be optimized.

@@ -129,7 +129,7 @@ void d_transmittance(const Medium &medium,
 }
 
 /**
- * Sample the given medium to see if the ray is affected by it. 
+ * Sample the given medium to see if the ray is affected by it.
  * Returns the transmittance divided by pdf.
  */
 DEVICE

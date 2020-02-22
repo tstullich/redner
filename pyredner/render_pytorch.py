@@ -960,7 +960,7 @@ class RenderFunction(torch.autograd.Function):
                 d_sigma_s = torch.zeros(3, device = pyredner.get_device())
                 buffers.d_sigma_s_list.append(d_sigma_s)
                 d_g = torch.zeros(1, device = pyredner.get_device())
-                d_g_list.append(d_g)
+                buffers.d_g_list.append(d_g)
                 buffers.d_mediums.append(redner.DMedium(\
                     redner.medium_type.homogeneous,
                     redner.float_ptr(d_sigma_a.data_ptr()),
@@ -992,7 +992,7 @@ class RenderFunction(torch.autograd.Function):
                                   sample_pixel_center: bool = False):
         """
             Given a serialized scene and output an 2-channel image,
-            which visualizes the derivatives of pixel color with respect to 
+            which visualizes the derivatives of pixel color with respect to
             the screen space coordinates.
 
             Args
@@ -1169,10 +1169,10 @@ class RenderFunction(torch.autograd.Function):
         num_mediums = len(ctx.mediums)
         for i in range(num_mediums):
             ret_list.append(None) # type
-            if d_mediums[i].type == redner.medium_type.homogeneous:
-                ret_list.append(d_sigma_a_list[i].cpu()) # sigma_a
-                ret_list.append(d_sigma_s_list[i].cpu()) # sigma_s
-                ret_list.append(d_g_list[i].cpu()) # g - phase function scattering
+            if buffers.d_mediums[i].type == redner.medium_type.homogeneous:
+                ret_list.append(buffers.d_sigma_a_list[i].cpu()) # sigma_a
+                ret_list.append(buffers.d_sigma_s_list[i].cpu()) # sigma_s
+                ret_list.append(buffers.d_g_list[i].cpu()) # g - phase function scattering
             else:
                 assert(False)
 

@@ -112,7 +112,7 @@ Scene::Scene(const Camera &camera,
         optix_scene = optix_context->createModel();
         if (shapes.size() > 0) {
             optix_scene->setInstances(
-                (int)shapes.size(), RTP_BUFFER_TYPE_HOST, &optix_instances[0], 
+                (int)shapes.size(), RTP_BUFFER_TYPE_HOST, &optix_instances[0],
                 RTP_BUFFER_FORMAT_TRANSFORM_FLOAT4x4, RTP_BUFFER_TYPE_HOST, &transforms[0]);
         } else {
             // Hack: the last argument is the pointer to a buffer, but optix prime

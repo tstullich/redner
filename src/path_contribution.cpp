@@ -409,7 +409,7 @@ struct path_contribs_accumulator {
                             auto light_pmf = scene.light_pmf[envmap_id];
                             auto pdf_nee = envmap_pdf(*scene.envmap, wo) * light_pmf;
                             auto mis_weight = Real(1 / (1 + square((double)pdf_nee / (double)scatter_pdf)));
-                            scatter_contrib = (mis_weight / scatter_pdf) * scatter_val * light_contrib;                            
+                            scatter_contrib = (mis_weight / scatter_pdf) * scatter_val * light_contrib;
                         }
                     }
                     // Update throughput
@@ -782,7 +782,7 @@ struct d_path_contribs_accumulator {
                             //     get_phase_function(scene.mediums[medium_ids[pixel_id]])
                             d_get_phase_function(scene.mediums[medium_ids[pixel_id]],
                                                  d_phase_function,
-                                                 d_mediums[pixel_id]);
+                                                 d_mediums[medium_ids[pixel_id]]);
                         } else {
                             // Not in a medium
                             // bsdf_val = bsdf(material, surface_point, wi, wo, min_rough)
@@ -955,7 +955,7 @@ struct d_path_contribs_accumulator {
                         //     get_phase_function(scene.mediums[medium_ids[pixel_id]])
                         d_get_phase_function(scene.mediums[medium_ids[pixel_id]],
                                              d_phase_function,
-                                             d_mediums[pixel_id]);
+                                             d_mediums[medium_ids[pixel_id]]);
                     } else {
                         // Not in a medium
                         // bsdf_val = bsdf(material, surface_point, wi, wo, min_rough)
@@ -1218,7 +1218,7 @@ struct d_path_contribs_accumulator {
                         //     get_phase_function(scene.mediums[medium_ids[pixel_id]])
                         d_get_phase_function(scene.mediums[medium_ids[pixel_id]],
                                              d_phase_function,
-                                             d_mediums[pixel_id]);
+                                             d_mediums[medium_ids[pixel_id]]);
                     } else {
                         const auto &surface_shape = scene.shapes[surface_isect.shape_id];
                         if (surface_shape.material_id >= 0) {
@@ -1417,7 +1417,7 @@ struct d_path_contribs_accumulator {
                     //     get_phase_function(scene.mediums[medium_ids[pixel_id]])
                     d_get_phase_function(scene.mediums[medium_ids[pixel_id]],
                                          d_phase_function,
-                                         d_mediums[pixel_id]);
+                                         d_mediums[medium_ids[pixel_id]]);
                 } else {
                     // XXX: Ignore derivative w.r.t. pdf_bsdf since it causes high variance
                     // when propagating back from many bounces
