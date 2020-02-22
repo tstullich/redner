@@ -886,46 +886,62 @@ struct secondary_edge_sampler {
 
     DEVICE Real importance(const BVHNode3 &node,
                            const SurfacePoint &p,
+                           const Vector3 &pos,
                            const Matrix3x3 &m,
-                           const Matrix3x3 &m_inv) {
+                           const Matrix3x3 &m_inv,
+                           bool in_medium) {
         // importance = BRDF * weighted length / dist
         // For BRDF we estimate the bound using linearly transformed cosine distribution
-        auto brdf_term = ltc_bound(node.bounds, p, m, m_inv);
+        auto material_term = Real(0);
+        if (in_medium) {
+            material_term = 1;
+        } else {
+            material_term = ltc_bound(node.bounds, p, m, m_inv);
+        }
         auto center = 0.5f * (node.bounds.p_min + node.bounds.p_max);
-        return brdf_term * node.weighted_total_length
-            / max(distance(center, p.position), Real(1e-3));
+        return material_term * node.weighted_total_length
+            / max(distance(center, pos), Real(1e-3));
     }
 
     DEVICE Real importance(const BVHNode6 &node,
                            const SurfacePoint &p,
+                           const Vector3 &pos,
                            const Matrix3x3 &m,
-                           const Matrix3x3 &m_inv) {
+                           const Matrix3x3 &m_inv,
+                           bool in_medium) {
         // importance = BRDF * weighted length / dist
         // Except if the sphere centered at 0.5 * (p - cam_org),
         // which has radius of 0.5 * distance(p, cam_org)
         // does not intersect the directional bounding box of node, 
         // the importance is zero (see Olson and Zhang 2006)
         auto d_bounds = AABB3{node.bounds.d_min, node.bounds.d_max};
-        if (!intersect(Sphere{0.5f * (p.position - cam_org),
-                    0.5f * distance(p.position, cam_org)}, d_bounds)) {
+        if (!intersect(Sphere{0.5f * (pos - cam_org),
+                    0.5f * distance(pos, cam_org)}, d_bounds)) {
             // Not silhouette
             return 0;
         }
         auto p_bounds = AABB3{node.bounds.p_min, node.bounds.p_max};
-        auto brdf_term = ltc_bound(p_bounds, p, m, m_inv);
+        auto material_term = Real(0);
+        if (in_medium) {
+            material_term = 1;
+        } else {
+            material_term = ltc_bound(p_bounds, p, m, m_inv);
+        }
         auto center = 0.5f * (p_bounds.p_min + p_bounds.p_max);
-        return brdf_term * node.weighted_total_length
-            / max(distance(center, p.position), Real(1e-3));
+        return material_term * node.weighted_total_length
+            / max(distance(center, pos), Real(1e-3));
     }
 
     DEVICE Real importance(const BVHNodePtr &node_ptr,
                            const SurfacePoint &p,
+                           const Vector3 &pos,
                            const Matrix3x3 &m,
-                           const Matrix3x3 &m_inv) {
+                           const Matrix3x3 &m_inv,
+                           bool in_medium) {
         if (node_ptr.is_bvh_node3) {
-            return importance(*node_ptr.ptr3, p, m, m_inv);
+            return importance(*node_ptr.ptr3, p, pos, m, m_inv, in_medium);
         } else {
-            return importance(*node_ptr.ptr6, p, m, m_inv);
+            return importance(*node_ptr.ptr6, p, pos, m, m_inv, in_medium);
         }
     }
 
@@ -944,42 +960,51 @@ struct secondary_edge_sampler {
     template <typename BVHNodeType>
     DEVICE Real leaf_importance(const BVHNodeType &node,
                                 const SurfacePoint &p,
+                                const Vector3 &pos,
                                 const Matrix3x3 &m,
-                                const Matrix3x3 &m_inv) {
+                                const Matrix3x3 &m_inv,
+                                bool in_medium) {
         const auto &edge = edges[node.edge_id];
-        if (!is_silhouette(scene.shapes, p.position, edge)) {
+        if (!is_silhouette(scene.shapes, pos, edge)) {
             return 0;
         }
         auto v0 = Vector3{get_v0(scene.shapes, edge)};
         auto v1 = Vector3{get_v1(scene.shapes, edge)};
-        // If degenerate, the weight is 0
-        if (length_squared(v1 - v0) > 1e-10f) {
-            // Transform the vertices to local coordinates
-            auto v0o = m_inv * (v0 - p.position);
-            auto v1o = m_inv * (v1 - p.position);
-            // If below surface, the weight is 0
-            if (v0o[2] > 0.f || v1o[2] > 0.f) {
-                // Clip to the surface tangent plane
-                if (v0o[2] < 0.f) {
-                    v0o = (v0o*v1o[2] - v1o*v0o[2]) / (v1o[2] - v0o[2]);
+        if (in_medium) {
+            // Don't use LTC for medium
+            auto v0_imp = 1 / distance_squared(pos, v0);
+            auto v1_imp = 1 / distance_squared(pos, v1);
+            return 1 / max(v0_imp, v1_imp);
+        } else {
+            // If degenerate, the weight is 0
+            if (length_squared(v1 - v0) > 1e-10f) {
+                // Transform the vertices to local coordinates
+                auto v0o = m_inv * (v0 - pos);
+                auto v1o = m_inv * (v1 - pos);
+                // If below surface, the weight is 0
+                if (v0o[2] > 0.f || v1o[2] > 0.f) {
+                    // Clip to the surface tangent plane
+                    if (v0o[2] < 0.f) {
+                        v0o = (v0o*v1o[2] - v1o*v0o[2]) / (v1o[2] - v0o[2]);
+                    }
+                    if (v1o[2] < 0.f) {
+                        v1o = (v0o*v1o[2] - v1o*v0o[2]) / (v1o[2] - v0o[2]);
+                    }
+                    // Integrate over the edge using LTC
+                    auto vodir = v1o - v0o;
+                    auto wt = normalize(vodir);
+                    auto l0 = dot(v0o, wt);
+                    auto l1 = dot(v1o, wt);
+                    auto vo = v0o - l0 * wt;
+                    auto d = length(vo);
+                    auto I = [&](Real l) {
+                        return (l/(d*(d*d+l*l))+atan(l/d)/(d*d))*vo[2] +
+                            (l*l/(d*(d*d+l*l)))*wt[2];
+                    };
+                    auto Il0 = I(l0);
+                    auto Il1 = I(l1);
+                    return max(Il1 - Il0, Real(0));
                 }
-                if (v1o[2] < 0.f) {
-                    v1o = (v0o*v1o[2] - v1o*v0o[2]) / (v1o[2] - v0o[2]);
-                }
-                // Integrate over the edge using LTC
-                auto vodir = v1o - v0o;
-                auto wt = normalize(vodir);
-                auto l0 = dot(v0o, wt);
-                auto l1 = dot(v1o, wt);
-                auto vo = v0o - l0 * wt;
-                auto d = length(vo);
-                auto I = [&](Real l) {
-                    return (l/(d*(d*d+l*l))+atan(l/d)/(d*d))*vo[2] +
-                        (l*l/(d*(d*d+l*l)))*wt[2];
-                };
-                auto Il0 = I(l0);
-                auto Il1 = I(l1);
-                return max(Il1 - Il0, Real(0));
             }
         }
         return 0;
@@ -987,25 +1012,29 @@ struct secondary_edge_sampler {
 
     DEVICE Real leaf_importance(const BVHNodePtr &node_ptr,
                                 const SurfacePoint &p,
+                                const Vector3 &pos,
                                 const Matrix3x3 &m,
-                                const Matrix3x3 &m_inv) {
+                                const Matrix3x3 &m_inv,
+                                bool in_medium) {
         if (node_ptr.is_bvh_node3) {
-            return leaf_importance(*node_ptr.ptr3, p, m, m_inv);
+            return leaf_importance(*node_ptr.ptr3, p, pos, m, m_inv, in_medium);
         } else {
-            return leaf_importance(*node_ptr.ptr6, p, m, m_inv);
+            return leaf_importance(*node_ptr.ptr6, p, pos, m, m_inv, in_medium);
         }
     }
 
     template <typename BVHNodeType>
     DEVICE Real leaf_importance(const BVHNodeType &node,
                                 const SurfacePoint &p,
+                                const Vector3 &pos,
                                 const Matrix3x3 &m,
                                 const Matrix3x3 &m_inv,
                                 const Ray &nee_ray,
                                 const Intersection &nee_isect,
-                                Real edge_billboard_size) {
+                                Real edge_billboard_size,
+                                bool in_medium) {
         const auto &edge = edges[node.edge_id];
-        if (!is_silhouette(scene.shapes, p.position, edge)) {
+        if (!is_silhouette(scene.shapes, pos, edge)) {
             return 0;
         }
         if (nee_isect.valid()) {
@@ -1035,34 +1064,41 @@ struct secondary_edge_sampler {
             return 0;
         }
 
-        // If degenerate, the weight is 0
-        if (length_squared(v1 - v0) > 1e-10f) {
-            // Transform the vertices to local coordinates
-            auto v0o = m_inv * (v0 - p.position);
-            auto v1o = m_inv * (v1 - p.position);
-            // If below surface, the weight is 0
-            if (v0o[2] > 0.f || v1o[2] > 0.f) {
-                // Clip to the surface tangent plane
-                if (v0o[2] < 0.f) {
-                    v0o = (v0o*v1o[2] - v1o*v0o[2]) / (v1o[2] - v0o[2]);
+        if (in_medium) {
+            // Don't use LTC for medium
+            auto v0_imp = 1 / distance_squared(pos, v0);
+            auto v1_imp = 1 / distance_squared(pos, v1);
+            return 1 / max(v0_imp, v1_imp);
+        } else {
+            // If degenerate, the weight is 0
+            if (length_squared(v1 - v0) > 1e-10f) {
+                // Transform the vertices to local coordinates
+                auto v0o = m_inv * (v0 - pos);
+                auto v1o = m_inv * (v1 - pos);
+                // If below surface, the weight is 0
+                if (v0o[2] > 0.f || v1o[2] > 0.f) {
+                    // Clip to the surface tangent plane
+                    if (v0o[2] < 0.f) {
+                        v0o = (v0o*v1o[2] - v1o*v0o[2]) / (v1o[2] - v0o[2]);
+                    }
+                    if (v1o[2] < 0.f) {
+                        v1o = (v0o*v1o[2] - v1o*v0o[2]) / (v1o[2] - v0o[2]);
+                    }
+                    // Integrate over the edge using LTC
+                    auto vodir = v1o - v0o;
+                    auto wt = normalize(vodir);
+                    auto l0 = dot(v0o, wt);
+                    auto l1 = dot(v1o, wt);
+                    auto vo = v0o - l0 * wt;
+                    auto d = length(vo);
+                    auto I = [&](Real l) {
+                        return (l/(d*(d*d+l*l))+atan(l/d)/(d*d))*vo[2] +
+                            (l*l/(d*(d*d+l*l)))*wt[2];
+                    };
+                    auto Il0 = I(l0);
+                    auto Il1 = I(l1);
+                    return max(Il1 - Il0, Real(0));
                 }
-                if (v1o[2] < 0.f) {
-                    v1o = (v0o*v1o[2] - v1o*v0o[2]) / (v1o[2] - v0o[2]);
-                }
-                // Integrate over the edge using LTC
-                auto vodir = v1o - v0o;
-                auto wt = normalize(vodir);
-                auto l0 = dot(v0o, wt);
-                auto l1 = dot(v1o, wt);
-                auto vo = v0o - l0 * wt;
-                auto d = length(vo);
-                auto I = [&](Real l) {
-                    return (l/(d*(d*d+l*l))+atan(l/d)/(d*d))*vo[2] +
-                        (l*l/(d*(d*d+l*l)))*wt[2];
-                };
-                auto Il0 = I(l0);
-                auto Il1 = I(l1);
-                return max(Il1 - Il0, Real(0));
             }
         }
         return 0;
@@ -1070,25 +1106,29 @@ struct secondary_edge_sampler {
 
     DEVICE Real leaf_importance(const BVHNodePtr &node_ptr,
                                 const SurfacePoint &p,
+                                const Vector3 &pos,
                                 const Matrix3x3 &m,
                                 const Matrix3x3 &m_inv,
                                 const Ray &nee_ray,
                                 const Intersection &nee_isect,
-                                Real edge_bounds_expand) {
+                                Real edge_bounds_expand,
+                                bool in_medium) {
         if (node_ptr.is_bvh_node3) {
-            return leaf_importance(*node_ptr.ptr3,
-                p, m, m_inv, nee_ray, nee_isect, edge_bounds_expand);
+            return leaf_importance(*node_ptr.ptr3, p, pos, m, m_inv,
+                nee_ray, nee_isect, edge_bounds_expand, in_medium);
         } else {
-            return leaf_importance(*node_ptr.ptr6,
-                p, m, m_inv, nee_ray, nee_isect, edge_bounds_expand);
+            return leaf_importance(*node_ptr.ptr6, p, pos, m, m_inv,
+                nee_ray, nee_isect, edge_bounds_expand, in_medium);
         }
     }
 
-    DEVICE bool inside(const BVHNodePtr &node_ptr, const SurfacePoint &p) {
+    DEVICE bool inside(const BVHNodePtr &node_ptr,
+                       const SurfacePoint &p,
+                       const Vector3 &pos) {
         if (node_ptr.is_bvh_node3) {
-            return ::inside(node_ptr.ptr3->bounds, p.position);
+            return ::inside(node_ptr.ptr3->bounds, pos);
         } else {
-            return ::inside(node_ptr.ptr6->bounds, p.position);
+            return ::inside(node_ptr.ptr6->bounds, pos);
         }
     }
 
@@ -1116,9 +1156,11 @@ struct secondary_edge_sampler {
 
     DEVICE int sample_edge_h(const EdgeTreeRoots &edge_tree_roots,
                              const SurfacePoint &p,
+                             const Vector3 &pos,
                              const Matrix3x3 &m,
                              const Matrix3x3 &m_inv,
                              const Ray &nee_ray,
+                             bool in_medium,
                              Real sample,
                              Real resample_sample,
                              Real &sample_weight) {
@@ -1174,7 +1216,7 @@ struct secondary_edge_sampler {
             const auto &stack_item = *--stack_ptr;
             if (is_leaf(stack_item.node_ptr)) {
                 auto w = stack_item.num_samples *
-                    leaf_importance(stack_item.node_ptr, p, m, m_inv) /
+                    leaf_importance(stack_item.node_ptr, p, pos, m, m_inv, in_medium) /
                     stack_item.pmf;
                 if (w > 0) {
                     auto prev_wsum = wsum;
@@ -1194,11 +1236,11 @@ struct secondary_edge_sampler {
                 BVHNodePtr children[2];
                 get_children(stack_item.node_ptr, children);
                 auto imp0 = Real(0), imp1 = Real(0);
-                if (inside(stack_item.node_ptr, p)) {
+                if (inside(stack_item.node_ptr, p, pos)) {
                     imp0 = imp1 = Real(1);
                 } else {
-                    imp0 = importance(children[0], p, m, m_inv);
-                    imp1 = importance(children[1], p, m, m_inv);
+                    imp0 = importance(children[0], p, pos, m, m_inv, in_medium);
+                    imp1 = importance(children[1], p, pos, m, m_inv, in_medium);
                 }
                 if (imp0 > 0 || imp1 > 0) {
                     auto prob0 = imp0 / (imp0 + imp1);
@@ -1240,11 +1282,13 @@ struct secondary_edge_sampler {
 
     DEVICE int sample_edge_l(const EdgeTreeRoots &edge_tree_roots,
                              const SurfacePoint &p,
+                             const Vector3 &pos,
                              const Matrix3x3 &m,
                              const Matrix3x3 &m_inv,
                              const Ray &nee_ray,
                              const Intersection &nee_isect,
                              const SurfacePoint &nee_point,
+                             bool in_medium,
                              Real resample_sample,
                              Real &sample_weight,
                              Vector3 &edge_pt,
@@ -1272,8 +1316,8 @@ struct secondary_edge_sampler {
             // pop from stack
             const auto &stack_item = *--stack_ptr;
             if (is_leaf(stack_item.node_ptr)) {
-                auto w = leaf_importance(stack_item.node_ptr, p, m, m_inv,
-                    nee_ray, nee_isect, edge_bounds_expand);
+                auto w = leaf_importance(stack_item.node_ptr, p, pos, m, m_inv,
+                    nee_ray, nee_isect, edge_bounds_expand, in_medium);
                 if (w > 0) {
                     auto prev_wsum = wsum;
                     wsum += w;
@@ -1293,12 +1337,12 @@ struct secondary_edge_sampler {
                 get_children(stack_item.node_ptr, children);
                 if (nee_isect.valid()) {
                     auto nee_pt = nee_point.position;
-                    if (contains_silhouette(children[0], p.position) &&
+                    if (contains_silhouette(children[0], pos) &&
                             contains_silhouette(children[0], nee_pt) &&
                             intersect(children[0], nee_ray, edge_bounds_expand)) {
                         *stack_ptr++ = BVHStackItemL{BVHNodePtr(children[0])};
                     }
-                    if (contains_silhouette(children[1], p.position) &&
+                    if (contains_silhouette(children[1], pos) &&
                             contains_silhouette(children[1], nee_pt) &&
                             intersect(children[1], nee_ray, edge_bounds_expand)) {
                         *stack_ptr++ = BVHStackItemL{BVHNodePtr(children[1])};
@@ -1306,11 +1350,11 @@ struct secondary_edge_sampler {
                 } else {
                     // Infinitely far nee rays
                     // TODO: silhouette detection for infinitely far positions
-                    if (contains_silhouette(children[0], p.position) &&
+                    if (contains_silhouette(children[0], pos) &&
                             intersect(children[0], nee_ray, edge_bounds_expand)) {
                         *stack_ptr++ = BVHStackItemL{BVHNodePtr(children[0])};
                     }
-                    if (contains_silhouette(children[1], p.position) &&
+                    if (contains_silhouette(children[1], pos) &&
                             intersect(children[1], nee_ray, edge_bounds_expand)) {
                         *stack_ptr++ = BVHStackItemL{BVHNodePtr(children[1])};
                     }
@@ -1368,9 +1412,10 @@ struct secondary_edge_sampler {
     DEVICE void operator()(int idx) {
         auto pixel_id = active_pixels[idx];
         const auto &edge_sample = edge_samples[idx];
-        const auto &wi = -incoming_rays[pixel_id].dir;
-        const auto &shading_isect = shading_isects[pixel_id];
-        const auto &shading_point = shading_points[pixel_id];
+        const auto &incoming_ray = incoming_rays[pixel_id];
+        const auto &wi = -incoming_ray.dir;
+        const auto &surface_isect = surface_isects[pixel_id];
+        const auto &surface_point = surface_points[pixel_id];
         const auto &throughput = throughputs[pixel_id];
         const auto &min_rough = min_roughness[pixel_id];
         const auto &nee_isect = nee_isects[pixel_id];
@@ -1402,51 +1447,79 @@ struct secondary_edge_sampler {
             return;
         }
 
-        // Setup the Linearly Transformed Cosine Distribution
-        const Shape &shape = scene.shapes[shading_isect.shape_id];
-        const Material &material = scene.materials[shape.material_id];
-        // First decide which component of BRDF to sample
-        auto diffuse_reflectance = get_diffuse_reflectance(material, shading_point);
-        auto specular_reflectance = get_specular_reflectance(material, shading_point);
-        auto diffuse_weight = luminance(diffuse_reflectance);
-        auto specular_weight = luminance(specular_reflectance);
-        if (c_uniform_sampling) {
-            diffuse_weight = 1;
-            specular_weight = 0;
-        }
-        auto weight_sum = diffuse_weight + specular_weight;
-        if (weight_sum <= 0.f) {
-            // black material
-            return;
-        }
-        auto diffuse_pmf = diffuse_weight / weight_sum;
-        auto specular_pmf = specular_weight / weight_sum;
-        auto m_pmf = 0.f;
-        auto n = shading_point.shading_frame.n;
-        if (material.two_sided) {
-            if (dot(wi, n) < 0.f) {
-                n = -n;
+        auto pos = surface_point.position;
+        if (medium_ids != nullptr && medium_distances != nullptr) {
+            if (medium_ids[pixel_id] >= 0) {
+                pos = incoming_ray.org + incoming_ray.dir * medium_distances[pixel_id];
             }
         }
-        auto frame_x = normalize(wi - n * dot(wi, n));
-        auto frame_y = cross(n, frame_x);
-        if (dot(wi, n) > 1 - 1e-6f) {
-            coordinate_system(n, frame_x, frame_y);
-        }
-        auto isotropic_frame = Frame{frame_x, frame_y, n};
+
+        // Setup the Linearly Transformed Cosine Distribution
+        const Shape &shape = scene.shapes[surface_isect.shape_id];
+        const Material &material = scene.materials[shape.material_id];
+        auto m_pmf = 0.f;
         auto m = Matrix3x3{};
         auto m_inv = Matrix3x3{};
-        auto roughness = max(get_roughness(material, shading_point), min_rough);
-        if (edge_sample.bsdf_component <= diffuse_pmf) {
-            // M is shading frame * identity
+        auto in_medium = medium_ids != nullptr &&
+                         medium_ids[pixel_id] >= 0 &&
+                         medium_distances[pixel_id] < incoming_ray.tmax;
+        auto is_diffuse = true;
+        auto is_diffuse_or_glossy = true;
+        auto diffuse_pmf = Real(1);
+        auto specular_pmf = Real(0);
+        if (in_medium) {
+            auto frame_x = Vector3{0, 0, 0};
+            auto frame_y = Vector3{0, 0, 0};
+            coordinate_system(wi, frame_x, frame_y);
+            auto isotropic_frame = Frame{frame_x, frame_y, wi};
             m_inv = Matrix3x3(isotropic_frame);
             m = inverse(m_inv);
-            m_pmf = diffuse_pmf;
+            is_diffuse = true;
+            is_diffuse_or_glossy = true;
         } else {
-            m_inv = inverse(get_ltc_matrix(shading_point, wi, roughness, tabM)) *
-                    Matrix3x3(isotropic_frame);
-            m = inverse(m_inv);
-            m_pmf = specular_pmf;
+            // First decide which component of BRDF to sample
+            auto diffuse_reflectance = get_diffuse_reflectance(material, surface_point);
+            auto specular_reflectance = get_specular_reflectance(material, surface_point);
+            auto diffuse_weight = luminance(diffuse_reflectance);
+            auto specular_weight = luminance(specular_reflectance);
+            if (c_uniform_sampling) {
+                diffuse_weight = 1;
+                specular_weight = 0;
+            }
+            auto weight_sum = diffuse_weight + specular_weight;
+            if (weight_sum <= 0.f) {
+                // black material
+                return;
+            }
+            diffuse_pmf = diffuse_weight / weight_sum;
+            specular_pmf = specular_weight / weight_sum;
+            auto n = surface_point.shading_frame.n;
+            if (material.two_sided) {
+                if (dot(wi, n) < 0.f) {
+                    n = -n;
+                }
+            }
+            auto frame_x = normalize(wi - n * dot(wi, n));
+            auto frame_y = cross(n, frame_x);
+            if (dot(wi, n) > 1 - 1e-6f) {
+                coordinate_system(n, frame_x, frame_y);
+            }
+            auto isotropic_frame = Frame{frame_x, frame_y, n};
+            auto roughness = max(get_roughness(material, surface_point), min_rough);
+            if (edge_sample.bsdf_component <= diffuse_pmf) {
+                // M is shading frame * identity
+                m_inv = Matrix3x3(isotropic_frame);
+                m = inverse(m_inv);
+                m_pmf = diffuse_pmf;
+            } else {
+                m_inv = inverse(get_ltc_matrix(surface_point, wi, roughness, tabM)) *
+                        Matrix3x3(isotropic_frame);
+                m = inverse(m_inv);
+                m_pmf = specular_pmf;
+            }
+            is_diffuse = roughness > Real(0.1);
+            is_diffuse_or_glossy =
+                edge_sample.bsdf_component <= diffuse_pmf || roughness > Real(0.1);
         }
 
         auto edge_id = -1;
@@ -1457,12 +1530,10 @@ struct secondary_edge_sampler {
         auto edge_sel = edge_sample.edge_sel;
         auto use_nee_ray = false;
         auto nee_ray_pmf = Real(1);
-        auto is_diffuse_or_glossy =
-            edge_sample.bsdf_component <= diffuse_pmf || roughness > Real(0.1);
         // Turn off nee edge sampling when roughness is low
         if (c_use_nee_ray && is_diffuse_or_glossy) {
             use_nee_ray = edge_sel < Real(0.5) ? true : false;
-            if (roughness > Real(0.1)) {
+            if (is_diffuse) {
                 nee_ray_pmf = 0.5f;
             } else {
                 nee_ray_pmf = use_nee_ray ? diffuse_pmf * 0.5f : 1.f - diffuse_pmf * 0.5f;
@@ -1500,41 +1571,48 @@ struct secondary_edge_sampler {
                         const auto &edge = edges[edge_id];
                         // If the edge lies on the same triangle of shading isects, the weight is 0
                         // If not a silhouette edge, the weight is 0
-                        bool same_tri = edge.shape_id == shading_isect.shape_id &&
-                            (edge.v0 == shading_isect.tri_id || edge.v1 == shading_isect.tri_id);
+                        bool same_tri = edge.shape_id == surface_isect.shape_id &&
+                            (edge.v0 == surface_isect.tri_id || edge.v1 == surface_isect.tri_id);
                         if (edges_pmf[edge_id] > 0 &&
-                                is_silhouette(scene.shapes, shading_point.position, edge) &&
+                                is_silhouette(scene.shapes, pos, edge) &&
                                 !same_tri) {
                             auto v0 = Vector3{get_v0(scene.shapes, edge)};
                             auto v1 = Vector3{get_v1(scene.shapes, edge)};
                             // If degenerate, the weight is 0
                             if (length_squared(v1 - v0) > 1e-10f) {
-                                // Transform the vertices to local coordinates
-                                auto v0o = m_inv * (v0 - shading_point.position);
-                                auto v1o = m_inv * (v1 - shading_point.position);
-                                // If below surface, the weight is 0
-                                if (v0o[2] > 0.f || v1o[2] > 0.f) {
-                                    // Clip to the surface tangent plane
-                                    if (v0o[2] < 0.f) {
-                                        v0o = (v0o*v1o[2] - v1o*v0o[2]) / (v1o[2] - v0o[2]);
+                                if (in_medium) {
+                                    // Don't use LTC for medium
+                                    auto v0_imp = 1 / distance_squared(pos, v0);
+                                    auto v1_imp = 1 / distance_squared(pos, v1);
+                                    edge_weights[sample_id] = 1 / max(v0_imp, v1_imp);
+                                } else {
+                                    // Transform the vertices to local coordinates
+                                    auto v0o = m_inv * (v0 - surface_point.position);
+                                    auto v1o = m_inv * (v1 - surface_point.position);
+                                    // If below surface, the weight is 0
+                                    if (v0o[2] > 0.f || v1o[2] > 0.f) {
+                                        // Clip to the surface tangent plane
+                                        if (v0o[2] < 0.f) {
+                                            v0o = (v0o*v1o[2] - v1o*v0o[2]) / (v1o[2] - v0o[2]);
+                                        }
+                                        if (v1o[2] < 0.f) {
+                                            v1o = (v0o*v1o[2] - v1o*v0o[2]) / (v1o[2] - v0o[2]);
+                                        }
+                                        // Integrate over the edge using LTC
+                                        auto vodir = v1o - v0o;
+                                        auto wt = normalize(vodir);
+                                        auto l0 = dot(v0o, wt);
+                                        auto l1 = dot(v1o, wt);
+                                        auto vo = v0o - l0 * wt;
+                                        auto d = length(vo);
+                                        auto I = [&](Real l) {
+                                            return (l/(d*(d*d+l*l))+atan(l/d)/(d*d))*vo[2] +
+                                                (l*l/(d*(d*d+l*l)))*wt[2];
+                                        };
+                                        auto Il0 = I(l0);
+                                        auto Il1 = I(l1);
+                                        edge_weights[sample_id] = max((Il1 - Il0) / edges_pmf[edge_id], Real(0));
                                     }
-                                    if (v1o[2] < 0.f) {
-                                        v1o = (v0o*v1o[2] - v1o*v0o[2]) / (v1o[2] - v0o[2]);
-                                    }
-                                    // Integrate over the edge using LTC
-                                    auto vodir = v1o - v0o;
-                                    auto wt = normalize(vodir);
-                                    auto l0 = dot(v0o, wt);
-                                    auto l1 = dot(v1o, wt);
-                                    auto vo = v0o - l0 * wt;
-                                    auto d = length(vo);
-                                    auto I = [&](Real l) {
-                                        return (l/(d*(d*d+l*l))+atan(l/d)/(d*d))*vo[2] +
-                                            (l*l/(d*(d*d+l*l)))*wt[2];
-                                    };
-                                    auto Il0 = I(l0);
-                                    auto Il1 = I(l1);
-                                    edge_weights[sample_id] = max((Il1 - Il0) / edges_pmf[edge_id], Real(0));
                                 }
                             }
                         }
@@ -1568,96 +1646,106 @@ struct secondary_edge_sampler {
             } else {
                 // sample using a tree traversal
                 edge_id = sample_edge_h(edge_tree_roots,
-                    shading_point, m, m_inv, nee_ray,
-                    edge_sel, edge_sample.resample_sel, edge_weight);
+                    surface_point, pos, m, m_inv, nee_ray,
+                    in_medium, edge_sel, edge_sample.resample_sel, edge_weight);
                 if (edge_id == -1 || edge_weight <= 0) {
                     return;
                 }
             }
 
             const auto &edge = edges[edge_id];
-            if (!is_silhouette(scene.shapes, shading_point.position, edge)) {
+            if (!is_silhouette(scene.shapes, pos, edge)) {
                 return;
             }
 
             auto v0 = Vector3{get_v0(scene.shapes, edge)};
             auto v1 = Vector3{get_v1(scene.shapes, edge)};
-            // Transform the vertices to local coordinates
-            auto v0o = m_inv * (v0 - shading_point.position);
-            auto v1o = m_inv * (v1 - shading_point.position);
-            if (v0o[2] <= 0.f && v1o[2] <= 0.f) {
-                // Edge is below the shading point
-                return;
-            }
+            if (in_medium) {
+                // Uniform sample v0 to v1 for medium
+                // Convert from l to position
+                sample_p = v0 + (v1 - v0) * edge_sample.t;
+                auto edge_pdf = m_pmf / length(v1 - v0);
+                assert(edge_pdf > 0);
+                edge_weight /= edge_pdf;
+                mwt = v1 - v0;
+            } else {
+                // Transform the vertices to local coordinates
+                auto v0o = m_inv * (v0 - pos);
+                auto v1o = m_inv * (v1 - pos);
+                if (v0o[2] <= 0.f && v1o[2] <= 0.f) {
+                    // Edge is below the shading point
+                    return;
+                }
 
-            // Clip to the surface tangent plane
-            if (v0o[2] < 0.f) {
-                v0o = (v0o*v1o[2] - v1o*v0o[2]) / (v1o[2] - v0o[2]);
-            }
-            if (v1o[2] < 0.f) {
-                v1o = (v0o*v1o[2] - v1o*v0o[2]) / (v1o[2] - v0o[2]);
-            }
-            auto vodir = v1o - v0o;
-            auto wt = normalize(vodir);
-            auto l0 = dot(v0o, wt);
-            auto l1 = dot(v1o, wt);
-            auto vo = v0o - l0 * wt;
-            auto d = length(vo);
-            auto I = [&](Real l) {
-                return (l/(d*(d*d+l*l))+atan(l/d)/(d*d))*vo[2] +
-                    (l*l/(d*(d*d+l*l)))*wt[2];
-            };
-            auto Il0 = I(l0);
-            auto Il1 = I(l1);
-            auto normalization = Il1 - Il0;
-            auto line_cdf = [&](Real l) {
-                return (I(l)-Il0)/normalization;
-            };
-            auto line_pdf = [&](Real l) {
-                auto dist_sq=d*d+l*l;
-                return 2.f*d*(vo+l*wt)[2]/(normalization*dist_sq*dist_sq);
-            };
-            // Hybrid bisection & Newton iteration
-            // Here we are trying to find a point l s.t. line_cdf(l) = edge_sample.t
-            auto lb = l0;
-            auto ub = l1;
-            if (lb > ub) {
-                swap_(lb, ub);
-            }
-            auto l = 0.5f * (lb + ub);
-            for (int it = 0; it < 20; it++) {
-                if (!(l >= lb && l <= ub)) {
-                    l = 0.5f * (lb + ub);
+                // Clip to the surface tangent plane
+                if (v0o[2] < 0.f) {
+                    v0o = (v0o*v1o[2] - v1o*v0o[2]) / (v1o[2] - v0o[2]);
                 }
-                auto value = line_cdf(l) - edge_sample.t;
-                if (fabs(value) < 1e-5f || it == 19) {
-                    break;
+                if (v1o[2] < 0.f) {
+                    v1o = (v0o*v1o[2] - v1o*v0o[2]) / (v1o[2] - v0o[2]);
                 }
-                // The derivative may not be entirely accurate,
-                // but the bisection is going to handle this
-                if (value > 0.f) {
-                    ub = l;
-                } else {
-                    lb = l;
+                auto vodir = v1o - v0o;
+                auto wt = normalize(vodir);
+                auto l0 = dot(v0o, wt);
+                auto l1 = dot(v1o, wt);
+                auto vo = v0o - l0 * wt;
+                auto d = length(vo);
+                auto I = [&](Real l) {
+                    return (l/(d*(d*d+l*l))+atan(l/d)/(d*d))*vo[2] +
+                        (l*l/(d*(d*d+l*l)))*wt[2];
+                };
+                auto Il0 = I(l0);
+                auto Il1 = I(l1);
+                auto normalization = Il1 - Il0;
+                auto line_cdf = [&](Real l) {
+                    return (I(l)-Il0)/normalization;
+                };
+                auto line_pdf = [&](Real l) {
+                    auto dist_sq=d*d+l*l;
+                    return 2.f*d*(vo+l*wt)[2]/(normalization*dist_sq*dist_sq);
+                };
+                // Hybrid bisection & Newton iteration
+                // Here we are trying to find a point l s.t. line_cdf(l) = edge_sample.t
+                auto lb = l0;
+                auto ub = l1;
+                if (lb > ub) {
+                    swap_(lb, ub);
                 }
-                auto derivative = line_pdf(l);
-                l -= value / derivative;
+                auto l = 0.5f * (lb + ub);
+                for (int it = 0; it < 20; it++) {
+                    if (!(l >= lb && l <= ub)) {
+                        l = 0.5f * (lb + ub);
+                    }
+                    auto value = line_cdf(l) - edge_sample.t;
+                    if (fabs(value) < 1e-5f || it == 19) {
+                        break;
+                    }
+                    // The derivative may not be entirely accurate,
+                    // but the bisection is going to handle this
+                    if (value > 0.f) {
+                        ub = l;
+                    } else {
+                        lb = l;
+                    }
+                    auto derivative = line_pdf(l);
+                    l -= value / derivative;
+                }
+                if (line_pdf(l) <= 0.f) {
+                    // Numerical issue
+                    return;
+                }
+                // Convert from l to position
+                sample_p = m * (vo + l * wt);
+                auto edge_pdf = m_pmf * line_pdf(l);
+                assert(edge_pdf > 0);
+                edge_weight /= (m_pmf * line_pdf(l));
+                mwt = m * wt;
             }
-            if (line_pdf(l) <= 0.f) {
-                // Numerical issue
-                return;
-            }
-            // Convert from l to position
-            sample_p = m * (vo + l * wt);
-            auto edge_pdf = m_pmf * line_pdf(l);
-            assert(edge_pdf > 0);
-            edge_weight /= (m_pmf * line_pdf(l));
-            mwt = m * wt;
         } else {
             // edge_sel *= 2;
             edge_id = sample_edge_l(edge_tree_roots,
-                 shading_point, m, m_inv, nee_ray, nee_isect, nee_point,
-                 edge_sample.resample_sel, edge_weight, sample_p,
+                 surface_point, pos, m, m_inv, nee_ray, nee_isect, nee_point,
+                 in_medium, edge_sample.resample_sel, edge_weight, sample_p,
                  mwt);
             if (edge_id == -1 || edge_weight <= 0) {
                 return;
@@ -1670,8 +1758,7 @@ struct secondary_edge_sampler {
         // shading_point.position, v0 and v1 forms a half-plane
         // that splits the spaces into upper half-space and lower half-space
         auto half_plane_normal =
-            normalize(cross(v0 - shading_point.position,
-                            v1 - shading_point.position));
+            normalize(cross(v0 - pos, v1 - pos));
         // Generate sample directions
         auto offset = 1e-5f / length(sample_p);
         auto sample_dir = normalize(sample_p);
@@ -1679,8 +1766,16 @@ struct secondary_edge_sampler {
         auto v_upper_dir = normalize(sample_dir + offset * half_plane_normal);
         auto v_lower_dir = normalize(sample_dir - offset * half_plane_normal);
 
-        auto eval_bsdf = bsdf(material, shading_point, wi, sample_dir, min_rough);
-        if (sum(eval_bsdf) < 1e-6f) {
+        auto eval_scatter = Vector3{0, 0, 0};
+        if (in_medium) {
+            auto phase_function =
+                get_phase_function(scene.mediums[medium_ids[pixel_id]]);
+            auto p = phase_function_eval(phase_function, wi, sample_dir);
+            eval_scatter = Vector3{p, p, p};
+        } else {
+            eval_scatter = bsdf(material, surface_point, wi, sample_dir, min_rough);
+        }
+        if (sum(eval_scatter) < 1e-6f) {
             return;
         }
 
@@ -1700,14 +1795,14 @@ struct secondary_edge_sampler {
         edge_records[idx].mwt = mwt; // for Jacobian computation
         edge_records[idx].use_nee_ray = use_nee_ray;
         edge_records[idx].is_diffuse_or_glossy = is_diffuse_or_glossy;
-        rays[2 * idx + 0] = Ray(shading_point.position, v_upper_dir, 1e-3f * length(sample_p));
-        rays[2 * idx + 1] = Ray(shading_point.position, v_lower_dir, 1e-3f * length(sample_p));
+        rays[2 * idx + 0] = Ray(pos, v_upper_dir, 1e-3f * length(sample_p));
+        rays[2 * idx + 1] = Ray(pos, v_lower_dir, 1e-3f * length(sample_p));
         const auto &incoming_ray_differential = incoming_ray_differentials[pixel_id];
         // Propagate ray differentials
         auto bsdf_ray_differential = RayDifferential{};
         bsdf_ray_differential.org_dx = incoming_ray_differential.org_dx;
         bsdf_ray_differential.org_dy = incoming_ray_differential.org_dy;
-        if (edge_sample.bsdf_component <= diffuse_pmf) {
+        if (edge_sample.bsdf_component <= diffuse_pmf || in_medium) {
             // HACK: Output direction has no dependencies w.r.t. input
             // However, since the diffuse BRDF serves as a low pass filter,
             // we want to assign a larger prefilter.
@@ -1717,9 +1812,9 @@ struct secondary_edge_sampler {
             // HACK: we compute the half vector as the micronormal,
             // and use dndx/dndy to approximate the micronormal screen derivatives
             auto m = normalize(wi + sample_dir);
-            auto m_local2 = dot(m, shading_point.shading_frame.n);
-            auto dmdx = shading_point.dn_dx * m_local2;
-            auto dmdy = shading_point.dn_dy * m_local2;
+            auto m_local2 = dot(m, surface_point.shading_frame.n);
+            auto dmdx = surface_point.dn_dx * m_local2;
+            auto dmdy = surface_point.dn_dy * m_local2;
             auto dir_dx = incoming_ray_differential.dir_dx;
             auto dir_dy = incoming_ray_differential.dir_dy;
             // Igehy 1999, Equation 15
@@ -1727,16 +1822,16 @@ struct secondary_edge_sampler {
             auto ddotn_dy = dir_dy * m - wi * dmdy;
             // Igehy 1999, Equation 14
             bsdf_ray_differential.dir_dx =
-                dir_dx - 2 * (-dot(wi, m) * shading_point.dn_dx + ddotn_dx * m);
+                dir_dx - 2 * (-dot(wi, m) * surface_point.dn_dx + ddotn_dx * m);
             bsdf_ray_differential.dir_dy =
-                dir_dy - 2 * (-dot(wi, m) * shading_point.dn_dy + ddotn_dy * m);
+                dir_dy - 2 * (-dot(wi, m) * surface_point.dn_dy + ddotn_dy * m);
         }
         bsdf_differentials[2 * idx + 0] = bsdf_ray_differential;
         bsdf_differentials[2 * idx + 1] = bsdf_ray_differential;
         // edge_weight doesn't take the Jacobian between the shading point
         // and the ray intersection into account. We'll compute this later
         assert(nee_ray_pmf > 0);
-        auto nt = throughput * eval_bsdf * d_color * edge_weight / nee_ray_pmf;
+        auto nt = throughput * eval_scatter * d_color * edge_weight / nee_ray_pmf;
         // assert(isfinite(throughput));
         // assert(isfinite(eval_bsdf));
         // assert(isfinite(d_color));
@@ -1757,8 +1852,10 @@ struct secondary_edge_sampler {
     const SecondaryEdgeSample *edge_samples;
     const Ray *incoming_rays;
     const RayDifferential *incoming_ray_differentials;
-    const Intersection *shading_isects;
-    const SurfacePoint *shading_points;
+    const Intersection *surface_isects;
+    const SurfacePoint *surface_points;
+    const int *medium_ids;
+    const Real *medium_distances;
     const Ray *nee_rays;
     const Intersection *nee_isects;
     const SurfacePoint *nee_points;
@@ -1779,8 +1876,10 @@ void sample_secondary_edges(const Scene &scene,
                             const BufferView<SecondaryEdgeSample> &samples,
                             const BufferView<Ray> &incoming_rays,
                             const BufferView<RayDifferential> &incoming_ray_differentials,
-                            const BufferView<Intersection> &shading_isects,
-                            const BufferView<SurfacePoint> &shading_points,
+                            const BufferView<Intersection> &surface_isects,
+                            const BufferView<SurfacePoint> &surface_points,
+                            const BufferView<int> &medium_ids,
+                            const BufferView<Real> &medium_distances,
                             const BufferView<Ray> &nee_rays,
                             const BufferView<Intersection> &nee_isects,
                             const BufferView<SurfacePoint> &nee_points,
@@ -1808,8 +1907,10 @@ void sample_secondary_edges(const Scene &scene,
         samples.begin(),
         incoming_rays.begin(),
         incoming_ray_differentials.begin(),
-        shading_isects.begin(),
-        shading_points.begin(),
+        surface_isects.begin(),
+        surface_points.begin(),
+        medium_ids.begin(),
+        medium_distances.begin(),
         nee_rays.begin(),
         nee_isects.begin(),
         nee_points.begin(),

@@ -112,7 +112,6 @@ struct PathBuffer {
         d_next_rays = Buffer<DRay>(use_gpu, num_pixels);
         d_next_ray_differentials = Buffer<RayDifferential>(use_gpu, num_pixels);
         d_next_points = Buffer<SurfacePoint>(use_gpu, num_pixels);
-        d_scatter_ray_differentials = Buffer<RayDifferential>(use_gpu, num_pixels);
         d_throughputs = Buffer<Vector3>(use_gpu, num_pixels);
         d_rays = Buffer<DRay>(use_gpu, num_pixels);
         d_ray_differentials = Buffer<RayDifferential>(use_gpu, num_pixels);
@@ -174,7 +173,6 @@ struct PathBuffer {
     Buffer<DRay> d_next_rays;
     Buffer<RayDifferential> d_next_ray_differentials;
     Buffer<SurfacePoint> d_next_points;
-    Buffer<RayDifferential> d_scatter_ray_differentials;
     Buffer<Vector3> d_throughputs;
     Buffer<DRay> d_rays;
     Buffer<RayDifferential> d_ray_differentials;
@@ -690,9 +688,6 @@ void render(const Scene &scene,
 
                 auto d_throughputs = path_buffer.d_throughputs.view(0, num_pixels);
                 auto d_rays = path_buffer.d_rays.view(0, num_pixels);
-                // auto d_ray_differentials = path_buffer.d_ray_differentials.view(0, num_pixels);
-                auto d_scatter_ray_differentials =
-                    path_buffer.d_scatter_ray_differentials.view(0, num_pixels);
                 auto d_points = path_buffer.d_points.view(0, num_pixels);
 
                 // Backpropagate path contribution
@@ -747,8 +742,10 @@ void render(const Scene &scene,
                     auto edge_surface_points =
                         path_buffer.edge_surface_points.view(0, num_edge_samples);
                     auto edge_medium_ids = BufferView<int>();
+                    auto edge_medium_distances = BufferView<Real>();
                     if (scene.mediums.size() > 0) {
                         edge_medium_ids = path_buffer.edge_medium_ids.view(0, num_edge_samples);
+                        edge_medium_distances = path_buffer.edge_medium_distances.view(0, num_edge_samples);
                     }
                     auto edge_min_roughness =
                         path_buffer.edge_min_roughness.view(0, num_edge_samples);
@@ -760,6 +757,8 @@ void render(const Scene &scene,
                         incoming_ray_differentials,
                         surface_isects,
                         surface_points,
+                        medium_ids,
+                        medium_distances,
                         nee_rays,
                         light_isects,
                         light_points,
