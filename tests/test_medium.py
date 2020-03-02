@@ -1,8 +1,6 @@
 import pyredner
 import torch
-import redner
 
-#pyredner.set_use_gpu(False)
 pyredner.set_use_gpu(torch.cuda.is_available())
 
 # Intitialize information about the medium. We can set the
@@ -224,6 +222,10 @@ for t in range(200):
     # Compute the loss function
     loss = (img - target).pow(2).sum()
     print('loss:', loss.item())
+
+    with open('results/test_medium/loss.txt', 'a') as file:
+        file.write(str(loss.item()))
+        file.write('\n')
 
     # Backpropagate the gradients
     loss.backward()

@@ -1071,6 +1071,11 @@ class RenderFunction(torch.autograd.Function):
         if get_print_timing():
             print('Backward pass, time: %.5f s' % time_elapsed)
 
+        # Save time_elapsed for testing
+        with open('results/timing.txt', 'a') as file:
+            file.write(str(time_elapsed))
+            file.write('\n')
+
         ret_list = []
         ret_list.append(None) # seed
         ret_list.append(None) # num_shapes
