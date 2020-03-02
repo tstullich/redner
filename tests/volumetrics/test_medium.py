@@ -3,12 +3,12 @@ import torch
 
 pyredner.set_use_gpu(torch.cuda.is_available())
 
-# Intitialize information about the medium. We can set the
+# Initialize information about the medium. We can set the
 # absorption as well as scattering factors for the medium.
 # g is a parameter that pertains to the phase function that is going
 # to be used. Redner currently only supports the Henyey-Greenstein
 # phase function, but it should be possible to add others in the future
-mediums = [pyredner.HomogeneousMedium(\
+mediums = [pyredner.HomogeneousMedium( \
     sigma_a = torch.tensor([0.05, 0.05, 0.05]),
     sigma_s = torch.tensor([0.00001, 0.00001, 0.00001]),
     g = torch.tensor([0.0]))]
@@ -20,20 +20,20 @@ cam = pyredner.Camera(position = torch.tensor([0.0, 0.5, 5.0]),
                       up = torch.tensor([0.0, 1.0, 0.0]),
                       fov = torch.tensor([70.0]), # in degree
                       clip_near = 1e-2, # needs to > 0
-                      resolution = (256, 256),
+                      resolution = (512, 512),
                       medium_id = 0)
 
 # The materials for the scene - one for the sphere and one for the
 # surrounding planes. The light source emits white light
-mat_sphere = pyredner.Material(\
+mat_sphere = pyredner.Material( \
     diffuse_reflectance = \
         torch.tensor([0.89, 0.15, 0.21], device = pyredner.get_device()))
 
-mat_light = pyredner.Material(\
+mat_light = pyredner.Material( \
     diffuse_reflectance = \
         torch.tensor([1.0, 1.0, 1.0], device = pyredner.get_device()))
 
-mat_planes = pyredner.Material(\
+mat_planes = pyredner.Material( \
     diffuse_reflectance = \
         torch.tensor([0.0, 0.19, 0.56], device = pyredner.get_device()))
 
@@ -41,7 +41,7 @@ materials = [mat_sphere, mat_light, mat_planes]
 
 # Setup for various objects in the scene
 sphere = pyredner.generate_sphere(128, 64)
-shape_sphere = pyredner.Shape(\
+shape_sphere = pyredner.Shape( \
     vertices = sphere[0],
     indices = sphere[1],
     uvs = sphere[2],
@@ -52,19 +52,19 @@ shape_sphere = pyredner.Shape(\
 
 # Manually translating sphere since redner does not seem to support
 # geometric transformations
-shape_sphere.vertices = shape_sphere.vertices + torch.tensor([0.0, 0.0, -0.3],\
-    device = pyredner.get_device())
+shape_sphere.vertices = shape_sphere.vertices + torch.tensor([0.0, 0.0, -0.3], \
+                                                             device = pyredner.get_device())
 
 # Shape describing the light. In this case we use an area light source
 # facing downward onto the scene
-shape_light = pyredner.Shape(\
+shape_light = pyredner.Shape( \
     vertices = torch.tensor([[5.0, 6.5,  5.0],
                              [5.0, 6.5, -5.0],
                              [-5.0, 6.5,-5.0],
                              [-5.0, 6.5, 5.0]],
-                             device = pyredner.get_device()),
+                            device = pyredner.get_device()),
     indices = torch.tensor([[2, 1, 0],[3, 2, 0]],
-        dtype = torch.int32, device = pyredner.get_device()),
+                           dtype = torch.int32, device = pyredner.get_device()),
     uvs = None,
     normals = None,
     material_id = 0,
@@ -72,14 +72,14 @@ shape_light = pyredner.Shape(\
     exterior_medium_id = 0)
 
 # Shape describing the floor
-shape_floor = pyredner.Shape(\
+shape_floor = pyredner.Shape( \
     vertices = torch.tensor([[7.0,  -1.5,  5.0],
                              [7.0,  -1.5, -5.0],
                              [-7.0, -1.5, -5.0],
                              [-7.0, -1.5,  5.0]],
-                             device = pyredner.get_device()),
+                            device = pyredner.get_device()),
     indices = torch.tensor([[0, 1, 2],[0, 2, 3]],
-        dtype = torch.int32, device = pyredner.get_device()),
+                           dtype = torch.int32, device = pyredner.get_device()),
     uvs = None,
     normals = None,
     material_id = 2,
@@ -87,14 +87,14 @@ shape_floor = pyredner.Shape(\
     exterior_medium_id = 0)
 
 # Shape describing the backplane
-shape_back = pyredner.Shape(\
+shape_back = pyredner.Shape( \
     vertices = torch.tensor([[8.0,  -9.0, -5.0],
                              [8.0,   7.0, -5.0],
                              [-8.0,  7.0, -5.0],
                              [-8.0, -9.0, -5.0]],
-                             device = pyredner.get_device()),
+                            device = pyredner.get_device()),
     indices = torch.tensor([[0, 1, 2],[0, 2, 3]],
-        dtype = torch.int32, device = pyredner.get_device()),
+                           dtype = torch.int32, device = pyredner.get_device()),
     uvs = None,
     normals = None,
     material_id = 2,
@@ -102,14 +102,14 @@ shape_back = pyredner.Shape(\
     exterior_medium_id = 0)
 
 # Shape describing the left side of the box
-shape_left = pyredner.Shape(\
+shape_left = pyredner.Shape( \
     vertices = torch.tensor([[-5.0,  -1.5,  5.0],
                              [-5.0,   6.0,  5.0],
                              [-5.0,   6.0, -5.0],
                              [-5.0,  -1.5, -5.0]],
-                             device = pyredner.get_device()),
+                            device = pyredner.get_device()),
     indices = torch.tensor([[2, 1, 0],[3, 2, 0]],
-        dtype = torch.int32, device = pyredner.get_device()),
+                           dtype = torch.int32, device = pyredner.get_device()),
     uvs = None,
     normals = None,
     material_id = 2,
@@ -118,14 +118,14 @@ shape_left = pyredner.Shape(\
 
 
 # Shape describing the right side of the box
-shape_right = pyredner.Shape(\
+shape_right = pyredner.Shape( \
     vertices = torch.tensor([[5.0,  -1.5,  5.0],
                              [5.0,   6.0,  5.0],
                              [5.0,   6.0, -5.0],
                              [5.0,  -1.5, -5.0]],
-                             device = pyredner.get_device()),
+                            device = pyredner.get_device()),
     indices = torch.tensor([[0, 1, 2],[0, 2, 3]],
-        dtype = torch.int32, device = pyredner.get_device()),
+                           dtype = torch.int32, device = pyredner.get_device()),
     uvs = None,
     normals = None,
     material_id = 2,
@@ -159,7 +159,7 @@ scene = pyredner.Scene(cam,
                        materials,
                        area_lights,
                        mediums = mediums)
-scene_args = pyredner.RenderFunction.serialize_scene(\
+scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
     num_samples = 256,
     max_bounces = 1,
@@ -179,16 +179,16 @@ if pyredner.get_use_gpu():
 # A higher medium absorption factor corresponds to less light being
 # transmitted so the goal is to move from a darkened image
 # to a lighter one.
-mediums[0].sigma_a = torch.tensor(\
+mediums[0].sigma_a = torch.tensor( \
     [0.3, 0.3, 0.3],
     device = pyredner.get_device(),
     requires_grad = True)
 
 ## Serialize scene arguments
-scene_args = pyredner.RenderFunction.serialize_scene(\
+scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
     num_samples = 256,
-    max_bounces = 2,
+    max_bounces = 1,
     # Disable edge sampling for now
     use_primary_edge_sampling = False,
     use_secondary_edge_sampling = False)
@@ -208,10 +208,10 @@ for t in range(200):
     print('iteration:', t)
     optimizer.zero_grad()
     # Forward pass to render the image
-    scene_args = pyredner.RenderFunction.serialize_scene(\
+    scene_args = pyredner.RenderFunction.serialize_scene( \
         scene = scene,
         num_samples = 256,
-        max_bounces = 2,
+        max_bounces = 1,
         use_primary_edge_sampling = False,
         use_secondary_edge_sampling = False)
 
@@ -240,10 +240,10 @@ for t in range(200):
     print('sigma_a:', mediums[0].sigma_a)
 
 # Render final result
-scene_args = pyredner.RenderFunction.serialize_scene(\
+scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
     num_samples = 256,
-    max_bounces = 2,
+    max_bounces = 1,
     use_primary_edge_sampling = False,
     use_secondary_edge_sampling = False)
 img = render(202, *scene_args)
