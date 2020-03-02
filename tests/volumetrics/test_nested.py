@@ -11,16 +11,21 @@ pyredner.set_use_gpu(torch.cuda.is_available())
 mediums = [pyredner.HomogeneousMedium( \
     sigma_a = torch.tensor([0.05, 0.05, 0.05]),
     sigma_s = torch.tensor([0.00001, 0.00001, 0.00001]),
-    g = torch.tensor([0.0]))]
+    g = torch.tensor([0.0])),
+
+    pyredner.HomogeneousMedium(\
+        sigma_a = torch.tensor([0.0001, 0.0001, 0.0001]),
+        sigma_s = torch.tensor([0.3, 0.0001, 0.0001]),
+        g = torch.tensor([0.0]))]
 
 # Attach medium information to the camera to get a fog effect
 # throughout the whole scene
-cam = pyredner.Camera(position = torch.tensor([0.0, 0.5, 5.0]),
+cam = pyredner.Camera(position = torch.tensor([-1.0, 0.5, 0.0]),
                       look_at = torch.tensor([0.0, 0.0, 0.0]),
                       up = torch.tensor([0.0, 1.0, 0.0]),
                       fov = torch.tensor([70.0]), # in degree
                       clip_near = 1e-2, # needs to > 0
-                      resolution = (256, 256),
+                      resolution = (512, 512),
                       medium_id = 0)
 
 # The materials for the scene - one for the sphere and one for the
@@ -39,22 +44,15 @@ mat_planes = pyredner.Material( \
 
 materials = [mat_sphere, mat_light, mat_planes]
 
+print('Loading dragon model')
 # Setup for various objects in the scene
-sphere = pyredner.generate_sphere(128, 64)
-shape_sphere = pyredner.Shape( \
-    vertices = sphere[0],
-    indices = sphere[1],
-    uvs = sphere[2],
-    normals = sphere[3],
-    material_id = 0,
-    interior_medium_id = -1,
-    exterior_medium_id = -1)
+material_map, mesh_list, light_map = pyredner.load_obj('models/dragon.obj')
+for _, mesh in mesh_list:
+    print('Computing normals')
+    mesh.normals = pyredner.compute_vertex_normal(mesh.vertices, mesh.indices)
 
-# Manually translating sphere since redner does not seem to support
-# geometric transformations
-shape_sphere.vertices = shape_sphere.vertices + torch.tensor([0.0, 0.0, -0.3], \
-                                                             device = pyredner.get_device())
 
+shapes = []
 # Shape describing the light. In this case we use an area light source
 # facing downward onto the scene
 shape_light = pyredner.Shape( \
@@ -70,6 +68,16 @@ shape_light = pyredner.Shape( \
     material_id = 0,
     interior_medium_id = -1,
     exterior_medium_id = 0)
+shapes.append(shape_light)
+
+for mtl_name, mesh in mesh_list:
+    shapes.append(pyredner.Shape( \
+        vertices = mesh.vertices,
+        indices = mesh.indices,
+        material_id = -1,
+        normals = mesh.normals,
+        interior_medium_id = 1,
+        exterior_medium_id = 0))
 
 # Shape describing the floor
 shape_floor = pyredner.Shape( \
@@ -85,6 +93,7 @@ shape_floor = pyredner.Shape( \
     material_id = 2,
     interior_medium_id = -1,
     exterior_medium_id = 0)
+shapes.append(shape_floor)
 
 # Shape describing the backplane
 shape_back = pyredner.Shape( \
@@ -100,6 +109,7 @@ shape_back = pyredner.Shape( \
     material_id = 2,
     interior_medium_id = -1,
     exterior_medium_id = 0)
+shapes.append(shape_back)
 
 # Shape describing the left side of the box
 shape_left = pyredner.Shape( \
@@ -115,7 +125,7 @@ shape_left = pyredner.Shape( \
     material_id = 2,
     interior_medium_id = -1,
     exterior_medium_id = 0)
-
+shapes.append(shape_left)
 
 # Shape describing the right side of the box
 shape_right = pyredner.Shape( \
@@ -131,23 +141,10 @@ shape_right = pyredner.Shape( \
     material_id = 2,
     interior_medium_id = -1,
     exterior_medium_id = 0)
-
-# The shape list of our scene containing multiple shapes
-# We can remove different parts of the scene to observe the effects the presence
-# of participating media has on the overall scene.
-# Comment out the different configurations to test
+shapes.append(shape_right)
 
 # Config 1 - A complete box + a sphere
-shapes = [shape_light, shape_sphere, shape_floor, shape_back, shape_left, shape_right]
-
-# Config 2 - Complete box only
-#shapes = [shape_light, shape_floor, shape_back, shape_left, shape_right]
-
-# Config 3 - Sphere + a floor plane
-#shapes = [shape_light, shape_sphere, shape_floor]
-
-# Config 4 - Back plane only
-#shapes = [shape_light, shape_back]
+#shapes = [shape_light, shape_sphere, shape_floor, shape_back, shape_left, shape_right]
 
 light = pyredner.AreaLight(shape_id = 0,
                            intensity = torch.tensor([1.0, 1.0, 1.0]))
@@ -184,11 +181,16 @@ mediums[0].sigma_a = torch.tensor( \
     device = pyredner.get_device(),
     requires_grad = True)
 
+mediums[1].sigma_s = torch.tensor( \
+    [0.2, 0.2, 0.2],
+    device = pyredner.get_device(),
+    requires_grad = True)
+
 ## Serialize scene arguments
 scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
     num_samples = 256,
-    max_bounces = 2,
+    max_bounces = 1,
     # Disable edge sampling for now
     use_primary_edge_sampling = False,
     use_secondary_edge_sampling = False)
@@ -202,7 +204,7 @@ diff = torch.abs(target - img)
 pyredner.imwrite(diff.cpu(), 'results/test_nested/init_diff.png')
 
 # Optimize absorption factor of medium inside the sphere
-optimizer = torch.optim.Adam([mediums[0].sigma_a], lr=5e-2)
+optimizer = torch.optim.Adam([mediums[0].sigma_a, mediums[1].sigma_s], lr=5e-2)
 # Run Adam for 200 iterations
 for t in range(200):
     print('iteration:', t)
@@ -211,7 +213,7 @@ for t in range(200):
     scene_args = pyredner.RenderFunction.serialize_scene( \
         scene = scene,
         num_samples = 256,
-        max_bounces = 2,
+        max_bounces = 1,
         use_primary_edge_sampling = False,
         use_secondary_edge_sampling = False)
 
@@ -230,20 +232,23 @@ for t in range(200):
     # Backpropagate the gradients
     loss.backward()
     # Print the gradients of the absorption factor
-    print('grad:', mediums[0].sigma_a.grad)
+    print('grad 0:', mediums[0].sigma_a.grad)
+    print('grad 1:', mediums[1].sigma_a.grad)
 
     # Take a gradient descent step
     optimizer.step()
     # Clamp sigma_a to a valid value
     mediums[0].sigma_a.data.clamp_(0.00001)
+    mediums[1].sigma_s.data.clamp_(0.00001)
     # Print the current absorption factor values
     print('sigma_a:', mediums[0].sigma_a)
+    print('sigma_s:', mediums[1].sigma_s)
 
 # Render final result
 scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
     num_samples = 256,
-    max_bounces = 2,
+    max_bounces = 1,
     use_primary_edge_sampling = False,
     use_secondary_edge_sampling = False)
 img = render(202, *scene_args)

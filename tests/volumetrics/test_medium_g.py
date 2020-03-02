@@ -188,7 +188,7 @@ mediums[0].g = torch.tensor( \
 scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
     num_samples = 256,
-    max_bounces = 2,
+    max_bounces = 1,
     # Disable edge sampling for now
     use_primary_edge_sampling = False,
     use_secondary_edge_sampling = False)
@@ -201,8 +201,6 @@ pyredner.imwrite(img.cpu(), 'results/test_medium_g/init.png')
 diff = torch.abs(target - img)
 pyredner.imwrite(diff.cpu(), 'results/test_medium_g/init_diff.png')
 
-exit()
-
 # Optimize absorption factor of medium inside the sphere
 optimizer = torch.optim.Adam([mediums[0].sigma_a], lr=5e-2)
 # Run Adam for 200 iterations
@@ -213,7 +211,7 @@ for t in range(200):
     scene_args = pyredner.RenderFunction.serialize_scene( \
         scene = scene,
         num_samples = 256,
-        max_bounces = 2,
+        max_bounces = 1,
         use_primary_edge_sampling = False,
         use_secondary_edge_sampling = False)
 
@@ -245,7 +243,7 @@ for t in range(200):
 scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
     num_samples = 256,
-    max_bounces = 2,
+    max_bounces = 1,
     use_primary_edge_sampling = False,
     use_secondary_edge_sampling = False)
 img = render(202, *scene_args)

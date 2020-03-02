@@ -20,7 +20,7 @@ cam = pyredner.Camera(position = torch.tensor([0.0, 0.5, 5.0]),
                       up = torch.tensor([0.0, 1.0, 0.0]),
                       fov = torch.tensor([70.0]), # in degree
                       clip_near = 1e-2, # needs to > 0
-                      resolution = (256, 256),
+                      resolution = (512, 512),
                       medium_id = 0)
 
 # The materials for the scene - one for the sphere and one for the
