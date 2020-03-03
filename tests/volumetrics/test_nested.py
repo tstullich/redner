@@ -47,10 +47,6 @@ materials = [mat_sphere, mat_light, mat_planes]
 print('Loading dragon model')
 # Setup for various objects in the scene
 material_map, mesh_list, light_map = pyredner.load_obj('models/dragon.obj')
-for _, mesh in mesh_list:
-    print('Computing normals')
-    mesh.normals = pyredner.compute_vertex_normal(mesh.vertices, mesh.indices)
-
 
 shapes = []
 # Shape describing the light. In this case we use an area light source
@@ -147,7 +143,7 @@ shapes.append(shape_right)
 #shapes = [shape_light, shape_sphere, shape_floor, shape_back, shape_left, shape_right]
 
 light = pyredner.AreaLight(shape_id = 0,
-                           intensity = torch.tensor([1.0, 1.0, 1.0]))
+                           intensity = torch.tensor([10.0, 10.0, 10.0]))
 area_lights = [light]
 
 # Finally we construct our scene using all the variables we setup previously.

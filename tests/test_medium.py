@@ -3,7 +3,7 @@ import torch
 
 pyredner.set_use_gpu(torch.cuda.is_available())
 
-# Intitialize information about the medium. We can set the
+# Initialize information about the medium. We can set the
 # absorption as well as scattering factors for the medium.
 # g is a parameter that pertains to the phase function that is going
 # to be used. Redner currently only supports the Henyey-Greenstein
@@ -20,7 +20,7 @@ cam = pyredner.Camera(position = torch.tensor([0.0, 0.5, 5.0]),
                       up = torch.tensor([0.0, 1.0, 0.0]),
                       fov = torch.tensor([70.0]), # in degree
                       clip_near = 1e-2, # needs to > 0
-                      resolution = (256, 256),
+                      resolution = (512, 512),
                       medium_id = 0)
 
 # The materials for the scene - one for the sphere and one for the
@@ -188,7 +188,7 @@ mediums[0].sigma_a = torch.tensor(\
 scene_args = pyredner.RenderFunction.serialize_scene(\
     scene = scene,
     num_samples = 256,
-    max_bounces = 2,
+    max_bounces = 1,
     # Disable edge sampling for now
     use_primary_edge_sampling = False,
     use_secondary_edge_sampling = False)
@@ -211,7 +211,7 @@ for t in range(200):
     scene_args = pyredner.RenderFunction.serialize_scene(\
         scene = scene,
         num_samples = 256,
-        max_bounces = 2,
+        max_bounces = 1,
         use_primary_edge_sampling = False,
         use_secondary_edge_sampling = False)
 
@@ -243,7 +243,7 @@ for t in range(200):
 scene_args = pyredner.RenderFunction.serialize_scene(\
     scene = scene,
     num_samples = 256,
-    max_bounces = 2,
+    max_bounces = 1,
     use_primary_edge_sampling = False,
     use_secondary_edge_sampling = False)
 img = render(202, *scene_args)
