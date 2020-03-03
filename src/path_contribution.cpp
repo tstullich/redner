@@ -789,8 +789,10 @@ struct d_path_contribs_accumulator {
                         } else {
                             // Not in a medium
                             // bsdf_val = bsdf(material, surface_point, wi, wo, min_rough)
-                            d_bsdf(material, surface_point, wi, wo, min_rough, d_scatter_val,
-                                   d_material, d_surface_point, d_wi, d_wo);
+                            if (shading_shape.material_id >= 0) {
+                                d_bsdf(material, surface_point, wi, wo, min_rough, d_scatter_val,
+                                       d_material, d_surface_point, d_wi, d_wo);
+                            }
                         }
 
                         // weight = mis_weight / pdf_nee
@@ -962,8 +964,10 @@ struct d_path_contribs_accumulator {
                     } else {
                         // Not in a medium
                         // bsdf_val = bsdf(material, surface_point, wi, wo, min_rough)
-                        d_bsdf(material, surface_point, wi, wo, min_rough, d_scatter_val,
-                               d_material, d_surface_point, d_wi, d_wo);
+                        if (shading_shape.material_id >= 0) {
+                            d_bsdf(material, surface_point, wi, wo, min_rough, d_scatter_val,
+                                   d_material, d_surface_point, d_wi, d_wo);
+                        }
                     }
 
                     auto d_ray_diff = RayDifferential{
@@ -1429,8 +1433,10 @@ struct d_path_contribs_accumulator {
                     // An intuitive way to think about this is that we are dividing the pdfs
                     // and multiplying MIS weights also for our gradient estimator
                     // bsdf_val = bsdf(material, surface_point, wi, wo)
-                    d_bsdf(material, surface_point, wi, wo, min_rough, d_scatter_val,
-                           d_material, d_surface_point, d_wi, d_wo);
+                    if (shading_shape.material_id >= 0) {
+                        d_bsdf(material, surface_point, wi, wo, min_rough, d_scatter_val,
+                               d_material, d_surface_point, d_wi, d_wo);
+                    }
                 }
 
                 // wi = -incoming_ray.dir
