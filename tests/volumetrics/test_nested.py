@@ -143,7 +143,7 @@ shapes.append(shape_right)
 #shapes = [shape_light, shape_sphere, shape_floor, shape_back, shape_left, shape_right]
 
 light = pyredner.AreaLight(shape_id = 0,
-                           intensity = torch.tensor([10.0, 10.0, 10.0]))
+                           intensity = torch.tensor([1.0, 1.0, 1.0]))
 area_lights = [light]
 
 # Finally we construct our scene using all the variables we setup previously.
