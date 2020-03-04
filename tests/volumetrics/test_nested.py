@@ -219,7 +219,7 @@ for t in range(200):
     loss = (img - target).pow(2).sum()
     print('loss:', loss.item())
 
-    with open('results/test_nested/nested-loss.txt', 'a') as file:
+    with open('results/test_nested/nested-loss.csv', 'a') as file:
         file.write(str(t) + ' ' + str(loss.item()))
         file.write('\n')
 
