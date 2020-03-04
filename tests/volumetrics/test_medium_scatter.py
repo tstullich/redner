@@ -192,6 +192,11 @@ pyredner.imwrite(img.cpu(), 'results/test_medium_scatter/init.png')
 diff = torch.abs(target - img)
 pyredner.imwrite(diff.cpu(), 'results/test_medium_scatter/init_diff.png')
 
+# Setup loss csv file
+with open('results/test_medium_scatter/cornell-scatter-loss.csv', 'w') as file:
+    file.write('a b')
+    file.write('\n')
+
 # Optimize absorption factor of medium inside the sphere
 optimizer = torch.optim.Adam([mediums[0].sigma_s], lr=5e-2)
 # Run Adam for 200 iterations
@@ -214,8 +219,8 @@ for t in range(200):
     loss = (img - target).pow(2).sum()
     print('loss:', loss.item())
 
-    with open('results/test_medium_scatter/loss.txt', 'a') as file:
-        file.write(str(loss.item()))
+    with open('results/test_medium_scatter/cornell-scatter-loss.csv', 'a') as file:
+        file.write(str(t) + ' ' + str(loss.item()))
         file.write('\n')
 
     # Backpropagate the gradients
@@ -242,4 +247,4 @@ img = render(202, *scene_args)
 # Save the images and diffs
 pyredner.imwrite(img.cpu(), 'results/test_medium_scatter/final.exr')
 pyredner.imwrite(img.cpu(), 'results/test_medium_scatter/final.png')
-pyredner.imwrite(torch.abs(target - img), 'results/test_medium_scatter/final_diff.png')
+pyredner.imwrite(torch.abs(target - img).cpu(), 'results/test_medium_scatter/final_diff.png')

@@ -178,10 +178,7 @@ mediums[0].sigma_s = torch.tensor( \
 scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
     num_samples = 256,
-    max_bounces = 1,
-    # Disable edge sampling for now
-    use_primary_edge_sampling = False,
-    use_secondary_edge_sampling = False)
+    max_bounces = 1)
 
 ## Render initial guess
 img = render(1, *scene_args)
@@ -190,6 +187,11 @@ pyredner.imwrite(img.cpu(), 'results/test_medium_buddha/init.png')
 ## Compute the difference between the target and initial guess
 diff = torch.abs(target - img)
 pyredner.imwrite(diff.cpu(), 'results/test_medium_buddha/init_diff.png')
+
+# Setup loss csv file
+with open('results/test_medium_buddha/buddha-loss.csv', 'w') as file:
+    file.write('a b')
+    file.write('\n')
 
 # Optimize absorption factor of medium inside the sphere
 optimizer = torch.optim.Adam([mediums[0].sigma_a, mediums[0].sigma_s], lr=5e-2)
@@ -201,9 +203,7 @@ for t in range(200):
     scene_args = pyredner.RenderFunction.serialize_scene( \
         scene = scene,
         num_samples = 256,
-        max_bounces = 1,
-        use_primary_edge_sampling = False,
-        use_secondary_edge_sampling = False)
+        max_bounces = 1)
 
     # Use a different seed per iteration
     img = render(t + 1, *scene_args)
@@ -213,8 +213,8 @@ for t in range(200):
     loss = (img - target).pow(2).sum()
     print('loss:', loss.item())
 
-    with open('results/test_medium_buddha/loss.txt', 'a') as file:
-        file.write(str(loss.item()))
+    with open('results/test_medium_buddha/buddha-loss.csv', 'a') as file:
+        file.write(str(t) + ' ' + str(loss.item()))
         file.write('\n')
 
     # Backpropagate the gradients
@@ -236,12 +236,10 @@ for t in range(200):
 scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
     num_samples = 256,
-    max_bounces = 1,
-    use_primary_edge_sampling = False,
-    use_secondary_edge_sampling = False)
+    max_bounces = 1)
 img = render(202, *scene_args)
 
 # Save the images and diffs
 pyredner.imwrite(img.cpu(), 'results/test_medium_buddha/final.exr')
 pyredner.imwrite(img.cpu(), 'results/test_medium_buddha/final.png')
-pyredner.imwrite(torch.abs(target - img), 'results/test_medium_buddha/final_diff.png')
+pyredner.imwrite(torch.abs(target - img).cpu(), 'results/test_medium_buddha/final_diff.png')
