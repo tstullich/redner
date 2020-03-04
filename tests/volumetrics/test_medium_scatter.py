@@ -153,9 +153,7 @@ scene = pyredner.Scene(cam,
 scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
     num_samples = 256,
-    max_bounces = 1,
-    use_primary_edge_sampling = False,
-    use_secondary_edge_sampling = False)
+    max_bounces = 1)
 
 render = pyredner.RenderFunction.apply
 target = render(0, *scene_args)
@@ -171,7 +169,7 @@ if pyredner.get_use_gpu():
 # transmitted so the goal is to move from a darkened image
 # to a lighter one.
 mediums[0].sigma_s = torch.tensor( \
-    [0.1, 0.1, 0.1],
+    [0.01, 0.01, 0.01],
     device = pyredner.get_device(),
     requires_grad = True)
 
@@ -179,10 +177,7 @@ mediums[0].sigma_s = torch.tensor( \
 scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
     num_samples = 256,
-    max_bounces = 2,
-    # Disable edge sampling for now
-    use_primary_edge_sampling = False,
-    use_secondary_edge_sampling = False)
+    max_bounces = 2)
 
 ## Render initial guess
 img = render(1, *scene_args)
@@ -207,9 +202,7 @@ for t in range(200):
     scene_args = pyredner.RenderFunction.serialize_scene( \
         scene = scene,
         num_samples = 256,
-        max_bounces = 2,
-        use_primary_edge_sampling = False,
-        use_secondary_edge_sampling = False)
+        max_bounces = 2)
 
     # Use a different seed per iteration
     img = render(t + 1, *scene_args)
@@ -239,9 +232,7 @@ for t in range(200):
 scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
     num_samples = 256,
-    max_bounces = 2,
-    use_primary_edge_sampling = False,
-    use_secondary_edge_sampling = False)
+    max_bounces = 2)
 img = render(202, *scene_args)
 
 # Save the images and diffs
