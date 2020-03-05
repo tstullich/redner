@@ -238,6 +238,11 @@ for t in range(200):
     print('sigma_a:', mediums[0].sigma_a)
     print('sigma_s:', mediums[1].sigma_s)
 
+with open('results/test_nested/final_val.txt', 'a') as file:
+    file.write(str(mediums[0].sigma_a))
+    file.write('\n')
+    file.write(str(mediums[1].sigma_s))
+
 # Render final result
 scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
