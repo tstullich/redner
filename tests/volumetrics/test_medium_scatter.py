@@ -10,7 +10,7 @@ pyredner.set_use_gpu(torch.cuda.is_available())
 # phase function, but it should be possible to add others in the future
 mediums = [pyredner.HomogeneousMedium( \
     sigma_a = torch.tensor([0.05, 0.05, 0.05]),
-    sigma_s = torch.tensor([0.00001, 0.00001, 0.00001]),
+    sigma_s = torch.tensor([0.0001, 0.0001, 0.0001]),
     g = torch.tensor([0.0]))]
 
 # Attach medium information to the camera to get a fog effect
@@ -169,7 +169,7 @@ if pyredner.get_use_gpu():
 # transmitted so the goal is to move from a darkened image
 # to a lighter one.
 mediums[0].sigma_s = torch.tensor( \
-    [0.01, 0.01, 0.01],
+    [0.1, 0.1, 0.1],
     device = pyredner.get_device(),
     requires_grad = True)
 
@@ -227,6 +227,9 @@ for t in range(200):
     mediums[0].sigma_s.data.clamp_(0.00001)
     # Print the current absorption factor values
     print('sigma_s:', mediums[0].sigma_s)
+
+with open('results/test_medium_scatter/final_val.txt', 'a') as file:
+    file.write(str(mediums[0].sigma_s))
 
 # Render final result
 scene_args = pyredner.RenderFunction.serialize_scene( \
