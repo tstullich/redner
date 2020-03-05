@@ -10,7 +10,7 @@ pyredner.set_use_gpu(torch.cuda.is_available())
 # phase function, but it should be possible to add others in the future
 mediums = [pyredner.HomogeneousMedium( \
     sigma_a = torch.tensor([0.05, 0.05, 0.05]),
-    sigma_s = torch.tensor([0.0001, 0.0001, 0.0001]),
+    sigma_s = torch.tensor([0.001, 0.001, 0.001]),
     g = torch.tensor([0.0]))]
 
 # Attach medium information to the camera to get a fog effect
