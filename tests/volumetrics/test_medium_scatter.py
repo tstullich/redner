@@ -33,11 +33,19 @@ mat_light = pyredner.Material( \
     diffuse_reflectance = \
         torch.tensor([1.0, 1.0, 1.0], device = pyredner.get_device()))
 
-mat_planes = pyredner.Material( \
+mat_white = pyredner.Material( \
     diffuse_reflectance = \
-        torch.tensor([0.0, 0.19, 0.56], device = pyredner.get_device()))
+        torch.tensor([1.0, 1.0, 1.0], device = pyredner.get_device()))
 
-materials = [mat_sphere, mat_light, mat_planes]
+mat_green = pyredner.Material( \
+    diffuse_reflectance = \
+        torch.tensor([0.0, 0.5, 0.0], device = pyredner.get_device()))
+
+mat_red = pyredner.Material( \
+    diffuse_reflectance = \
+        torch.tensor([0.5, 0.0, 0.0], device = pyredner.get_device()))
+
+materials = [mat_sphere, mat_light, mat_white, mat_green, mat_red]
 
 # Setup for various objects in the scene
 sphere = pyredner.generate_sphere(128, 64)
@@ -112,7 +120,7 @@ shape_left = pyredner.Shape( \
                            dtype = torch.int32, device = pyredner.get_device()),
     uvs = None,
     normals = None,
-    material_id = 2,
+    material_id = 3,
     interior_medium_id = -1,
     exterior_medium_id = 0)
 
@@ -128,7 +136,7 @@ shape_right = pyredner.Shape( \
                            dtype = torch.int32, device = pyredner.get_device()),
     uvs = None,
     normals = None,
-    material_id = 2,
+    material_id = 4,
     interior_medium_id = -1,
     exterior_medium_id = 0)
 
