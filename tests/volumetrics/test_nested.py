@@ -165,6 +165,10 @@ target = pyredner.imread('results/test_nested/target.exr')
 if pyredner.get_use_gpu():
     target = target.cuda(device = pyredner.get_device())
 
+# Before perturbing save old values
+sigma_a_val = mediums[0].sigma_a
+sigma_s_val = mediums[1].sigma_s
+
 # Perturb the medium for the initial guess.
 # Here we set the absorption factor to be optimized.
 # A higher medium absorption factor corresponds to less light being
@@ -199,10 +203,15 @@ with open('results/test_nested/nested-loss.csv', 'w') as file:
     file.write('a b')
     file.write('\n')
 
+# Setup diff file
+with open('results/test_nested/nested-param.csv', 'w') as file:
+    file.write('a b c')
+    file.write('\n')
+
 # Optimize absorption factor of medium inside the sphere
-optimizer = torch.optim.Adam([mediums[0].sigma_a, mediums[1].sigma_s], lr=5e-2)
-# Run Adam for 200 iterations
-for t in range(200):
+optimizer = torch.optim.Adam([mediums[0].sigma_a, mediums[1].sigma_s], lr=5e-3)
+# Run Adam for 100 iterations
+for t in range(100):
     print('iteration:', t)
     optimizer.zero_grad()
     # Forward pass to render the image
@@ -223,11 +232,17 @@ for t in range(200):
         file.write(str(t) + ' ' + str(loss.item()))
         file.write('\n')
 
+    with open('results/test_nested/nested-param.csv', 'a') as file:
+        file.write(str(t) + ' ')
+        file.write(str(torch.abs(sigma_a_val - mediums[0].sigma_a).sum().item()) + ' ')
+        file.write(str(torch.abs(sigma_s_val - mediums[1].sigma_s).sum().item()))
+        file.write('\n')
+
     # Backpropagate the gradients
     loss.backward()
     # Print the gradients of the absorption factor
     print('grad 0:', mediums[0].sigma_a.grad)
-    print('grad 1:', mediums[1].sigma_a.grad)
+    print('grad 1:', mediums[1].sigma_s.grad)
 
     # Take a gradient descent step
     optimizer.step()

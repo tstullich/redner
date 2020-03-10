@@ -171,6 +171,9 @@ target = pyredner.imread('results/test_medium_scatter/target.exr')
 if pyredner.get_use_gpu():
     target = target.cuda(device = pyredner.get_device())
 
+# Before perturbing save old value
+target_val = mediums[0].sigma_s
+
 # Perturb the medium for the initial guess.
 # Here we set the absorption factor to be optimized.
 # A higher medium absorption factor corresponds to less light being
@@ -200,10 +203,14 @@ with open('results/test_medium_scatter/cornell-scatter-loss.csv', 'w') as file:
     file.write('a b')
     file.write('\n')
 
+with open('results/test_medium_scatter/cornell-scatter-param.csv', 'w') as file:
+    file.write('a b')
+    file.write('\n')
+
 # Optimize absorption factor of medium inside the sphere
-optimizer = torch.optim.Adam([mediums[0].sigma_s], lr=5e-2)
-# Run Adam for 200 iterations
-for t in range(200):
+optimizer = torch.optim.Adam([mediums[0].sigma_s], lr=5e-3)
+# Run Adam for 100 iterations
+for t in range(100):
     print('iteration:', t)
     optimizer.zero_grad()
     # Forward pass to render the image
@@ -224,6 +231,10 @@ for t in range(200):
         file.write(str(t) + ' ' + str(loss.item()))
         file.write('\n')
 
+    with open('results/test_medium_scatter/cornell-scatter-param.csv', 'a') as file:
+        file.write(str(t) + ' ' + str(torch.abs(target_val - mediums[0].sigma_s).sum().item()))
+        file.write('\n')
+
     # Backpropagate the gradients
     loss.backward()
     # Print the gradients of the absorption factor
@@ -238,6 +249,7 @@ for t in range(200):
 
 with open('results/test_medium_scatter/final_val.txt', 'a') as file:
     file.write(str(mediums[0].sigma_s))
+    file.write('\n')
 
 # Render final result
 scene_args = pyredner.RenderFunction.serialize_scene( \
