@@ -180,7 +180,7 @@ target_val = mediums[0].sigma_s
 # transmitted so the goal is to move from a darkened image
 # to a lighter one.
 mediums[0].sigma_s = torch.tensor( \
-    [0.1, 0.1, 0.1],
+    [0.2, 0.2, 0.2],
     device = pyredner.get_device(),
     requires_grad = True)
 
