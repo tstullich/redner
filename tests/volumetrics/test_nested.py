@@ -166,8 +166,8 @@ if pyredner.get_use_gpu():
     target = target.cuda(device = pyredner.get_device())
 
 # Before perturbing save old values
-sigma_a_val = mediums[0].sigma_a
-sigma_s_val = mediums[1].sigma_s
+sigma_a_val = torch.tensor(mediums[0].sigma_a, device=pyredner.get_device())
+sigma_s_val = torch.tensor(mediums[1].sigma_s, device=pyredner.get_device())
 
 # Perturb the medium for the initial guess.
 # Here we set the absorption factor to be optimized.

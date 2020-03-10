@@ -15,13 +15,13 @@ mediums = [pyredner.HomogeneousMedium( \
 
 # Attach medium information to the camera to get a fog effect
 # throughout the whole scene
-cam = pyredner.Camera(position = torch.tensor([0.0, 0.5, -1.0]),
-                      look_at = torch.tensor([0.0, 0.0, 0.0]),
+cam = pyredner.Camera(position = torch.tensor([313, 221.7, 97.034]),
+                      look_at = torch.tensor([0.0, 221.7, 0.0]),
                       up = torch.tensor([0.0, 1.0, 0.0]),
-                      fov = torch.tensor([70.0]), # in degree
+                      fov = torch.tensor([60.0]), # in degree
                       clip_near = 1e-2, # needs to > 0
-                      resolution = (512, 512),
-                      medium_id = 0)
+                      resolution = (256, 256),
+                      medium_id = -1)
 
 # The materials for the scene - one for the sphere and one for the
 # surrounding planes. The light source emits white light
@@ -40,18 +40,26 @@ mat_planes = pyredner.Material( \
 
 materials = [mat_sphere, mat_light, mat_planes]
 
-print('Loading buddha model')
-# Setup for various objects in the scene
-material_map, mesh_list, light_map = pyredner.load_obj('models/buddha.obj')
+print('Loading Sponza Model')
+material_map, mesh_list, light_map = pyredner.load_obj('models/sponza/sponza.obj')
+
+# Setup material map
+material_id_map = {}
+materials = []
+count = len(materials)
+for key, value in material_map.items():
+    material_id_map[key] = count
+    count += 1
+    materials.append(value)
 
 # Shape describing the light. In this case we use an area light source
 # facing downward onto the scene
 shapes = []
 shape_light = pyredner.Shape( \
-    vertices = torch.tensor([[5.0, 6.5,  5.0],
-                             [5.0, 6.5, -5.0],
-                             [-5.0, 6.5,-5.0],
-                             [-5.0, 6.5, 5.0]],
+    vertices = torch.tensor([[340.0, 700.0,  340.0],
+                             [340.0, 700.0, -340.0],
+                             [-340.0, 700.0,-340.0],
+                             [-340.0, 700.0, 340.0]],
                             device = pyredner.get_device()),
     indices = torch.tensor([[2, 1, 0],[3, 2, 0]],
                            dtype = torch.int32, device = pyredner.get_device()),
@@ -63,78 +71,13 @@ shape_light = pyredner.Shape( \
 shapes.append(shape_light)
 
 for mtl_name, mesh in mesh_list:
-    shapes.append(pyredner.Shape( \
+    shapes.append(pyredner.Shape(
         vertices = mesh.vertices,
         indices = mesh.indices,
-        material_id = -1,
+        material_id = material_id_map[mtl_name],
         normals = mesh.normals,
-        interior_medium_id = 0,
-        exterior_medium_id = 0))
-
-# Shape describing the floor
-shape_floor = pyredner.Shape( \
-    vertices = torch.tensor([[7.0,  -1.5,  5.0],
-                             [7.0,  -1.5, -5.0],
-                             [-7.0, -1.5, -5.0],
-                             [-7.0, -1.5,  5.0]],
-                            device = pyredner.get_device()),
-    indices = torch.tensor([[0, 1, 2],[0, 2, 3]],
-                           dtype = torch.int32, device = pyredner.get_device()),
-    uvs = None,
-    normals = None,
-    material_id = 2,
-    interior_medium_id = -1,
-    exterior_medium_id = 0)
-shapes.append(shape_floor)
-
-# Shape describing the backplane
-shape_back = pyredner.Shape( \
-    vertices = torch.tensor([[8.0,  -9.0, -5.0],
-                             [8.0,   7.0, -5.0],
-                             [-8.0,  7.0, -5.0],
-                             [-8.0, -9.0, -5.0]],
-                            device = pyredner.get_device()),
-    indices = torch.tensor([[0, 1, 2],[0, 2, 3]],
-                           dtype = torch.int32, device = pyredner.get_device()),
-    uvs = None,
-    normals = None,
-    material_id = 2,
-    interior_medium_id = -1,
-    exterior_medium_id = 0)
-shapes.append(shape_back)
-
-# Shape describing the left side of the box
-shape_left = pyredner.Shape( \
-    vertices = torch.tensor([[-5.0,  -1.5,  5.0],
-                             [-5.0,   6.0,  5.0],
-                             [-5.0,   6.0, -5.0],
-                             [-5.0,  -1.5, -5.0]],
-                            device = pyredner.get_device()),
-    indices = torch.tensor([[2, 1, 0],[3, 2, 0]],
-                           dtype = torch.int32, device = pyredner.get_device()),
-    uvs = None,
-    normals = None,
-    material_id = 2,
-    interior_medium_id = -1,
-    exterior_medium_id = 0)
-shapes.append(shape_left)
-
-
-# Shape describing the right side of the box
-shape_right = pyredner.Shape( \
-    vertices = torch.tensor([[5.0,  -1.5,  5.0],
-                             [5.0,   6.0,  5.0],
-                             [5.0,   6.0, -5.0],
-                             [5.0,  -1.5, -5.0]],
-                            device = pyredner.get_device()),
-    indices = torch.tensor([[0, 1, 2],[0, 2, 3]],
-                           dtype = torch.int32, device = pyredner.get_device()),
-    uvs = None,
-    normals = None,
-    material_id = 2,
-    interior_medium_id = -1,
-    exterior_medium_id = 0)
-shapes.append(shape_right)
+        interior_medium_id = -1,
+        exterior_medium_id = -1))
 
 light = pyredner.AreaLight(shape_id = 0,
                            intensity = torch.tensor([10.0, 10.0, 10.0]))
@@ -148,7 +91,7 @@ scene = pyredner.Scene(cam,
                        mediums = mediums)
 scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
-    num_samples = 256,
+    num_samples = 16,
     max_bounces = 1)
 
 render = pyredner.RenderFunction.apply
@@ -158,6 +101,8 @@ pyredner.imwrite(target.cpu(), 'results/test_medium_buddha/target.png')
 target = pyredner.imread('results/test_medium_buddha/target.exr')
 if pyredner.get_use_gpu():
     target = target.cuda(device = pyredner.get_device())
+
+exit()
 
 # Before perturbing save values
 sigma_a_val = mediums[0].sigma_a
