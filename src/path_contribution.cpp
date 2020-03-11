@@ -496,6 +496,14 @@ struct path_contribs_accumulator {
             }
         }
 
+        if (!isfinite(nee_contrib)) {
+            nee_contrib = Vector3{0, 0, 0};
+        }
+
+        if (!isfinite(scatter_contrib)) {
+            nee_contrib = Vector3{0, 0, 0};
+        }
+
         assert(isfinite(nee_contrib));
         assert(isfinite(scatter_contrib));
         auto path_contrib = throughput * (nee_contrib + scatter_contrib);
