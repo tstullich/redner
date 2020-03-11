@@ -262,7 +262,7 @@ scene_args = pyredner.RenderFunction.serialize_scene( \
     max_bounces = 1,
     use_primary_edge_sampling = False,
     use_secondary_edge_sampling = False)
-img = render(202, *scene_args)
+img = render(102, *scene_args)
 
 # Save the images and diffs
 pyredner.imwrite(img.cpu(), 'results/test_medium_g/final.exr')

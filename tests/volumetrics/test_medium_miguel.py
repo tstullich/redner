@@ -9,8 +9,8 @@ pyredner.set_use_gpu(torch.cuda.is_available())
 # to be used. Redner currently only supports the Henyey-Greenstein
 # phase function, but it should be possible to add others in the future
 mediums = [pyredner.HomogeneousMedium( \
-    sigma_a = torch.tensor([0.05, 0.05, 0.05]),
-    sigma_s = torch.tensor([0.2, 0.5, 0.5]),
+    sigma_a = torch.tensor([0.005, 0.005, 0.005]),
+    sigma_s = torch.tensor([0.00001, 0.00001, 0.00001]),
     g = torch.tensor([0.0]))]
 
 # Attach medium information to the camera to get a fog effect
@@ -22,8 +22,8 @@ cam = pyredner.Camera(position = torch.tensor([22.84, 2.37, -1.8]),
                       up = torch.tensor([0.0, 1.0, 0.0]),
                       fov = torch.tensor([70.0]), # in degree
                       clip_near = 1e-2, # needs to > 0
-                      resolution = (256, 256),
-                      medium_id = -1)
+                      resolution = (512, 512),
+                      medium_id = 0)
 
 mat_light = pyredner.Material( \
     diffuse_reflectance = \
@@ -49,8 +49,7 @@ for mtl_name, mesh in mesh_list:
         indices = mesh.indices,
         material_id = material_id_map[mtl_name],
         normals = mesh.normals,
-        interior_medium_id = -1,
-        exterior_medium_id = -1))
+        exterior_medium_id = 0))
 
 print('Generating light source')
 
@@ -65,8 +64,7 @@ shape_light = pyredner.Shape(
     vertices = light.vertices,
     indices = light.indices,
     material_id = 0,
-    interior_medium_id = -1,
-    exterior_medium_id = -1)
+    exterior_medium_id = 0)
 shapes.insert(0, shape_light)
 
 light = pyredner.AreaLight(shape_id = 0,
@@ -82,7 +80,7 @@ scene = pyredner.Scene(cam,
                        mediums = mediums)
 scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
-    num_samples = 256,
+    num_samples = 512,
     max_bounces = 2)
 
 render = pyredner.RenderFunction.apply
@@ -93,11 +91,9 @@ target = pyredner.imread('results/test_medium_miguel/target.exr')
 if pyredner.get_use_gpu():
     target = target.cuda(device = pyredner.get_device())
 
-exit()
-
 # Before perturbing save values
-sigma_a_val = mediums[0].sigma_a
-sigma_s_val = mediums[0].sigma_s
+sigma_a_val = mediums[0].sigma_a.clone().detach()
+sigma_s_val = mediums[0].sigma_s.clone().detach()
 
 # Perturb the medium for the initial guess.
 # Here we set the absorption factor to be optimized.
@@ -110,15 +106,15 @@ mediums[0].sigma_a = torch.tensor( \
     requires_grad = True)
 
 mediums[0].sigma_s = torch.tensor( \
-    [0.6, 0.4, 0.01],
+    [0.2, 0.2, 0.2],
     device = pyredner.get_device(),
     requires_grad = True)
 
 ## Serialize scene arguments
 scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
-    num_samples = 256,
-    max_bounces = 1)
+    num_samples = 512,
+    max_bounces = 2)
 
 ## Render initial guess
 img = render(1, *scene_args)
@@ -147,8 +143,8 @@ for t in range(100):
     # Forward pass to render the image
     scene_args = pyredner.RenderFunction.serialize_scene( \
         scene = scene,
-        num_samples = 256,
-        max_bounces = 1)
+        num_samples = 512,
+        max_bounces = 2)
 
     # Use a different seed per iteration
     img = render(t + 1, *scene_args)
@@ -192,9 +188,9 @@ with open('results/test_medium_miguel/final_val.txt', 'w') as file:
 # Render final result
 scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
-    num_samples = 256,
-    max_bounces = 1)
-img = render(202, *scene_args)
+    num_samples = 512,
+    max_bounces = 2)
+img = render(102, *scene_args)
 
 # Save the images and diffs
 pyredner.imwrite(img.cpu(), 'results/test_medium_miguel/final.exr')
