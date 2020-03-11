@@ -18,7 +18,7 @@ mediums = [pyredner.HomogeneousMedium( \
 #cam = pyredner.Camera(position = torch.tensor([313, 221.7, 97.034]),
 #                      look_at = torch.tensor([0.0, 221.7, 0.0]),
 cam = pyredner.Camera(position = torch.tensor([22.84, 2.37, -1.8]),
-                      look_at = torch.tensor([7.0, 1.082, -7.66]),
+                      look_at = torch.tensor([7.0, 1.082, 7.66]),
                       up = torch.tensor([0.0, 1.0, 0.0]),
                       fov = torch.tensor([70.0]), # in degree
                       clip_near = 1e-2, # needs to > 0
@@ -57,7 +57,7 @@ print('Generating light source')
 light = pyredner.generate_quad_light(torch.tensor([15.291, 12.0, -4.47]),
     torch.tensor([16.09, 3.878, -4.89]),
     torch.tensor([30.0, 30.0]),
-    torch.tensor([100.0, 100.0, 100.0]))
+    torch.tensor([10.0, 10.0, 10.0]))
 
 # Shape describing the light. In this case we use an area light source
 # facing downward onto the scene
@@ -183,10 +183,11 @@ for t in range(100):
     print('sigma_a:', mediums[0].sigma_a)
     print('sigma_s:', mediums[0].sigma_s)
 
-with open('results/test_medium_miguel/final_val.txt', 'a') as file:
+with open('results/test_medium_miguel/final_val.txt', 'w') as file:
     file.write(str(mediums[0].sigma_a))
     file.write('\n')
     file.write(str(mediums[0].sigma_s))
+    file.write('\n')
 
 # Render final result
 scene_args = pyredner.RenderFunction.serialize_scene( \

@@ -208,7 +208,8 @@ with open('results/test_medium_scatter/cornell-scatter-param.csv', 'w') as file:
     file.write('\n')
 
 # Optimize absorption factor of medium inside the sphere
-optimizer = torch.optim.Adam([mediums[0].sigma_s], lr=5e-3)
+#optimizer = torch.optim.Adam([mediums[0].sigma_s], lr=5e-3)
+optimizer = torch.optim.Adam([mediums[0].sigma_s], lr=0.009)
 # Run Adam for 100 iterations
 for t in range(100):
     print('iteration:', t)
@@ -247,7 +248,7 @@ for t in range(100):
     # Print the current absorption factor values
     print('sigma_s:', mediums[0].sigma_s)
 
-with open('results/test_medium_scatter/final_val.txt', 'a') as file:
+with open('results/test_medium_scatter/final_val.txt', 'w') as file:
     file.write(str(mediums[0].sigma_s))
     file.write('\n')
 

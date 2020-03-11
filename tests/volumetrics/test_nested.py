@@ -209,7 +209,7 @@ with open('results/test_nested/nested-param.csv', 'w') as file:
     file.write('\n')
 
 # Optimize absorption factor of medium inside the sphere
-optimizer = torch.optim.Adam([mediums[0].sigma_a, mediums[1].sigma_s], lr=5e-3)
+optimizer = torch.optim.Adam([mediums[0].sigma_a, mediums[1].sigma_s], lr=0.009)
 # Run Adam for 100 iterations
 for t in range(100):
     print('iteration:', t)
@@ -253,10 +253,11 @@ for t in range(100):
     print('sigma_a:', mediums[0].sigma_a)
     print('sigma_s:', mediums[1].sigma_s)
 
-with open('results/test_nested/final_val.txt', 'a') as file:
+with open('results/test_nested/final_val.txt', 'w') as file:
     file.write(str(mediums[0].sigma_a))
     file.write('\n')
     file.write(str(mediums[1].sigma_s))
+    file.write('\n')
 
 # Render final result
 scene_args = pyredner.RenderFunction.serialize_scene( \

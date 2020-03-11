@@ -250,8 +250,10 @@ for t in range(100):
     # Print the current absorption factor values
     print('g:', mediums[0].g)
 
-with open('results/test_medium_g/final_val.txt', 'a') as file:
+with open('results/test_medium_g/final_val.txt', 'w') as file:
     file.write(str(mediums[0].g))
+    file.write('\n')
+
 
 # Render final result
 scene_args = pyredner.RenderFunction.serialize_scene( \
