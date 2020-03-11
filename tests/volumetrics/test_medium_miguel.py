@@ -15,61 +15,34 @@ mediums = [pyredner.HomogeneousMedium( \
 
 # Attach medium information to the camera to get a fog effect
 # throughout the whole scene
-cam = pyredner.Camera(position = torch.tensor([313, 221.7, 97.034]),
-                      look_at = torch.tensor([0.0, 221.7, 0.0]),
+#cam = pyredner.Camera(position = torch.tensor([313, 221.7, 97.034]),
+#                      look_at = torch.tensor([0.0, 221.7, 0.0]),
+cam = pyredner.Camera(position = torch.tensor([22.84, 2.37, -1.8]),
+                      look_at = torch.tensor([7.0, 1.082, -7.66]),
                       up = torch.tensor([0.0, 1.0, 0.0]),
-                      fov = torch.tensor([60.0]), # in degree
+                      fov = torch.tensor([70.0]), # in degree
                       clip_near = 1e-2, # needs to > 0
                       resolution = (256, 256),
                       medium_id = -1)
-
-# The materials for the scene - one for the sphere and one for the
-# surrounding planes. The light source emits white light
-mat_sphere = pyredner.Material( \
-    specular_reflectance= torch.tensor([0.5, 0.1, 0.8]),
-    diffuse_reflectance = \
-        torch.tensor([0.89, 0.15, 0.21], device = pyredner.get_device()))
 
 mat_light = pyredner.Material( \
     diffuse_reflectance = \
         torch.tensor([1.0, 1.0, 1.0], device = pyredner.get_device()))
 
-mat_planes = pyredner.Material( \
-    diffuse_reflectance = \
-        torch.tensor([0.0, 0.19, 0.56], device = pyredner.get_device()))
+materials = [mat_light]
 
-materials = [mat_sphere, mat_light, mat_planes]
-
-print('Loading Sponza Model')
-material_map, mesh_list, light_map = pyredner.load_obj('models/sponza/sponza.obj')
+print('Loading San Miguel model')
+material_map, mesh_list, light_map = pyredner.load_obj('models/san-miguel/san-miguel.obj')
 
 # Setup material map
 material_id_map = {}
-materials = []
 count = len(materials)
 for key, value in material_map.items():
     material_id_map[key] = count
     count += 1
     materials.append(value)
 
-# Shape describing the light. In this case we use an area light source
-# facing downward onto the scene
 shapes = []
-shape_light = pyredner.Shape( \
-    vertices = torch.tensor([[340.0, 700.0,  340.0],
-                             [340.0, 700.0, -340.0],
-                             [-340.0, 700.0,-340.0],
-                             [-340.0, 700.0, 340.0]],
-                            device = pyredner.get_device()),
-    indices = torch.tensor([[2, 1, 0],[3, 2, 0]],
-                           dtype = torch.int32, device = pyredner.get_device()),
-    uvs = None,
-    normals = None,
-    material_id = 1,
-    interior_medium_id = -1,
-    exterior_medium_id = 0)
-shapes.append(shape_light)
-
 for mtl_name, mesh in mesh_list:
     shapes.append(pyredner.Shape(
         vertices = mesh.vertices,
@@ -79,8 +52,26 @@ for mtl_name, mesh in mesh_list:
         interior_medium_id = -1,
         exterior_medium_id = -1))
 
+print('Generating light source')
+
+light = pyredner.generate_quad_light(torch.tensor([15.291, 12.0, -4.47]),
+    torch.tensor([16.09, 3.878, -4.89]),
+    torch.tensor([30.0, 30.0]),
+    torch.tensor([100.0, 100.0, 100.0]))
+
+# Shape describing the light. In this case we use an area light source
+# facing downward onto the scene
+shape_light = pyredner.Shape(
+    vertices = light.vertices,
+    indices = light.indices,
+    material_id = 0,
+    interior_medium_id = -1,
+    exterior_medium_id = -1)
+shapes.insert(0, shape_light)
+
 light = pyredner.AreaLight(shape_id = 0,
-                           intensity = torch.tensor([10.0, 10.0, 10.0]))
+                           intensity = light.light_intensity,
+                           two_sided=True)
 area_lights = [light]
 
 # Finally we construct our scene using all the variables we setup previously.
@@ -91,14 +82,14 @@ scene = pyredner.Scene(cam,
                        mediums = mediums)
 scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
-    num_samples = 16,
-    max_bounces = 1)
+    num_samples = 256,
+    max_bounces = 2)
 
 render = pyredner.RenderFunction.apply
 target = render(0, *scene_args)
-pyredner.imwrite(target.cpu(), 'results/test_medium_buddha/target.exr')
-pyredner.imwrite(target.cpu(), 'results/test_medium_buddha/target.png')
-target = pyredner.imread('results/test_medium_buddha/target.exr')
+pyredner.imwrite(target.cpu(), 'results/test_medium_miguel/target.exr')
+pyredner.imwrite(target.cpu(), 'results/test_medium_miguel/target.png')
+target = pyredner.imread('results/test_medium_miguel/target.exr')
 if pyredner.get_use_gpu():
     target = target.cuda(device = pyredner.get_device())
 
@@ -132,18 +123,18 @@ scene_args = pyredner.RenderFunction.serialize_scene( \
 ## Render initial guess
 img = render(1, *scene_args)
 ## Save image
-pyredner.imwrite(img.cpu(), 'results/test_medium_buddha/init.png')
+pyredner.imwrite(img.cpu(), 'results/test_medium_miguel/init.png')
 ## Compute the difference between the target and initial guess
 diff = torch.abs(target - img)
-pyredner.imwrite(diff.cpu(), 'results/test_medium_buddha/init_diff.png')
+pyredner.imwrite(diff.cpu(), 'results/test_medium_miguel/init_diff.png')
 
 # Setup loss csv file
-with open('results/test_medium_buddha/buddha-loss.csv', 'w') as file:
+with open('results/test_medium_miguel/miguel-loss.csv', 'w') as file:
     file.write('a b')
     file.write('\n')
 
 # Setup param diff file
-with open('results/test_medium_buddha/buddha-param.csv', 'w') as file:
+with open('results/test_medium_miguel/miguel-param.csv', 'w') as file:
     file.write('a b c')
     file.write('\n')
 
@@ -161,17 +152,17 @@ for t in range(100):
 
     # Use a different seed per iteration
     img = render(t + 1, *scene_args)
-    pyredner.imwrite(img.cpu(), 'results/test_medium_buddha/iter_{}.png'.format(t))
+    pyredner.imwrite(img.cpu(), 'results/test_medium_miguel/iter_{}.png'.format(t))
 
     # Compute the loss function
     loss = (img - target).pow(2).sum()
     print('loss:', loss.item())
 
-    with open('results/test_medium_buddha/buddha-loss.csv', 'a') as file:
+    with open('results/test_medium_miguel/miguel-loss.csv', 'a') as file:
         file.write(str(t) + ' ' + str(loss.item()))
         file.write('\n')
 
-    with open('results/test_medium_buddha/buddha-param.csv', 'a') as file:
+    with open('results/test_medium_miguel/miguel-param.csv', 'a') as file:
         file.write(str(t) + ' ')
         file.write(str(torch.abs(sigma_a_val - mediums[0].sigma_a).sum().item()) + ' ')
         file.write(str(torch.abs(sigma_s_val - mediums[0].sigma_s).sum().item()))
@@ -192,7 +183,7 @@ for t in range(100):
     print('sigma_a:', mediums[0].sigma_a)
     print('sigma_s:', mediums[0].sigma_s)
 
-with open('results/test_medium_buddha/final_val.txt', 'a') as file:
+with open('results/test_medium_miguel/final_val.txt', 'a') as file:
     file.write(str(mediums[0].sigma_a))
     file.write('\n')
     file.write(str(mediums[0].sigma_s))
@@ -205,6 +196,6 @@ scene_args = pyredner.RenderFunction.serialize_scene( \
 img = render(202, *scene_args)
 
 # Save the images and diffs
-pyredner.imwrite(img.cpu(), 'results/test_medium_buddha/final.exr')
-pyredner.imwrite(img.cpu(), 'results/test_medium_buddha/final.png')
-pyredner.imwrite(torch.abs(target - img).cpu(), 'results/test_medium_buddha/final_diff.png')
+pyredner.imwrite(img.cpu(), 'results/test_medium_miguel/final.exr')
+pyredner.imwrite(img.cpu(), 'results/test_medium_miguel/final.png')
+pyredner.imwrite(torch.abs(target - img).cpu(), 'results/test_medium_miguel/final_diff.png')
