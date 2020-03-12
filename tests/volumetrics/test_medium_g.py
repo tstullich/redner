@@ -175,7 +175,7 @@ target_val = torch.tensor(mediums[0].g, device=pyredner.get_device())
 # transmitted so the goal is to move from a darkened image
 # to a lighter one.
 mediums[0].g = torch.tensor( \
-    [-0.7],
+    [-0.9],
     device = pyredner.get_device(),
     requires_grad = True)
 
