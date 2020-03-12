@@ -9,8 +9,8 @@ pyredner.set_use_gpu(torch.cuda.is_available())
 # to be used. Redner currently only supports the Henyey-Greenstein
 # phase function, but it should be possible to add others in the future
 mediums = [pyredner.HomogeneousMedium( \
-    sigma_a = torch.tensor([0.05, 0.05, 0.05]),
-    sigma_s = torch.tensor([0.00001, 0.00001, 0.00001]),
+    sigma_a = torch.tensor([0.0001, 0.0001, 0.0001]),
+    sigma_s = torch.tensor([0.01, 0.01, 0.01]),
     g = torch.tensor([0.0]))]
 
 # Attach medium information to the camera to get a fog effect
@@ -20,7 +20,7 @@ cam = pyredner.Camera(position = torch.tensor([0.0, 0.5, 5.0]),
                       up = torch.tensor([0.0, 1.0, 0.0]),
                       fov = torch.tensor([70.0]), # in degree
                       clip_near = 1e-2, # needs to > 0
-                      resolution = (512, 512),
+                      resolution = (256, 256),
                       medium_id = 0)
 
 # The materials for the scene - one for the sphere and one for the
@@ -56,25 +56,23 @@ shape_sphere = pyredner.Shape( \
     normals = sphere[3],
     material_id = 0,
     interior_medium_id = -1,
-    exterior_medium_id = -1)
+    exterior_medium_id = 0)
 
 # Manually translating sphere since redner does not seem to support
 # geometric transformations
 shape_sphere.vertices = shape_sphere.vertices + torch.tensor([0.0, 0.0, -0.3], \
                                                              device = pyredner.get_device())
 
+light = pyredner.generate_quad_light(torch.tensor([0.0, 2.0, 5.0]),
+    torch.tensor([0.0, 0.0, -0.3]),
+    torch.tensor([5.0, 5.0]),
+    torch.tensor([5.0, 5.0, 5.0]))
+
 # Shape describing the light. In this case we use an area light source
 # facing downward onto the scene
 shape_light = pyredner.Shape( \
-    vertices = torch.tensor([[5.0, 6.5,  5.0],
-                             [5.0, 6.5, -5.0],
-                             [-5.0, 6.5,-5.0],
-                             [-5.0, 6.5, 5.0]],
-                            device = pyredner.get_device()),
-    indices = torch.tensor([[2, 1, 0],[3, 2, 0]],
-                           dtype = torch.int32, device = pyredner.get_device()),
-    uvs = None,
-    normals = None,
+    vertices = light.vertices,
+    indices = light.indices,
     material_id = 0,
     interior_medium_id = -1,
     exterior_medium_id = 0)
@@ -143,9 +141,9 @@ shape_right = pyredner.Shape( \
 # Config 1 - A complete box + a sphere
 shapes = [shape_light, shape_sphere, shape_floor, shape_back, shape_left, shape_right]
 
-light = pyredner.AreaLight(shape_id = 0,
-                           intensity = torch.tensor([1.0, 1.0, 1.0]))
-area_lights = [light]
+lights = pyredner.AreaLight(shape_id = 0,
+                           intensity = light.light_intensity)
+area_lights = [lights]
 
 # Finally we construct our scene using all the variables we setup previously.
 scene = pyredner.Scene(cam,
@@ -155,7 +153,7 @@ scene = pyredner.Scene(cam,
                        mediums = mediums)
 scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
-    num_samples = 256,
+    num_samples = 512,
     max_bounces = 1,
     use_primary_edge_sampling = False,
     use_secondary_edge_sampling = False)
@@ -177,14 +175,14 @@ target_val = torch.tensor(mediums[0].g, device=pyredner.get_device())
 # transmitted so the goal is to move from a darkened image
 # to a lighter one.
 mediums[0].g = torch.tensor( \
-    [0.9],
+    [-0.7],
     device = pyredner.get_device(),
     requires_grad = True)
 
 ## Serialize scene arguments
 scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
-    num_samples = 256,
+    num_samples = 512,
     max_bounces = 1,
     # Disable edge sampling for now
     use_primary_edge_sampling = False,
@@ -217,7 +215,7 @@ for t in range(100):
     # Forward pass to render the image
     scene_args = pyredner.RenderFunction.serialize_scene( \
         scene = scene,
-        num_samples = 256,
+        num_samples = 512,
         max_bounces = 1,
         use_primary_edge_sampling = False,
         use_secondary_edge_sampling = False)
@@ -258,7 +256,7 @@ with open('results/test_medium_g/final_val.txt', 'w') as file:
 # Render final result
 scene_args = pyredner.RenderFunction.serialize_scene( \
     scene = scene,
-    num_samples = 256,
+    num_samples = 512,
     max_bounces = 1,
     use_primary_edge_sampling = False,
     use_secondary_edge_sampling = False)
