@@ -10,13 +10,13 @@ pyredner.set_use_gpu(torch.cuda.is_available())
 # phase function, but it should be possible to add others in the future
 mediums = [pyredner.HomogeneousMedium( \
     sigma_a = torch.tensor([0.05, 0.05, 0.05]),
-    sigma_s = torch.tensor([0.00001, 0.00001, 0.00001]),
+    sigma_s = torch.tensor([0.00001, 0.5, 0.5]),
     g = torch.tensor([0.0])),
 
     pyredner.HomogeneousMedium(\
         sigma_a = torch.tensor([0.0001, 0.0001, 0.0001]),
-        sigma_s = torch.tensor([0.3, 0.0001, 0.0001]),
-        g = torch.tensor([0.0]))]
+        sigma_s = torch.tensor([0.5, 0.00001, 0.00001]),
+        g = torch.tensor([0.9]))]
 
 # Attach medium information to the camera to get a fog effect
 # throughout the whole scene
@@ -25,8 +25,8 @@ cam = pyredner.Camera(position = torch.tensor([-1.0, 0.5, 0.0]),
                       up = torch.tensor([0.0, 1.0, 0.0]),
                       fov = torch.tensor([70.0]), # in degree
                       clip_near = 1e-2, # needs to > 0
-                      resolution = (512, 512),
-                      medium_id = 0)
+                      resolution = (256, 256),
+                      medium_id = 1)
 
 # The materials for the scene - one for the sphere and one for the
 # surrounding planes. The light source emits white light
@@ -48,22 +48,22 @@ print('Loading dragon model')
 # Setup for various objects in the scene
 material_map, mesh_list, light_map = pyredner.load_obj('models/dragon.obj')
 
+light = pyredner.generate_quad_light(torch.tensor([-2.0, 1.0, 0.0]),
+    torch.tensor([0.0, 0.0, 0.0]),
+    torch.tensor([5.0, 5.0]),
+    torch.tensor([1.0, 1.0, 1.0]))
+
 shapes = []
 # Shape describing the light. In this case we use an area light source
 # facing downward onto the scene
 shape_light = pyredner.Shape( \
-    vertices = torch.tensor([[5.0, 6.5,  5.0],
-                             [5.0, 6.5, -5.0],
-                             [-5.0, 6.5,-5.0],
-                             [-5.0, 6.5, 5.0]],
-                            device = pyredner.get_device()),
-    indices = torch.tensor([[2, 1, 0],[3, 2, 0]],
-                           dtype = torch.int32, device = pyredner.get_device()),
+    vertices = light.vertices,
+    indices = light.indices,
     uvs = None,
     normals = None,
     material_id = 0,
     interior_medium_id = -1,
-    exterior_medium_id = 0)
+    exterior_medium_id = 1)
 shapes.append(shape_light)
 
 for mtl_name, mesh in mesh_list:
@@ -72,8 +72,8 @@ for mtl_name, mesh in mesh_list:
         indices = mesh.indices,
         material_id = -1,
         normals = mesh.normals,
-        interior_medium_id = 1,
-        exterior_medium_id = 0))
+        interior_medium_id = 0,
+        exterior_medium_id = 1))
 
 # Shape describing the floor
 shape_floor = pyredner.Shape( \
@@ -88,7 +88,7 @@ shape_floor = pyredner.Shape( \
     normals = None,
     material_id = 2,
     interior_medium_id = -1,
-    exterior_medium_id = 0)
+    exterior_medium_id = 1)
 shapes.append(shape_floor)
 
 # Shape describing the backplane
@@ -104,7 +104,7 @@ shape_back = pyredner.Shape( \
     normals = None,
     material_id = 2,
     interior_medium_id = -1,
-    exterior_medium_id = 0)
+    exterior_medium_id = 1)
 shapes.append(shape_back)
 
 # Shape describing the left side of the box
@@ -120,7 +120,7 @@ shape_left = pyredner.Shape( \
     normals = None,
     material_id = 2,
     interior_medium_id = -1,
-    exterior_medium_id = 0)
+    exterior_medium_id = 1)
 shapes.append(shape_left)
 
 # Shape describing the right side of the box
@@ -136,14 +136,14 @@ shape_right = pyredner.Shape( \
     normals = None,
     material_id = 2,
     interior_medium_id = -1,
-    exterior_medium_id = 0)
+    exterior_medium_id = 1)
 shapes.append(shape_right)
 
 # Config 1 - A complete box + a sphere
 #shapes = [shape_light, shape_sphere, shape_floor, shape_back, shape_left, shape_right]
 
 light = pyredner.AreaLight(shape_id = 0,
-                           intensity = torch.tensor([1.0, 1.0, 1.0]))
+                           intensity = light.light_intensity)
 area_lights = [light]
 
 # Finally we construct our scene using all the variables we setup previously.
@@ -167,7 +167,7 @@ if pyredner.get_use_gpu():
 
 # Before perturbing save old values
 sigma_a_val = torch.tensor(mediums[0].sigma_a, device=pyredner.get_device())
-sigma_s_val = torch.tensor(mediums[1].sigma_s, device=pyredner.get_device())
+hg_g_val = torch.tensor(mediums[1].g, device=pyredner.get_device())
 
 # Perturb the medium for the initial guess.
 # Here we set the absorption factor to be optimized.
@@ -179,8 +179,8 @@ mediums[0].sigma_a = torch.tensor( \
     device = pyredner.get_device(),
     requires_grad = True)
 
-mediums[1].sigma_s = torch.tensor( \
-    [0.2, 0.2, 0.2],
+mediums[1].g = torch.tensor( \
+    [-0.9],
     device = pyredner.get_device(),
     requires_grad = True)
 
@@ -209,7 +209,7 @@ with open('results/test_nested/nested-param.csv', 'w') as file:
     file.write('\n')
 
 # Optimize absorption factor of medium inside the sphere
-optimizer = torch.optim.Adam([mediums[0].sigma_a, mediums[1].sigma_s], lr=0.009)
+optimizer = torch.optim.Adam([mediums[0].sigma_a, mediums[1].g], lr=5e-3)
 # Run Adam for 100 iterations
 for t in range(100):
     print('iteration:', t)
@@ -235,28 +235,28 @@ for t in range(100):
     with open('results/test_nested/nested-param.csv', 'a') as file:
         file.write(str(t) + ' ')
         file.write(str(torch.abs(sigma_a_val - mediums[0].sigma_a).sum().item()) + ' ')
-        file.write(str(torch.abs(sigma_s_val - mediums[1].sigma_s).sum().item()))
+        file.write(str(torch.abs(hg_g_val - mediums[1].g).sum().item()))
         file.write('\n')
 
     # Backpropagate the gradients
     loss.backward()
     # Print the gradients of the absorption factor
     print('grad 0:', mediums[0].sigma_a.grad)
-    print('grad 1:', mediums[1].sigma_s.grad)
+    print('grad 1:', mediums[1].g.grad)
 
     # Take a gradient descent step
     optimizer.step()
     # Clamp sigma_a to a valid value
     mediums[0].sigma_a.data.clamp_(0.00001)
-    mediums[1].sigma_s.data.clamp_(0.00001)
+    mediums[1].g.data.clamp_(0.00001)
     # Print the current absorption factor values
     print('sigma_a:', mediums[0].sigma_a)
-    print('sigma_s:', mediums[1].sigma_s)
+    print('g:', mediums[1].g)
 
 with open('results/test_nested/final_val.txt', 'w') as file:
     file.write(str(mediums[0].sigma_a))
     file.write('\n')
-    file.write(str(mediums[1].sigma_s))
+    file.write(str(mediums[1].g))
     file.write('\n')
 
 # Render final result
