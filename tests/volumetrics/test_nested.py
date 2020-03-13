@@ -25,7 +25,7 @@ cam = pyredner.Camera(position = torch.tensor([-1.0, 0.5, 0.0]),
                       up = torch.tensor([0.0, 1.0, 0.0]),
                       fov = torch.tensor([70.0]), # in degree
                       clip_near = 1e-2, # needs to > 0
-                      resolution = (512, 512),
+                      resolution = (256, 256),
                       medium_id = 1)
 
 # The materials for the scene - one for the sphere and one for the
@@ -236,8 +236,8 @@ for t in range(100):
         file.write(str(t) + ' ')
         file.write(str(torch.abs(sigma_a_val - mediums[0].sigma_a).sum().item()) + ' ')
         file.write(str(torch.abs(hg_g_val - mediums[1].g).sum().item()) + ' ')
-        file.write(str(mediums[0].sigma_a.item()) + ' ')
-        file.write(str(mediums[1].g.item()))
+        file.write(str(mediums[0].sigma_a) + ' ')
+        file.write(str(mediums[1].g))
         file.write('\n')
 
     # Backpropagate the gradients
