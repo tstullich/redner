@@ -205,7 +205,7 @@ with open('results/test_nested/nested-loss.csv', 'w') as file:
 
 # Setup diff file
 with open('results/test_nested/nested-param.csv', 'w') as file:
-    file.write('a b c')
+    file.write('a b c d e')
     file.write('\n')
 
 # Optimize absorption factor of medium inside the sphere
