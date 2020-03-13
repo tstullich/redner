@@ -235,7 +235,9 @@ for t in range(100):
     with open('results/test_nested/nested-param.csv', 'a') as file:
         file.write(str(t) + ' ')
         file.write(str(torch.abs(sigma_a_val - mediums[0].sigma_a).sum().item()) + ' ')
-        file.write(str(torch.abs(hg_g_val - mediums[1].g).sum().item()))
+        file.write(str(torch.abs(hg_g_val - mediums[1].g).sum().item()) + ' ')
+        file.write(str(mediums[0].sigma_a.item()) + ' ')
+        file.write(str(mediums[1].g.item()))
         file.write('\n')
 
     # Backpropagate the gradients
